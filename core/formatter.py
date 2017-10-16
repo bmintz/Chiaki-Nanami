@@ -115,7 +115,7 @@ class HelpCommandPage(BaseReactionPaginator):
         requirements = _make_command_requirements(command) or 'None'
         cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(_all_names(command))}`"
 
-        description = command.help.format(prefix=clean_prefix)
+        description = (command.help or '').format(prefix=clean_prefix)
 
         cmd_embed = (discord.Embed(title=func(cmd_name), description=func(description), colour=self.colour)
                      .add_field(name=func("Requirements"), value=func(requirements))
