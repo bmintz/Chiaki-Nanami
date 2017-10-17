@@ -214,10 +214,10 @@ class GeneralHelpPaginator(ListPaginator):
 
     @classmethod
     async def create(cls, ctx):
-        def key(c):
-            return c.cog_name or '\u200bMisc'
+        def cog_name(c):
+            return (c.instance.__class__.name if c.instance else '\u200bMisc'), c.cog_name
 
-        entries = (cmd for cmd in sorted(ctx.bot.commands, key=key) if not cmd.hidden)
+        entries = (cmd for cmd in sorted(ctx.bot.commands, key=cog_name) if not cmd.hidden)
         nested_pages = []
         per_page = 10
 
@@ -225,8 +225,8 @@ class GeneralHelpPaginator(ListPaginator):
         # (cog, description, next 10 commands)
         # ...
         get_cog = ctx.bot.get_cog
-        for cog, cmds in itertools.groupby(entries, key=key):
-            cog = get_cog(cog)
+        for (name, cog_name), cmds in itertools.groupby(entries, key=cog_name):
+            cog = get_cog(cog_name)
             if getattr(cog, '__hidden__', False):
                 continue
 
@@ -236,7 +236,7 @@ class GeneralHelpPaginator(ListPaginator):
                 description = inspect.getdoc(cog) or 'No description... yet.'
 
             lines = [' | '.join(line) async for line in _command_formatters(cmds, ctx)]
-            nested_pages.extend((cog, description, page) for page in sliced(lines, per_page))
+            nested_pages.extend((name, description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
@@ -264,13 +264,13 @@ class GeneralHelpPaginator(ListPaginator):
         return embed.set_footer(text=f'Currently on page {self._index + offset + 1}/{len(self)}')
 
     def _create_embed(self, idx, page):
-        cog, description, lines = page[0]
+        name, description, lines = page[0]
         note = f'Type `{self.context.clean_prefix}help command`\nfor more info on a command.'
         commands = '\n'.join(lines) + f'\n\n{note}'
 
         return self._page_footer_embed(
             discord.Embed(colour=self.colour, description=description)
-            .set_author(name=cog.__class__.__name__)
+            .set_author(name=name)
             .add_field(name='Commands', value=commands)
             .add_field(name='Note', value=_note, inline=False),
             offset=self._num_extra_pages
@@ -313,7 +313,7 @@ class GeneralHelpPaginator(ListPaginator):
         extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
 
         def cog_pages(start):
-            name_counter = Counter(e[0].__class__.__name__ for e in self.entries)
+            name_counter = Counter(e[0] for e in self.entries)
             for name, count in name_counter.items():
                 if count == 1:
                     yield str(start), name
