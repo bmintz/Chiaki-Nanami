@@ -18,6 +18,7 @@ from discord.ext import commands
 from more_itertools import always_iterable
 
 from . import context
+from .cog import Cog
 from .formatter import ChiakiFormatter
 
 from cogs.utils import errors
@@ -147,16 +148,17 @@ class Chiaki(commands.Bot):
         await super().close()
 
     def add_cog(self, cog):
-        members = inspect.getmembers(cog)
+        if not isinstance(cog, Cog):
+            raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
 
         # cog aliases
-        for alias in getattr(cog, '__aliases__', ()):
+        for alias in cog.__aliases__:
             if alias in self.cog_aliases:
                 raise discord.ClientException(f'"{alias}" already has a cog registered')
             self.cog_aliases[alias] = cog
 
         # add to namespace
-        cog.__hidden__ = getattr(cog, '__hidden__', False)
+        cog.__hidden__ = cog.__hidden__
         super().add_cog(cog)
 
     def remove_cog(self, cog_name):
