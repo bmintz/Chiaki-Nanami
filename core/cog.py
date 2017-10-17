@@ -31,7 +31,6 @@ class Cog:
         cls_name = cls.__name__
         # Protect names like AFK and BAGELS. We're assuming they are acronyms
         cls.name = name or (cls_name if cls_name.isupper() else re.sub(r"(\w)([A-Z])", r"\1 \2", cls_name))
-        print(name, '->', cls.name)
         cls.__aliases__ = aliases
         cls.__hidden__ = hidden
 
