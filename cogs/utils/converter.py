@@ -52,14 +52,13 @@ class CheckedMember(commands.MemberConverter):
 
 class BotCogConverter(commands.Converter):
     async def convert(self, ctx, arg):
-        bot = ctx.bot
         lowered = arg.lower()
 
-        result = discord.utils.find(lambda k: k.lower() == lowered, bot.all_cogs)
+        result = ctx.bot.get_cog(lowered)
         if result is None:
             raise commands.BadArgument(f"Module {lowered} not found")
 
-        return bot.all_cogs[result]
+        return result
 
 
 class BotCommand(commands.Converter):

@@ -155,18 +155,29 @@ class Chiaki(commands.Bot):
         for alias in cog.__aliases__:
             if alias in self.cog_aliases:
                 raise discord.ClientException(f'"{alias}" already has a cog registered')
-            self.cog_aliases[alias] = cog
+            self.cog_aliases[alias.lower()] = cog
 
         super().add_cog(cog)
+        cog_name = cog.__class__.__name__
+        self.cog_aliases[cog.__class__.name.lower()] = self.cogs[cog_name.lower()] = self.cogs.pop(cog_name)
 
-    def remove_cog(self, cog_name):
-        cog = self.cogs.get(cog_name)
+    def remove_cog(self, name):
+        lowered = name.lower()
+        cog = self.cogs.get(lowered)
         if cog is None:
             return
-        super().remove_cog(cog_name)
+        super().remove_cog(lowered)
 
         # remove cog aliases
         self.cog_aliases = {alias: real for alias, real in self.cog_aliases.items() if real is not cog}
+
+    def get_cog(self, name):
+        return self.all_cogs.get(name.lower())
+
+    # This must be implemented because Bot.get_all_commands doesn't call
+    # Bot.get_cog, so it will throw KeyError, and thus return an empty set.
+    def get_cog_commands(self, name):
+        return super().get_cog_commands(name.lower())
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
