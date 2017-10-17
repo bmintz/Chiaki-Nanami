@@ -10,13 +10,15 @@ from .utils import time
 from .utils.colours import user_color
 from .utils.jsonf import JSONFile
 
+from core.cog import Cog
+
 
 class AFKConfig(enum.IntEnum):
     MAX_MESSAGES = 5
     MAX_INTERVAL = 10 * 60
 
 
-class AFK:
+class AFK(Cog):
     def __init__(self, bot):
         self.bot = bot
         # Debating whether or not I should use a DB. Because this would be queried

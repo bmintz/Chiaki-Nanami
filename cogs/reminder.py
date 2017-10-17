@@ -12,6 +12,8 @@ from .utils.misc import emoji_url, truncate
 from .utils.paginator import EmbedFieldPages
 from .utils.time import duration, human_timedelta
 
+from core.cog import Cog
+
 
 MAX_REMINDERS = 10
 ALARM_CLOCK_URL = emoji_url('\N{ALARM CLOCK}')
@@ -25,7 +27,7 @@ def parse_time(time_string):
 
 
 # sorry not sorry danny
-class Reminder:
+class Reminder(Cog):
     def __init__(self, bot):
         self.bot = bot
 

@@ -18,6 +18,8 @@ from ..utils.misc import REGIONAL_INDICATORS
 from ..utils.paginator import BaseReactionPaginator, page
 from ..utils.time import duration_units
 
+from core.cog import Cog
+
 
 class MinesweeperException(Exception):
     pass
@@ -482,7 +484,7 @@ class MinesweeperSession:
                 task.cancel()
 
 
-class Minesweeper:
+class Minesweeper(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.manager_bucket = {level: SessionManager() for level in Level}

@@ -279,7 +279,7 @@ class TicTacToeSession:
 BOARD_SIZE_EMOJIS = list(map('{}\U000020e3'.format, range(3, 8))) + ['\N{BLACK SQUARE FOR STOP}']
 
 
-class TicTacToe(two_player_plugin('TicTacToe', cls=TicTacToeSession, aliases=['ttt'])):
+class TicTacToe(two_player_plugin('TicTacToe', cls=TicTacToeSession, aliases=['ttt']), name='Tic-Tac-Toe'):
     @staticmethod
     async def get_board_size(ctx):
         embed = (discord.Embed(colour=0x00FF00, description='Click one of the reactions below!')

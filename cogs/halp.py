@@ -11,6 +11,8 @@ from .utils.formats import multi_replace
 from .utils.misc import emoji_url, truncate
 from .utils.paginator import BaseReactionPaginator, ListPaginator
 
+from core.cog import Cog
+
 
 CHIAKI_TIP_EPOCH = datetime(2017, 8, 24)
 TIP_EMOJI = emoji_url('\N{ELECTRIC LIGHT BULB}')
@@ -84,7 +86,7 @@ _bracket_repls = {
 }
 
 
-class Help:
+class Help(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bot.remove_command('help')

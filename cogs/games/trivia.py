@@ -19,6 +19,8 @@ from . import manager
 
 from ..utils.misc import base_filename, emoji_url
 
+from core.cog import Cog
+
 
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
@@ -300,7 +302,7 @@ def _load_category_from_file(filename):
 
 # ------------- The actual cog --------------------
 
-class Trivia:
+class Trivia(Cog):
     FILE_PATH = os.path.join('.', 'data', 'games', 'trivia')
 
     def __init__(self, bot):

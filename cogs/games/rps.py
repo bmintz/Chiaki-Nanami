@@ -4,6 +4,8 @@ import random
 from collections import namedtuple
 from discord.ext import commands
 
+from core.cog import Cog
+
 
 RPS_COUNTERS = {
     "rock"     : ("paper", ),
@@ -22,7 +24,7 @@ RPSLS_COUNTERS = {
 
 Winner = namedtuple('Winner', 'name image')
 
-class RockPaperScissors:
+class RockPaperScissors(Cog):
     @staticmethod
     def pick(elem, counters):
         weights = [(elem in v) * 0.5 + 0.5 for v in counters.values()]
@@ -78,4 +80,4 @@ class RockPaperScissors:
 
 
 def setup(bot):
-    bot.add_cog(RockPaperScissors())
+    bot.add_cog(RockPaperScissors(bot))

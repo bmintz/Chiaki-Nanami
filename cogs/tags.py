@@ -10,6 +10,8 @@ from discord.ext import commands
 from .utils import formats
 from .utils.paginator import ListPaginator
 
+from core.cog import Cog
+
 tag_logger = logging.getLogger(__name__)
 
 class TagError(commands.UserInputError):
@@ -73,7 +75,7 @@ class TagName(commands.clean_content):
         return lower
 
 
-class Tags:
+class Tags(Cog):
     """You're it."""
     def __init__(self, bot):
         self.bot = bot

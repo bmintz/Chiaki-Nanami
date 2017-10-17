@@ -17,6 +17,7 @@ from PIL import Image
 
 from .utils.misc import emoji_url, load_async
 
+from core.cog import Cog
 
 # ---------------- Ship-related utilities -------------------
 
@@ -133,7 +134,7 @@ PRE_PING_REMARKS = [
 TEN_SEC_REACTION = '\N{BLACK SQUARE FOR STOP}'
 
 
-class OtherStuffs:
+class OtherStuffs(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.default_time = datetime.utcnow()

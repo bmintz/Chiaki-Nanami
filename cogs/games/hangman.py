@@ -18,6 +18,8 @@ from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import ListPaginator
 
+from core.cog import Cog
+
 
 # I hate string concatentation
 # And I hate constantly building the same string
@@ -165,7 +167,7 @@ def _load_hangman(filename):
     with open(filename) as f:
         return [line.strip() for line in f]
 
-class Hangman:
+class Hangman(Cog):
     """So you don't have to hang people in real life."""
     FILE_PATH = os.path.join('.', 'data', 'words')
 

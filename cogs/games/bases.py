@@ -15,13 +15,15 @@ from ..utils.context_managers import temp_attr
 from ..utils.converter import CheckedMember, NoSelfArgument
 from ..utils.formats import multi_replace
 
+from core.cog import Cog
+
 _clean_sig = functools.partial(multi_replace, replacements={**dict.fromkeys('<>[]', ''), '|': '/'})
 
 
 # templates for the plugins...
 
 two_player_plugin_template = '''\
-class {typename}:
+class {typename}(Cog, name='{game_name}'):
     def __init__(self):
         self.manager = SessionManager()
 

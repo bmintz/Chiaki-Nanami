@@ -11,6 +11,8 @@ from discord.ext import commands
 
 from .utils.context_managers import temp_attr
 
+from core.cog import Cog
+
 
 def _tabulate(rows, headers=()):
     display_rows = [list(map(str, r)) for r in rows]
@@ -35,7 +37,7 @@ def _tabulate(rows, headers=()):
     return '\n'.join(to_draw)
 
 
-class Owner:
+class Owner(Cog):
     """Owner-only commands"""
     __hidden__ = True
 

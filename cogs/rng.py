@@ -15,6 +15,8 @@ from .utils.converter import number
 from .utils.errors import InvalidUserArgument, private_message_only
 from .utils.misc import str_join
 
+from core.cog import Cog
+
 try:
     import webcolors
 except ImportError:
@@ -141,7 +143,7 @@ _available_distributions = {
     'triangular': random.triangular,
     }
 
-class RNG:
+class RNG(Cog):
     __aliases__ = "Random",
 
     def __init__(self, bot):

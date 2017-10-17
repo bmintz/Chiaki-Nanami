@@ -13,6 +13,7 @@ from .manager import SessionManager
 
 from ..utils.paginator import BaseReactionPaginator, page
 
+from core.cog import Cog
 
 # Sudoku board generator by Gareth Rees
 # This works best when m = 3.
@@ -341,7 +342,7 @@ class SudokuSession(BaseReactionPaginator):
             await getattr(self, self._reaction_map[reaction.emoji])()
 
 
-class Sudoku:
+class Sudoku(Cog):
     def __init__(self):
         self.manager = SessionManager()
 

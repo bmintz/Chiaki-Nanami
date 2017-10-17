@@ -206,7 +206,7 @@ class ConnectFourSession:
         return discord.utils.get(self.players, symbol=self.board.winner)
 
 class Connect4(two_player_plugin('Connect4', cls=ConnectFourSession,
-               game_name='Connect 4', aliases=['con4'])):
+               game_name='Connect 4', aliases=['con4']), name='Connect 4'):
 
 
 

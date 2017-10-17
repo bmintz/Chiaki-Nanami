@@ -27,6 +27,8 @@ from .utils.formats import *
 from .utils.misc import group_strings, str_join, nice_time, ordinal
 from .utils.paginator import BaseReactionPaginator, ListPaginator, page
 
+from core.cog import Cog
+
 
 try:
     import pkg_resources
@@ -146,7 +148,7 @@ class ServerPages(BaseReactionPaginator):
                )
 
 
-class Meta:
+class Meta(Cog):
     """Info related commands"""
 
     def __init__(self, bot):

@@ -11,6 +11,8 @@ from .utils import disambiguate
 from .utils.context_managers import temp_attr
 from .utils.misc import str_join
 
+from core.cog import Cog
+
 
 _Table = asyncqlio.table_base()
 
@@ -107,7 +109,7 @@ class AutoRole(disambiguate.DisambiguateRole):
         return role
 
 
-class Roles:
+class Roles(Cog):
     """Commands that are related to roles.
 
     Self-assignable, auto-assignable, and general role-related

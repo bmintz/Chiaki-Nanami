@@ -13,6 +13,8 @@ from .manager import SessionManager
 
 from ..utils import converter, jsonf
 
+from core.cog import Cog
+
 
 TRACK_LENGTH = 40
 DEFAULT_TRACK = '-' * TRACK_LENGTH
@@ -204,7 +206,7 @@ class RacingSession:
             return max(self.players, key=attrgetter('position'))
         return min(finished, key=attrgetter('time_taken'))
 
-class Racing:
+class Racing(Cog):
     """Be the animal you wish to beat. Wait."""
     def __init__(self, bot):
         self.bot = bot

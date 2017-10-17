@@ -18,6 +18,7 @@ from .utils.jsonf import JSONFile
 from .utils.misc import emoji_url, ordinal
 from .utils.paginator import ListPaginator, EmbedFieldPages
 
+from core.cog import Cog
 
 _Table = asyncqlio.table_base()
 
@@ -114,7 +115,7 @@ _is_valid_punishment = frozenset(_warn_punishments).__contains__
 # - implement anti-raid protocol
 # - implement antispam
 # - implement mention-spam
-class Moderator:
+class Moderator(Cog):
     def __init__(self, bot):
         self.bot = bot
         self._md = self.bot.db.bind_tables(_Table)

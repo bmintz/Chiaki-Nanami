@@ -8,6 +8,8 @@ from discord.ext import commands
 from .utils import disambiguate
 from .utils.misc import emoji_url, truncate
 
+from core.cog import Cog
+
 
 _Table = asyncqlio.table_base()
 _blocked_icon = emoji_url('\N{NO ENTRY}')
@@ -40,7 +42,7 @@ class Blacklist(_Table):
 _GuildOrUser = disambiguate.union(discord.Guild, discord.User)
 
 
-class Blacklists:
+class Blacklists(Cog, hidden=True):
     def __init__(self, bot):
         self.bot = bot
         self._md = self.bot.db.bind_tables(_Table)

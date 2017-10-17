@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from .utils.paginator import ListPaginator
 
+from core.cog import Cog
 
 _Table = asyncqlio.table_base()
 
@@ -39,7 +40,7 @@ class AliasName(commands.Converter):
         return lowered
 
 
-class Aliases:
+class Aliases(Cog):
     def __init__(self, bot):
         self.bot = bot
         self._md = self.bot.db.bind_tables(_Table)

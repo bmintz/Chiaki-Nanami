@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from .manager import SessionManager
 
+from core.cog import Cog
 
 class InvalidGameState(Exception):
     pass
@@ -94,7 +95,7 @@ class RussianRouletteSession:
         return self.players.popleft()
 
 
-class RussianRoulette:
+class RussianRoulette(Cog):
     """The ultimate test of luck."""
     def __init__(self):
         self.manager = SessionManager()

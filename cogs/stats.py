@@ -16,6 +16,7 @@ from .utils.misc import emoji_url
 from .utils.paginator import ListPaginator, EmbedFieldPages
 from .utils.time import human_timedelta
 
+from core.cog import Cog
 
 _Table = asyncqlio.table_base()
 _ignored_exceptions = (
@@ -46,7 +47,7 @@ class Command(_Table, table_name='commands'):
     commands_command_idx = asyncqlio.Index(command)
 
 
-class Stats:
+class Stats(Cog):
     def __init__(self, bot):
         self.bot = bot
         self._md = self.bot.db.bind_tables(_Table)
