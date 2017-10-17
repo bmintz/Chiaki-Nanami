@@ -157,8 +157,6 @@ class Chiaki(commands.Bot):
                 raise discord.ClientException(f'"{alias}" already has a cog registered')
             self.cog_aliases[alias] = cog
 
-        # add to namespace
-        cog.__hidden__ = cog.__hidden__
         super().add_cog(cog)
 
     def remove_cog(self, cog_name):
