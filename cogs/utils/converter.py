@@ -1,9 +1,15 @@
 import argparse
+import difflib
 import discord
 
+from collections import OrderedDict
 from discord.ext import commands
 from functools import partial
 from more_itertools import grouper
+
+
+def _unique(iterable):
+    return iter(OrderedDict.fromkeys(iterable))
 
 
 class NoBots(commands.BadArgument):
@@ -60,7 +66,13 @@ class BotCommand(commands.Converter):
     async def convert(self, ctx, arg):
         cmd = ctx.bot.get_command(arg)
         if cmd is None:
-            raise commands.BadArgument(f"I don't recognized the {arg} command")
+            names = map(str, _unique(ctx.bot.walk_commands()))
+            closest = difflib.get_close_matches(arg, names, cutoff=0.5)
+            # Can't use f-strings because \ is not allowed in the {} parts
+            # also + is faster than .format
+            joined = 'Did you mean...\n' + '\n'.join(closest) if closest else ''
+            raise commands.BadArgument(f"I don't recognized the {arg} command. {joined}")
+
         return cmd
 
 
