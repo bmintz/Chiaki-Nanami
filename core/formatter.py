@@ -3,12 +3,13 @@ import discord
 import functools
 import inspect
 import itertools
+import operator
 import platform
 import random
 import textwrap
 import time
 
-from collections import Counter, OrderedDict
+from collections import Counter, defaultdict, OrderedDict
 from collections.abc import Sequence
 from discord.ext import commands
 from more_itertools import always_iterable, sliced
@@ -214,10 +215,12 @@ class GeneralHelpPaginator(ListPaginator):
 
     @classmethod
     async def create(cls, ctx):
-        def cog_name(c):
-            return (c.instance.__class__.name if c.instance else '\u200bMisc'), c.cog_name
+        def key(c):
+            inst = c.instance
+            cls = inst.__class__.name if inst else '\u200bMisc'
+            return inst.__class__.__parent_category__, cls
 
-        entries = (cmd for cmd in sorted(ctx.bot.commands, key=cog_name) if not cmd.hidden)
+        entries = (cmd for cmd in sorted(ctx.bot.commands, key=key) if not cmd.hidden)
         nested_pages = []
         per_page = 10
 
@@ -225,8 +228,8 @@ class GeneralHelpPaginator(ListPaginator):
         # (cog, description, next 10 commands)
         # ...
         get_cog = ctx.bot.get_cog
-        for (name, cog_name), cmds in itertools.groupby(entries, key=cog_name):
-            cog = get_cog(cog_name)
+        for (parent, name), cmds in itertools.groupby(entries, key=key):
+            cog = get_cog(name)
             if getattr(cog, '__hidden__', False):
                 continue
 
@@ -236,7 +239,7 @@ class GeneralHelpPaginator(ListPaginator):
                 description = inspect.getdoc(cog) or 'No description... yet.'
 
             lines = [' | '.join(line) async for line in _command_formatters(cmds, ctx)]
-            nested_pages.extend((name, description, page) for page in sliced(lines, per_page))
+            nested_pages.extend((parent, name, description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
@@ -264,7 +267,7 @@ class GeneralHelpPaginator(ListPaginator):
         return embed.set_footer(text=f'Currently on page {self._index + offset + 1}/{len(self)}')
 
     def _create_embed(self, idx, page):
-        name, description, lines = page[0]
+        _, name, description, lines = page[0]
         note = f'Type `{self.context.clean_prefix}help command`\nfor more info on a command.'
         commands = '\n'.join(lines) + f'\n\n{note}'
 
@@ -311,26 +314,30 @@ class GeneralHelpPaginator(ListPaginator):
         """Table of contents (this page)"""
         extra_docs = enumerate(map(inspect.getdoc, self._extra_pages), start=1)
         extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
+        counter = self._num_extra_pages + 1
 
-        def cog_pages(start):
-            name_counter = Counter(e[0] for e in self.entries)
+        def cog_pages(iterator):
+            nonlocal counter
+            name_counter = Counter(map(operator.itemgetter(1), iterator))
             for name, count in name_counter.items():
                 if count == 1:
-                    yield str(start), name
+                    yield str(counter), name
                 else:
-                    yield f'{start}-{start + count - 1}', name
-                start += count
+                    yield f'{counter}-{counter + count - 1}', name
+                counter += count
 
-        pairs = list(cog_pages(self._num_extra_pages + 1))
-        padding = max(len(p[0]) for p in pairs)
+        embed = (discord.Embed(colour=self.colour, description='\n'.join(extra_lines))
+                 .set_author(name='Table of Contents')
+                 )
 
-        cog_lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
+        for category, entries in itertools.groupby(self.entries, operator.itemgetter(0)):
+            pairs = list(cog_pages(entries))
+            padding = max(len(p[0]) for p in pairs)
+            lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
 
-        return (discord.Embed(colour=self.colour, description='\n'.join(extra_lines))
-                .add_field(name='Cogs', value='\n'.join(cog_lines), inline=False)
-                .add_field(name='Other', value=f'`{len(self)}` - Some useful links.', inline=False)
-                .set_author(name='Table of Contents')
-                )
+            embed.add_field(name=category.title(), value='\n'.join(lines), inline=False)
+
+        return embed.add_field(name='Other', value=f'`{len(self)}` - Some useful links.', inline=False)
 
     def how_to_use(self):
         """How to use the bot"""

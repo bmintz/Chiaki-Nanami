@@ -55,3 +55,8 @@ class Cog:
 
             # cls.__attr uses the base class's name, so we have to use setattr
             setattr(cls, f'_{cls_name}__{attr}', check)
+
+        # Get the folder the cog is in, if it's in one.
+        folder = cls.__module__.rpartition('.')[0]
+        cogs, _, tail = folder.partition('.')
+        cls.__parent_category__ = tail or cogs
