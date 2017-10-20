@@ -128,7 +128,7 @@ class Chiaki(commands.Bot):
             # 1000 IDENTIFYs a day limit.
             self.load_extension(ext)
 
-        self.loop.create_task(self.change_game())
+        self._game_task = self.loop.create_task(self.change_game())
 
     def _dispatch_from_scheduler(self, entry):
         self.dispatch(entry.event, entry)
@@ -147,6 +147,7 @@ class Chiaki(commands.Bot):
     async def close(self):
         await self.session.close()
         await self.db.close()
+        self._game_task.cancel()
         await super().close()
 
     def add_cog(self, cog):
