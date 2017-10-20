@@ -128,6 +128,8 @@ class Chiaki(commands.Bot):
             # 1000 IDENTIFYs a day limit.
             self.load_extension(ext)
 
+        self.loop.create_task(self.change_game())
+
     def _dispatch_from_scheduler(self, entry):
         self.dispatch(entry.event, entry)
 
@@ -245,8 +247,6 @@ class Chiaki(commands.Bot):
 
         if not hasattr(self, 'start_time'):
             self.start_time = datetime.utcnow()
-
-        self.loop.create_task(self.change_game())
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CheckFailure) and await self.is_owner(ctx.author):
