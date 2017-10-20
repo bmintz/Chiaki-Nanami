@@ -1,5 +1,7 @@
+import collections
 import datetime
 import re
+import parsedatetime as pdt
 
 from dateutil.relativedelta import relativedelta
 from discord.ext import commands
@@ -7,38 +9,108 @@ from functools import partial
 from more_itertools import grouper
 
 from .formats import human_join, pluralize
+from .converter import union
 
-_pairwise = partial(grouper, 2)
+
+_short_time_pattern = re.compile("""
+    (?:(?P<years>[0-9])(?:years?|y))?             # e.g. 2y
+    (?:(?P<months>[0-9]{1,2})(?:months?|mo))?     # e.g. 2months
+    (?:(?P<weeks>[0-9]{1,4})(?:weeks?|w))?        # e.g. 10w
+    (?:(?P<days>[0-9]{1,5})(?:days?|d))?          # e.g. 14d
+    (?:(?P<hours>[0-9]{1,5})(?:hours?|h))?        # e.g. 12h
+    (?:(?P<minutes>[0-9]{1,5})(?:minutes?|m))?    # e.g. 10m
+    (?:(?P<seconds>[0-9]{1,5})(?:seconds?|s))?    # e.g. 15s
+""", re.VERBOSE)
+
 
 DURATION_MULTIPLIERS = {
-    'y': 60 * 60 * 24 * 365, 'yr' : 60 * 60 * 24 * 365,
-    'w': 60 * 60 * 24 * 7,   'wk' : 60 * 60 * 24 * 7,
-    'd': 60 * 60 * 24,       'day': 60 * 60 * 24,
-    'h': 60 * 60,            'hr' : 60 * 60,
-    'm': 60,                 'min': 60,
-    's': 1,                  'sec': 1,
+    'years'  : 60 * 60 * 24 * 365,
+    'months' : 60 * 60 * 24 * 30,
+    'weeks'  : 60 * 60 * 24 * 7,
+    'days'   : 60 * 60 * 24,
+    'hours'  : 60 * 60,
+    'minutes': 60,
+    'seconds': 1,
 }
 
 
-_time_pattern = ''.join(f'(?:([0-9]{{1,5}})({u1}|{u2}))?'
-                        for u1, u2 in _pairwise(DURATION_MULTIPLIERS))
-_time_compiled = re.compile(f'{_time_pattern}$')
+def _get_short_time_match(arg):
+    match = _short_time_pattern.fullmatch(arg)
+    if match is None or not match.group(0):
+        raise commands.BadArgument('invalid time provided')
+    return match
 
 
-def duration(string):
-    try:
-        return float(string)
-    except ValueError as e:
-        match = _time_compiled.match(string)
-        if match is None:
-            raise commands.BadArgument(f'{string} is not a valid time.') from None
-        no_nones = filter(None, match.groups())
-        return sum(float(amount) * DURATION_MULTIPLIERS[unit]
-                   for amount, unit in _pairwise(no_nones))
+class Delta(collections.namedtuple('Delta', 'delta')):
+    __slots__ = ()
 
+    def __new__(cls, argument):
+        match = _get_short_time_match(argument)
+        data = { k: int(v) for k, v in match.groupdict(default=0).items() }
+        return super().__new__(cls, relativedelta(**data))
+
+    def __str__(self):
+        return parse_delta(self.delta)
+
+    @property
+    def duration(self):
+        attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
+        return sum(getattr(self.delta, attr, 0) * DURATION_MULTIPLIERS[attr] for attr in attrs)
+
+# ----------------------- Time --------------------
+
+_TimeBase = collections.namedtuple('Delta', 'dt')
+
+_calendar = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
+
+
+class HumanTime(_TimeBase):
+    __slots__ = ()
+
+    def __new__(cls, argument):
+        now = datetime.datetime.utcnow()
+
+        dt, status = _calendar.parseDT(argument, sourceTime=now)
+        if not status.hasDateOrTime:
+            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days"')
+
+        if not status.hasTime:
+            # replace it with the current time
+            dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+
+        return super().__new__(cls, dt)
+
+
+class Time(HumanTime):
+    __slots__ = ()
+
+    def __new__(cls, arg):
+        try:
+            delta = Delta(arg)
+        except commands.BadArgument:
+            return super().__new__(cls, arg)
+        else:
+            now = datetime.datetime.utcnow()
+            return _TimeBase.__new__(cls, now + delta.delta)
+
+
+class FutureTime(Time):
+    __slots__ = ()
+
+    def __new__(cls, argument):
+        now = datetime.datetime.utcnow()
+        self = super().__new__(cls, argument)
+
+        if self.dt < now:
+            raise commands.BadArgument('This time is in the past.')
+
+        return self
+
+# TODO: User-friendly Time?
+
+# ------------------------- Parsing -------------------------
 
 TIME_UNITS = ('week', 'day', 'hour', 'minute')
-
 
 def duration_units(secs):
     m, s = divmod(secs, 60)
@@ -55,16 +127,7 @@ def duration_units(secs):
     return joined
 
 
-def human_timedelta(dt, *, source=None):
-    now = source or datetime.datetime.utcnow()
-
-    if dt > now:
-        delta = relativedelta(dt, now)
-        suffix = ''
-    else:
-        delta = relativedelta(now, dt)
-        suffix = ' ago'
-
+def parse_delta(delta, *, suffix=''):
     if delta.microseconds and delta.seconds:
         delta = delta + relativedelta(seconds=+1)
 
@@ -75,3 +138,16 @@ def human_timedelta(dt, *, source=None):
     if not output:
         return 'now'
     return human_join(output) + suffix
+
+
+def human_timedelta(dt, *, source=None):
+    now = source or datetime.datetime.utcnow()
+
+    if dt > now:
+        delta = relativedelta(dt, now)
+        suffix = ''
+    else:
+        delta = relativedelta(now, dt)
+        suffix = ' ago'
+
+    return parse_delta(delta, suffix=suffix)

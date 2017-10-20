@@ -95,18 +95,6 @@ class BannedMember(commands.Converter):
         return thing
 
 
-def positive_duration(arg):
-    amount = time.duration(arg)
-    if amount <= 0:
-        rounded = round(amount, 2) if amount % 1 else int(amount)
-        raise commands.BadArgument(f"I can't go forward {rounded} seconds. "
-                                    "Do you want me to go back in time or something?")
-    return amount
-
-def int_duration(arg):
-    return int(positive_duration(arg))
-
-
 _warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban',]
 _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
@@ -169,7 +157,7 @@ class Moderator(Cog):
 
     @commands.group(invoke_without_command=True, usage=['15', '99999 @Mee6#4876'])
     @commands.has_permissions(manage_messages=True)
-    async def slowmode(self, ctx, duration: positive_duration, *, member: discord.Member=None):
+    async def slowmode(self, ctx, duration: time.Delta, *, member: discord.Member=None):
         """Puts a thing in slowmode.
 
         An optional member argument can be provided. If it's
@@ -196,16 +184,16 @@ class Moderator(Cog):
             return await ctx.send(f'{member.mention} is already in **no-immune** slowmode. '
                                    'You need to turn it off first.')
 
-        slowmode['duration'] = duration
+        slowmode['duration'] = duration.duration
         await self.slowmodes.put(ctx.guild.id, config)
 
         await ctx.send(f'{member.mention} is now in slowmode! '
-                       f'{pronoun} must wait {time.duration_units(duration)} '
+                       f'{pronoun} must wait {duration} '
                         'between each message they send.')
 
     @slowmode.command(name='noimmune', aliases=['n-i'], usage=['10', '1000000000 @b1nzy#1337'])
     @commands.has_permissions(manage_messages=True)
-    async def slowmode_no_immune(self, ctx, duration: positive_duration, *, member: discord.Member=None):
+    async def slowmode_no_immune(self, ctx, duration: time.Delta, *, member: discord.Member=None):
         """Puts the channel or member in "no-immune" slowmode.
 
         Unlike `{prefix}slowmode`, no one is immune to this slowmode,
@@ -219,11 +207,11 @@ class Moderator(Cog):
 
         config = self.slowmodes.get(ctx.guild.id, {})
         slowmode = config.setdefault(str(member.id), {'no_immune': True})
-        slowmode['duration'] = duration
+        slowmode['duration'] = duration.duration
         await self.slowmodes.put(ctx.guild, config)
 
         await ctx.send(f'{member.mention} is now in **no-immune** slowmode! '
-                       f'{pronoun} must wait {time.duration_units(duration)} '
+                       f'{pronoun} must wait {duration} '
                        'after each message they send.')
 
     @slowmode.command(name='off', usage=['', '277045400375001091'])
@@ -458,7 +446,7 @@ class Moderator(Cog):
 
     @commands.command(name='warnpunish', usage=['4 softban', '5 ban'])
     @commands.has_permissions(manage_messages=True, manage_guild=True)
-    async def warn_punish(self, ctx, num: int, punishment, duration: int_duration=0):
+    async def warn_punish(self, ctx, num: int, punishment, duration: time.Delta = 0):
         """Sets the punishment a user receives upon exceeding a given warn limit.
 
         Valid punishments are:
@@ -477,16 +465,17 @@ class Moderator(Cog):
         if lowered in {'tempban', 'mute'}:
             if not duration:
                 return await ctx.send(f'A duration is required for {lowered}...')
+            true_duration = duration.duration
         else:
-            duration = 0
+            true_duration = 0
 
-        extra = f'for {time.duration_units(duration)}' if duration else ''
+        extra = f'for {duration}' if duration else ''
 
         row = WarnPunishment(
             guild_id=ctx.guild.id,
             warns=num,
             type=lowered,
-            duration=duration,
+            duration=true_duration,
         )
 
         await (ctx.session.insert.add_row(row)
@@ -512,15 +501,16 @@ class Moderator(Cog):
 
     @commands.command(name='warntimeout', usage=['10', '15m', '1h20m10s'])
     @commands.has_permissions(manage_messages=True, manage_guild=True)
-    async def warn_timeout(self, ctx, duration: positive_duration):
+    async def warn_timeout(self, ctx, duration: time.Delta):
         """Sets the maximum time between the oldest warn and the most recent warn.
         If a user hits a warn limit within this timeframe, they will be punished.
         """
-        row = WarnTimeout(guild_id=ctx.guild.id, timeout=datetime.timedelta(seconds=duration))
+        timeout = datetime.timedelta(seconds=duration.duration)
+        row = WarnTimeout(guild_id=ctx.guild.id, timeout=timeout)
         await (ctx.session.insert.add_row(row).on_conflict(WarnTimeout.guild_id)
                           .update(WarnTimeout.timeout))
 
-        await ctx.send(f'Alright, if a user was warned within {time.duration_units(duration)} '
+        await ctx.send(f'Alright, if a user was warned within **{duration}** '
                         'after their oldest warn, bad things will happen.')
 
     @staticmethod
@@ -573,13 +563,13 @@ class Moderator(Cog):
 
     @commands.command(usage=['192060404501839872 stfu about your gf'])
     @commands.has_permissions(manage_messages=True)
-    async def mute(self, ctx, member: discord.Member, duration: positive_duration, *, reason: str=None):
+    async def mute(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
         """Mutes a user (obviously)"""
         self._check_user(ctx, member)
-        when = ctx.message.created_at + datetime.timedelta(seconds=duration)
+        when = ctx.message.created_at + duration.delta
         await self._do_mute(member, when)
         await ctx.send(f"Done. {member.mention} will now be muted for "
-                       f"{time.human_timedelta(when)}... \N{ZIPPER-MOUTH FACE}")
+                       f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
     @commands.command(usage=['80528701850124288', '@R. Danny#6348'])
     async def mutetime(self, ctx, member: discord.Member=None):
@@ -708,15 +698,14 @@ class Moderator(Cog):
 
     @commands.command(aliases=['tb'], usage='Kwoth#2560 Your bot sucks lol')
     @commands.has_permissions(ban_members=True)
-    async def tempban(self, ctx, member: discord.Member, duration: positive_duration, *, reason: str=None):
+    async def tempban(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
         """Temporarily bans a user (obviously)"""
 
         self._check_user(ctx, member)
         await ctx.guild.ban(member, reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
-        await ctx.bot.db_scheduler.add(datetime.timedelta(seconds=duration), 'tempban_complete',
-                                       (ctx.guild.id, member.id))
+        await ctx.bot.db_scheduler.add(duration, 'tempban_complete', (ctx.guild.id, member.id))
 
     @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
     @commands.has_permissions(ban_members=True)

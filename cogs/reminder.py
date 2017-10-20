@@ -10,7 +10,7 @@ from datetime import timedelta
 from .utils.context_managers import redirect_exception
 from .utils.misc import emoji_url, truncate
 from .utils.paginator import EmbedFieldPages
-from .utils.time import duration, human_timedelta
+from .utils.time import FutureTime, human_timedelta
 
 from core.cog import Cog
 
@@ -19,11 +19,6 @@ MAX_REMINDERS = 10
 ALARM_CLOCK_URL = emoji_url('\N{ALARM CLOCK}')
 CLOCK_URL = emoji_url('\N{MANTELPIECE CLOCK}')
 CANCELED_URL = emoji_url('\N{BELL WITH CANCELLATION STROKE}')
-
-
-_calendar = parsedatetime.Calendar()
-def parse_time(time_string):
-    return _calendar.parseDT(time_string)[0]
 
 
 # sorry not sorry danny
@@ -60,21 +55,9 @@ class Reminder(Cog):
         await ctx.send(embed=self._create_reminder_embed(ctx, when, message))
 
     @commands.group(invoke_without_command=True)
-    async def remind(self, ctx, duration: duration, *, message: commands.clean_content='nothing'):
+    async def remind(self, ctx, when: FutureTime, *, message: commands.clean_content='nothing'):
         """Adds a reminder that will go off after a certain amount of time."""
-
-        when = ctx.message.created_at + timedelta(seconds=duration)
-        await self._add_reminder(ctx, when, message)
-
-    @remind.command(name='at')
-    async def remind_at(self, ctx, when: parse_time, *, message: commands.clean_content='nothing'):
-        """Adds a reminder that will go off at a certain time.
-
-        Times are based off UTC.
-        """
-        if when < ctx.message.created_at:
-            return await ctx.send("I can't go back in time for you. Sorry.")
-        await self._add_reminder(ctx, when, message)
+        await self._add_reminder(ctx, when.dt, message)
 
     @remind.command(name='cancel', aliases=['del'])
     async def cancel_reminder(self, ctx, index: int=1):
