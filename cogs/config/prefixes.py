@@ -86,7 +86,7 @@ class Prefixes(InitRoot):
             if original:
                 await ctx.send(original)
 
-    @prefix.command(name="reset")
+    @prefix.command(name='reset', aliases=['clear'])
     @commands.has_permissions(manage_guild=True)
     async def reset_prefix(self, ctx):
         """Resets the server's custom prefixes back to the default prefix ({prefix})"""
