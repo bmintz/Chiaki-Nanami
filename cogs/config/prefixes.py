@@ -89,7 +89,12 @@ class Prefixes(InitRoot):
     @prefix.command(name='reset', aliases=['clear'])
     @commands.has_permissions(manage_guild=True)
     async def reset_prefix(self, ctx):
-        """Resets the server's custom prefixes back to the default prefix ({prefix})"""
+        """Removes all the server's prefixes.
+
+        After this, the only way to get my commands to work
+        is by mentioning me.
+        """
+
         await ctx.bot.set_guild_prefixes(ctx.guild, [])
         await ctx.send(f"Done. **{ctx.guild}** no longer has any custom prefixes")
 
