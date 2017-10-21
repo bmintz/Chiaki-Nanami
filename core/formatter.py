@@ -63,9 +63,8 @@ def _make_command_requirements(command):
 
             perm_names = ', '.join(pretty_perms)
             requirements.append(f'{perm_names} permission{"s" * (len(pretty_perms) != 1)}')
-        print(requirements)
 
-        return '\n'.join(requirements)
+    return '\n'.join(requirements)
 
 
 class HelpCommandPage(BaseReactionPaginator):
