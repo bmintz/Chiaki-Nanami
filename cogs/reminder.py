@@ -45,7 +45,7 @@ class Reminder(Cog):
                .set_author(name='Reminder set!', icon_url=CLOCK_URL)
                .set_thumbnail(url=ctx.author.avatar_url)
                .add_field(name='For', value=f'#{ctx.channel} in {ctx.guild}', inline=False)
-               .set_footer(text='Set to go off at')
+               .set_footer(text=f'In {human_timedelta(when)} at')
                )
 
     async def _add_reminder(self, ctx, when, message):
