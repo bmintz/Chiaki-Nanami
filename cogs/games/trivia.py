@@ -236,11 +236,44 @@ class _OTDBQuestion(collections.namedtuple('_OTDBQuestion', 'category type quest
         a = self.answers
         return random.sample(a, len(a))
 
+    @classmethod
+    def from_data(cls, question):
+        return cls(
+            category=question['category'],
+            type=question['type'],
+            question=unescape(question['question']),
+            answer=question['correct_answer'],
+            incorrect=tuple(question['incorrect_answers']),
+        )
+
+# How many times should the cache be used before making an API request
+# to get more questions, the lower this number, the more likely it will
+# make an HTTP request. Set to 0 to always use the API
+#
+# Note that the toggler is only called when the trivia session doesn't
+# have any questions in the queue, so be careful when making this really
+# high. Otherwise the question cache might never be filled.
+TIMES_TO_USE_CACHE = 2
+
+# The size the cache should be before a new session primes a new session
+# using the cache rather than using the global toggler.
+MIN_CACHE_SIZE = 1000
+
 
 class OTDBTriviaSession(BaseTriviaSession):
+    # Global toggler for whether to use the cache or not
+    _toggle_using_cache = itertools.cycle([False] + [True] * TIMES_TO_USE_CACHE).__next__
+    _question_cache = set()
+
     def __init__(self, ctx, category=None):
         super().__init__(ctx, _otdb_category)
-        self._pending = collections.deque()
+        self._pending = collections.deque(maxlen=50)
+
+        if len(self._question_cache) >= MIN_CACHE_SIZE:
+            # Only prime 10 questions, because it's rare for a trivia game to go 
+            # longer than that. So pre-filling the pending queue with any more
+            # questions would just be a waste.
+            self._pending.extend(random.sample(self._question_cache, 10))
 
     async def _show_question(self, n):
         question = self._current_question
@@ -264,25 +297,27 @@ class OTDBTriviaSession(BaseTriviaSession):
 
         await self.ctx.send(embed=embed)
 
-    # XXX: This makes a request every 50 or so questions, not sure how to limit
-    #      this. I already use a deque to limit the number of requests, maybe I
-    #      should do a global cache?
     async def next_question(self):
         try:
             question = self._pending.pop()
         except IndexError:
-            async with self.ctx.bot.session.get('https://opentdb.com/api.php?amount=50') as resp:
-                results = await resp.json()
-                self._pending.extend(results['results'])
+            # Make sure the global cache is non-empty, because if the toggler
+            # is True and there are no questions in the cache, then the pop
+            # at the bottom will error out. And the trivia would end mysteriously.
+            if self._toggle_using_cache() and self._question_cache:
+                results = random.sample(self._question_cache, 50)
+            else:
+                async with self.ctx.bot.session.get('https://opentdb.com/api.php?amount=50') as resp:
+                    data = await resp.json()
+
+                results = list(map(_OTDBQuestion.from_data, data['results']))
+                self._question_cache.update(results)
+
+            self._pending.extend(results)
+
             question = self._pending.pop()
 
-        return _OTDBQuestion(
-            category=question['category'],
-            type=question['type'],
-            question=unescape(question['question']),
-            answer=question['correct_answer'],
-            incorrect=question['incorrect_answers'],
-        )
+        return question
 
 
 def _process_json(d, *, name=''):
