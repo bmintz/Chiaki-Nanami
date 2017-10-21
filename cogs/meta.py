@@ -403,7 +403,13 @@ class Meta(Cog):
                        .add_field(name="Explicit Content Filter", value=explicit_filter)
                        .add_field(name="Special Features", value=features)
                        .add_field(name='Counts', value='\n'.join(counts))
-                       .add_field(name=f'{len(server.channels)} Channels', value='\n'.join(channels))
+                       .add_field(name=pluralize(Channel=len(server.channels)), value='\n'.join(channels))
+                       # Members doesn't have to be pluralized because we can guarantee that there
+                       # will be at least two members in the server.
+                       # - The bot can't be the only person in the server, because that would imply
+                       #   that the bot owns the server, which is no longer possible.
+                       # - If the bot doesn't own the server, then the owner must be there,
+                       #   which means there is more than one person in the server.
                        .add_field(name=f'{len(server.members)} Members', value=member_stats)
                        .set_footer(text=f'ID: {server.id} | Created')
                        )
