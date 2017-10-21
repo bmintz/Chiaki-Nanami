@@ -374,10 +374,6 @@ class ModLog(Cog):
 
         try:
             for attempt in range(3):
-                entry = await guild.audit_logs(action=audit_action, after=after).get(target=user)
-                if entry is not None:
-                    break
-
                 # This delay is here for two reasons:
                 # 1. We want to avoid rate-limiting the bot too hard.
                 # 2. We'll wait for long periods of time so that we can sufficiently
@@ -386,6 +382,10 @@ class ModLog(Cog):
                 #
                 # It shouldn't take too long... Right, Discord?
                 await asyncio.sleep(0.5 * (attempt + 1))  # cruddy backoff
+
+                entry = await guild.audit_logs(action=audit_action, after=after).get(target=user)
+                if entry is not None:
+                    break
 
             else:  # hooray for for-else
                 log.info('%s (ID: %d) in guild %s (ID: %d) never had an entry for event %r',
