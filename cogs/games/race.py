@@ -107,7 +107,7 @@ class RacingSession:
                       )
         self._closed = asyncio.Event()
 
-    async def add_member(self, member):
+    async def _add_member(self, member):
         horse = await _get_race_horse(self.ctx.session, member.id)
         self.players.append(Racer(member, horse))
 
@@ -117,7 +117,7 @@ class RacingSession:
         if self.already_joined(member):
             return await self.ctx.send("You're already in the race!")
 
-        await self.add_member(member)
+        await self._add_member(member)
 
         if len(self.players) >= self.MAXIMUM_REQUIRED_MEMBERS:
             self._closed.set()
