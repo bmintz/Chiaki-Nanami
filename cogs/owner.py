@@ -37,9 +37,8 @@ def _tabulate(rows, headers=()):
     return '\n'.join(to_draw)
 
 
-class Owner(Cog):
+class Owner(Cog, hidden=True):
     """Owner-only commands"""
-    __hidden__ = True
 
     def __init__(self, bot):
         self.bot = bot
