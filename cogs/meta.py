@@ -191,7 +191,7 @@ class Meta(Cog):
         return  (discord.Embed(colour=colour, description=playing)
                 .set_thumbnail(url=avatar_url)
                 .set_author(name=str(member))
-                .add_field(name="Nickname", value=member.display_name)
+                .add_field(name="Display Name", value=member.display_name)
                 .add_field(name="Created at", value=nice_time(member.created_at))
                 .add_field(name=f"Joined server at", value=nice_time(member.joined_at))
                 .add_field(name=f"Avatar link", value=f'[Click Here!](avatar_url)')
