@@ -176,10 +176,19 @@ class Meta(Cog):
     @staticmethod
     async def _user_embed(member):
         avatar_url = member.avatar_url
-        playing = f"Playing **{member.game}**" if member.game else "Not playing anything..."
+
+        colour = _status_colors[member.status]
+        if not member.game:
+            playing = 'Not playing anything...'
+        elif member.game.type == 1:
+            playing = f'Streaming [**{member.game}**]({member.game.url})'
+            colour = 0x593695  # streaming colour
+        else:
+            playing = f"Playing **{member.game}**"
+
         roles = sorted(member.roles, reverse=True)[:-1]  # last role is @everyone
 
-        return  (discord.Embed(colour=_status_colors[member.status], description=playing)
+        return  (discord.Embed(colour=colour, description=playing)
                 .set_thumbnail(url=avatar_url)
                 .set_author(name=str(member))
                 .add_field(name="Nickname", value=member.display_name)
