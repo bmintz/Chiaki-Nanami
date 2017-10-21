@@ -88,6 +88,9 @@ class HelpCommandPage(BaseReactionPaginator):
 
     @page('\N{DOWNWARDS BLACK ARROW}')
     def subcommands(self):
+        if self._on_subcommand_page:
+            return None
+
         ctx, command = self.context, self.command
 
         assert isinstance(command, commands.GroupMixin), "command has no subcommands"
