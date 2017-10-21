@@ -88,17 +88,20 @@ class HelpCommandPage(BaseReactionPaginator):
 
     @page('\N{DOWNWARDS BLACK ARROW}')
     def subcommands(self):
-        assert isinstance(self.command, commands.GroupMixin), "command has no subcommands"
+        ctx, command = self.context, self.command
+
+        assert isinstance(command, commands.GroupMixin), "command has no subcommands"
         self._on_subcommand_page = True
-        subs = sorted(map(str, set(self.command.walk_commands())))
+        subs = sorted(map(str, set(command.walk_commands())))
 
         note = (
-            'Type `{ctx.clean_prefix}{ctx.invoked_with} command` for more info on a command.\n'
-            f'(e.g. type `{{ctx.clean_prefix}}{{ctx.clean_prefix}} {random.choice(subs)}`)'
-        ).format(ctx=self.context)
+            f'Type `{ctx.clean_prefix}{ctx.invoked_with} {command} subcommand`'
+            f' for more info on a subcommand.\n'
+            f'(e.g. type `{ctx.clean_prefix}{ctx.invoked_with} {random.choice(subs)}`)'
+        )
 
         return (discord.Embed(colour=self.colour, description='\n'.join(map('`{}`'.format, subs)))
-                .set_author(name=f'Child Commands for {self.command}')
+                .set_author(name=f'Child Commands for {command}')
                 .add_field(name='\u200b', value=note, inline=False)
                 )
 
