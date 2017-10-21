@@ -16,6 +16,7 @@ from discord.ext import commands
 from io import StringIO
 from itertools import chain, islice, starmap
 from math import log10
+from more_itertools import sliced
 from operator import attrgetter
 
 from .utils import cache, disambiguate
@@ -147,6 +148,38 @@ class ServerPages(BaseReactionPaginator):
                .set_author(name='Welcome to the help thing!')
                )
 
+def _parse_channel(channel, prefix, predicate):
+    formatted = f'{prefix}{escape_markdown(str(channel))}'
+    return f'**{formatted}**' if predicate(channel) else formatted
+
+class ChannelPaginator(ListPaginator):
+    def __init__(self, ctx):
+        permissions_in = ctx.author.permissions_in
+
+        _channel_parsers = {
+            discord.TextChannel: functools.partial(_parse_channel, prefix='#', predicate=lambda c: permissions_in(c).read_messages),
+            discord.VoiceChannel: functools.partial(_parse_channel, prefix='', predicate=lambda c: permissions_in(c).connect),
+        }
+
+        entries = [
+            (category, [_channel_parsers[c.__class__](c) for c in entries])
+            for category, channels in ctx.guild.by_category()
+            for entries in sliced(channels, 10)
+        ]
+
+        super().__init__(ctx, entries, lines_per_page=1)
+
+    def _create_embed(self, idx, page):
+        category, channels = page[0]
+
+        header = f'Channels in category {category}' if category else "Channels with no category..."
+        category_id = category.id if category else None
+        description = '\n'.join(channels) if channels else "There are no channels here..."
+
+        return (discord.Embed(description=description, colour=self.colour)
+                .set_author(name=header)
+                .set_footer(text=f'Page {idx + 1}/{len(self)} | Category ID: {category_id}')
+                )
 
 class Meta(Cog):
     """Info related commands"""
@@ -428,34 +461,16 @@ class Meta(Cog):
 
     @commands.command(aliases=['chnls'])
     async def channels(self, ctx):
-        """Shows all the channels in the server. Channels you can access are **bolded**
+        """Shows all the channels in the server, grouped by their category.
 
-        If you're in a voice channel, that channel is ***italicized and bolded***
+        Channels you can access -- being able to read messages
+        for text channels, and being able to connect on your own
+        for voice channels -- are **bolded.**
+
+        Note that text channels are prefixed with `#`, while voice
+        channels have no prefix.
         """
-        permissions_in = ctx.author.permissions_in
-
-        def get_channels(channels, prefix, permission):
-            return [f'**{prefix}{escape_markdown(str(c))}**' if getattr(permissions_in(c), permission)
-                    else f'{prefix}{escape_markdown(str(c))}' for c in channels]
-
-        text_channels  = get_channels(ctx.guild.text_channels,  prefix='#', permission='read_messages')
-        voice_channels = get_channels(ctx.guild.voice_channels, prefix='', permission='connect')
-
-        voice = ctx.author.voice
-        if voice is not None:
-            index = voice.channel.position
-            name = voice_channels[index]
-            # Name was already bolded
-            if not name.startswith('**'):
-                name = f'**{name}**'
-            voice_channels[index] = f'*{name}*'
-
-        channels = chain(
-            ('', f'**List of Text Channels ({len(text_channels)})**', '-' * 20, ), text_channels,
-            ('', f'**List of Voice Channels ({len(voice_channels)})**', '-' * 20, ), voice_channels
-        )
-
-        pages = ListPaginator(ctx, channels, title=f'Channels in {ctx.guild}')
+        pages = ChannelPaginator(ctx)
         await pages.interact()
 
     @commands.command()
