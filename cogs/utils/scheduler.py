@@ -180,7 +180,14 @@ class BaseScheduler:
         return callbacks_removed
 
     def run(self):
-        """Runs the scheduler."""
+        """Runs the scheduler.
+
+        If the scheduler is already running, this does nothing.
+        """
+
+        if self.is_running():
+            return
+
         self._runner = self._loop.create_task(self._update())
 
     def is_running(self):
