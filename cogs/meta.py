@@ -381,7 +381,10 @@ class Meta(Cog):
         highest_role = server.role_hierarchy[0]
         description = f"Owned by {server.owner}"
         features = '\n'.join(server.features) or 'None'
-        counts = (f'{len(getattr(server, thing))} {thing.title()}' for thing in ('channels', 'roles', 'emojis'))
+        counts = (f'{len(getattr(server, thing))} {thing.title()}' 
+                  for thing in ('roles', 'emojis'))
+        channels = (f'{len(getattr(server, thing))} {thing.replace("_channels", " ").title()}' 
+                   for thing in ('categories', 'text_channels', 'voice_channels'))
 
         statuses = collections.OrderedDict.fromkeys(['Online', 'Idle', 'Dnd', 'Offline'], 0)
         statuses.update(collections.Counter(m.status.name.title() for m in server.members if not m.bot))
@@ -400,6 +403,7 @@ class Meta(Cog):
                        .add_field(name="Explicit Content Filter", value=explicit_filter)
                        .add_field(name="Special Features", value=features)
                        .add_field(name='Counts', value='\n'.join(counts))
+                       .add_field(name=f'{len(server.channels)} Channels', value='\n'.join(channels))
                        .add_field(name=f'{len(server.members)} Members', value=member_stats)
                        .set_footer(text=f'ID: {server.id} | Created')
                        )
