@@ -1,13 +1,16 @@
 import asyncio
+import asyncpg
 import asyncqlio
 import collections
 import contextlib
 import discord
+import enum
 import functools
 import glob
 import io
 import itertools
 import json
+import logging
 import os
 import random
 
@@ -21,6 +24,8 @@ from ..utils.misc import base_filename, emoji_url
 
 from core.cog import Cog
 
+
+_logger = logging.getLogger(__name__)
 
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
@@ -195,33 +200,6 @@ class CustomTriviaSession(BaseTriviaSession):
         return _QuestionTuple(**await self.ctx.session.fetch(query, params))
 
 
-class RandomTriviaSession(BaseTriviaSession):
-    """Trivia Game using ALL categories, both custom and default."""
-    async def next_question(self):
-        if random.randint(0, 1):
-            # Try using custom categories first, we'll need to use
-            # default categories as a fallback in case the server
-            # doesn't have any custom categories.
-            query = """ SELECT *
-                        FROM trivia_categories
-                        WHERE guild_id={guild_id}
-                        OFFSET FLOOR(RANDOM() * (
-                            SELECT COUNT(*)
-                            FROM trivia_categories
-                            WHERE category_id={guild_id}
-                        ))
-                        LIMIT 1
-                    """
-            params = {'guild_id': self.ctx.guild.id}
-            row = await self.ctx.session.fetch(query, params)
-            if row:
-                self.category = Category(**row)
-                return await CustomTriviaSession.next_question(self)
-
-        self.category = random.choice(list(Category._default_categories.values()))
-        return await DefaultTriviaSession.next_question(self)
-
-
 _otdb_category = _CategoryTuple(name='Trivia - OTDB',
                                 description='[Check out their site here!](https://opentdb.com)')
 
@@ -320,6 +298,76 @@ class OTDBTriviaSession(BaseTriviaSession):
         return question
 
 
+class RandomQuestionType(enum.Enum):
+    DEFAULT = enum.auto()
+    CUSTOM = enum.auto()
+    OTDB = enum.auto()
+
+
+RQT_CHOICES = list(RandomQuestionType)
+
+
+class RandomTriviaSession(BaseTriviaSession):
+    """Trivia Game using ALL categories, both custom, default AND OTDB."""
+    _toggle_using_cache = OTDBTriviaSession._toggle_using_cache
+    _question_cache = OTDBTriviaSession._question_cache
+
+
+    def __init__(self, ctx, category=None):
+        super().__init__(ctx, _otdb_category)
+        self._pending = collections.deque(maxlen=50)
+
+        if len(self._question_cache) >= MIN_CACHE_SIZE:
+            # Only prime 10 questions, because it's rare for a trivia game to go 
+            # longer than that. So pre-filling the pending queue with any more
+            # questions would just be a waste.
+            self._pending.extend(random.sample(self._question_cache, 10))
+
+        self._question_type = None
+
+    async def _show_question(self, n):
+        if self._question_type == RandomQuestionType.OTDB:
+            await OTDBTriviaSession._show_question(self, n)
+        else:
+            await super()._show_question(n)
+
+    async def next_question(self):
+        self._question_type = qt = random.choice(RQT_CHOICES)
+
+        if qt == RandomQuestionType.CUSTOM:
+            # Try using custom categories first, we'll need to use
+            # default categories as a fallback in case the server
+            # doesn't have any custom categories.
+            query = """ SELECT *
+                        FROM trivia_categories
+                        WHERE guild_id={guild_id}
+                        OFFSET FLOOR(RANDOM() * (
+                            SELECT COUNT(*)
+                            FROM trivia_categories
+                            WHERE category_id={guild_id}
+                        ))
+                        LIMIT 1
+                    """
+            params = {'guild_id': self.ctx.guild.id}
+            try:
+                row = await self.ctx.session.fetch(query, params)
+            except Exception:
+                # Table doesn't exist, ignore it.
+                _logger.exception('Could not select a trivia question from PostgreSQL.')
+            else:
+                self._question_type = qt = random.choice(RQT_CHOICES[1:])
+                if row:
+                    self.category = Category(**row)
+                    return await CustomTriviaSession.next_question(self)
+                else:
+                    self._question_type = qt = random.choice(RQT_CHOICES[1:])
+
+        if qt == RandomQuestionType.DEFAULT:
+            self.category = random.choice(list(Category._default_categories.values()))
+            return await DefaultTriviaSession.next_question(self)
+        else:
+            return await OTDBTriviaSession.next_question(self)
+
 def _process_json(d, *, name=''):
     name = d.pop('name', name)
     description = d.pop('description', None)
@@ -362,9 +410,19 @@ class Trivia(Cog):
             await asyncio.sleep(1.5)
 
     @commands.group(invoke_without_command=True)
-    async def trivia(self, ctx, *, category: Category):
-        """Starts a game of trivia."""
-        cls = DefaultTriviaSession if isinstance(category, _CategoryTuple) else CustomTriviaSession
+    async def trivia(self, ctx, *, category: Category = None):
+        """Starts a game of trivia. 
+
+        Specifying no category will choose from all categories.
+        This means it will choose from OTDB, the server's custom
+        categories, and the built-in categories.
+        """
+        cls = (
+            DefaultTriviaSession if isinstance(category, _CategoryTuple) 
+            else RandomTriviaSession if category is None 
+            else CustomTriviaSession
+        )
+
         await self._run_trivia(ctx, category, cls)
 
     @trivia.command(name='otdb')
