@@ -394,7 +394,7 @@ class RandomTriviaSession(BaseTriviaSession):
                 else:
                     self._question_type = qt = random.choice(RQT_NO_CUSTOM)
 
-        if qt == RandomQuestionType.DEFAULT:
+        if qt == RandomQuestionType.DEFAULT and Category._default_categories:
             self.category = random.choice(list(Category._default_categories.values()))
             return await DefaultTriviaSession.next_question(self)
         else:
