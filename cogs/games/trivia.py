@@ -253,8 +253,33 @@ class OTDBTriviaSession(BaseTriviaSession):
             # questions would just be a waste.
             self._pending.extend(random.sample(self._question_cache, 10))
 
+    def _check_answer(self, message):
+        # There must break early.
+        if message.channel != self.ctx.channel:
+            return False
+        # Prevent other bots from accidentally answering the question
+        # This issue has happened numberous times with other bots.
+        if message.author.bot:
+            return False
+
+        if not message.content.isdigit():
+            # Do not allow negative numbers because they're not gonna be
+            # listed in the answers. We don't wanna confuse users here.
+            return super()._check_answer(message)
+
+        number = int(message.content)
+
+        try:
+            choice = self._choices[number - 1]
+        except IndexError:
+            return super()._check_answer(message)
+
+        return choice == self._current_question.answer
+
     async def _show_question(self, n):
         question = self._current_question
+        self._choices = question.choices
+
         leader = self.leader
         leader_text = f'{leader[0]} with {leader[1]} points' if leader else None
         description = self.category.description
@@ -262,7 +287,7 @@ class OTDBTriviaSession(BaseTriviaSession):
         is_tf = question.type == 'boolean'
         tf_header = '**True or False**\n' * is_tf
         question_field = f'{tf_header}{question.question}'
-        possible_answers = '\n'.join(map('\N{BULLET} {0}'.format, question.choices))
+        possible_answers = '\n'.join(itertools.starmap('{0}. {1}'.format, enumerate(self._choices, 1)))
 
         embed = (discord.Embed(description=description, colour=random.randint(0, 0xFFFFFF))
                  .set_author(name=self.category.name)
@@ -324,6 +349,12 @@ class RandomTriviaSession(BaseTriviaSession):
             self._pending.extend(random.sample(self._question_cache, 10))
 
         self._question_type = None
+
+    def _check_answer(self, message):
+        if self._question_type == RandomQuestionType.OTDB:
+            return OTDBTriviaSession._check_answer(self, message)
+        return super()._check_answer(message)
+
 
     async def _show_question(self, n):
         if self._question_type == RandomQuestionType.OTDB:
