@@ -89,10 +89,15 @@ def _callable_prefix(bot, message):
 
     return commands.when_mentioned_or(*prefixes)(bot, message)
 
+
+VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro')
 _chiaki_formatter = ChiakiFormatter(width=MAX_FORMATTER_WIDTH, show_check_failure=True)
 
 
 class Chiaki(commands.Bot):
+    __version__ = '1.0.1'
+    version_info = VersionInfo(major=1, minor=0, micro=1)
+
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
                          formatter=_chiaki_formatter,

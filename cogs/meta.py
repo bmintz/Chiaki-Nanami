@@ -251,6 +251,7 @@ class Meta(Cog):
                  .add_field(name='Python', value=platform.python_version())
                  .add_field(name='Library', value=DISCORD_PY_LIB)
                  .add_field(name='Useful links', value=useful_links, inline=False)
+                 .set_footer(text=f'Chiaki is on Version {bot.__version__} <3')
                  )
         await ctx.send(embed=embed)
 
