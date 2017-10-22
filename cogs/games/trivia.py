@@ -220,8 +220,8 @@ class _OTDBQuestion(collections.namedtuple('_OTDBQuestion', 'category type quest
             category=question['category'],
             type=question['type'],
             question=unescape(question['question']),
-            answer=question['correct_answer'],
-            incorrect=tuple(question['incorrect_answers']),
+            answer=unescape(question['correct_answer']),
+            incorrect=tuple(map(unescape, question['incorrect_answers'])),
         )
 
 # How many times should the cache be used before making an API request
