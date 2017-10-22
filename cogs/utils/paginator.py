@@ -16,6 +16,16 @@ from .misc import maybe_awaitable
 _log = logging.getLogger(__name__)
 
 
+@contextlib.contextmanager
+def _always_done_future(fut):
+    fut = asyncio.ensure_future(fut)
+    try:
+        yield fut
+    finally:
+        if not fut.done():
+            fut.cancel()
+
+
 class DelimPaginator(commands.Paginator):
     def __init__(self, prefix='```', suffix='```', max_size=2000, join_delim='\n', **kwargs):
         super().__init__(prefix, suffix, max_size)
@@ -326,29 +336,74 @@ class ListPaginator(BaseReactionPaginator):
                     and m.content.isdigit()
                     )
 
-        embed = (discord.Embed(colour=self.colour, description=f'Please enter a number from 1 to {len(self)}')
+        description = (
+            f'Please enter a number from 1 to {len(self)}.\n'
+            'You may also click any of the reactions to leave this page.'
+        )
+
+        embed = (discord.Embed(colour=self.colour, description=description)
                  .set_author(name=f'What page do you want to go to, {ctx.author.display_name}?')
                  .set_footer(text=f'We were on page {self._index + 1}')
                  )
 
+        wait = functools.partial(asyncio.wait, timeout=60, return_when=asyncio.FIRST_COMPLETED)
         try:
             while True:
-                await self._message.edit(embed=embed)
+                # The two futures are such that so the user doesn't get "stuck" in the
+                # number page. If they click on the number page by accident, then they
+                # should have an easy way out.
+                #  
+                # Thus we have to wait for two events:
+                # 1. the reaction if the user really wants to go to a different page,
+                # 2. and the actual number of the page they want to go to.
 
-                try:
-                    result = await ctx.bot.wait_for('message', check=check, timeout=60)
-                except asyncio.TimeoutError:
-                    return self._current
+                with _always_done_future(ctx.bot.wait_for('message', check=check)) as f1, \
+                     _always_done_future(ctx.bot.wait_for('reaction_add', check=self._check_reaction)) as f2:
+                    # ...
+                    await self._message.edit(embed=embed)
 
-                to_delete.append(result)
+                    done, pending = await wait((f1, f2))
+                    if not done:
+                        # Effectively a timeout.
+                        return self._current
 
-                result = int(result.content)
-                page = self.page_at(result - 1)
-                if page:
-                    return page
-                else:
-                    embed.description = f"That's not between 1 and {len(self)}..."
-                    embed.colour = 0xf44336
+                    result = await done.pop()
+
+                    if isinstance(result, discord.Message):
+                        # The user imputted a message, let's parse it normally.
+                        to_delete.append(result)
+
+                        result = int(result.content)
+                        page = self.page_at(result - 1)
+                        if page:
+                            return page
+                        else:
+                            embed.description = f"That's not between 1 and {len(self)}..."
+                            embed.colour = 0xf44336
+                    else:
+                        # The user probably added a reaction.
+                        react, user = result
+                        if react.emoji == '\N{INPUT SYMBOL FOR NUMBERS}':
+                            continue # fail silently
+
+                        # Treat it as if it was a normal reaction case.
+                        try:
+                            attr = self._reaction_map[react.emoji]
+                        except KeyError:
+                            # Because subclasses *can* override the check we need to check
+                            # that the check given is valid, ie that the check will return
+                            # True if and only if the emoji is in the reaction map.
+                            raise RuntimeError(f"{react.emoji} has no method attached to it, check "
+                                               f"the {self._check_reaction.__qualname__} method")
+
+                        try:
+                            return await maybe_awaitable(getattr(self, attr))
+                        finally:
+                            with contextlib.suppress(discord.HTTPException):
+                                # Manage Messages permissions is required to remove
+                                # other people's reactions. Sometimes the bot doesn't
+                                # have that for some reason. We must factor that in.
+                                await self._message.remove_reaction(react.emoji, user)
         finally:
             with contextlib.suppress(Exception):
                 await channel.delete_messages(to_delete)
