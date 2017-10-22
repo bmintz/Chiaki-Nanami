@@ -397,6 +397,7 @@ class RandomTriviaSession(BaseTriviaSession):
             self.category = random.choice(list(Category._default_categories.values()))
             return await DefaultTriviaSession.next_question(self)
         else:
+            self.category = _otdb_category
             return await OTDBTriviaSession.next_question(self)
 
 def _process_json(d, *, name=''):
