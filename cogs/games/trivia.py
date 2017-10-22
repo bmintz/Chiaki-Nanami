@@ -330,6 +330,7 @@ class RandomQuestionType(enum.Enum):
 
 
 RQT_CHOICES = list(RandomQuestionType)
+RQT_NO_CUSTOM = [RandomQuestionType.DEFAULT, RandomQuestionType.OTDB]
 
 
 class RandomTriviaSession(BaseTriviaSession):
@@ -384,14 +385,14 @@ class RandomTriviaSession(BaseTriviaSession):
                 row = await self.ctx.session.fetch(query, params)
             except Exception:
                 # Table doesn't exist, ignore it.
+                self._question_type = qt = random.choice(RQT_NO_CUSTOM)
                 _logger.exception('Could not select a trivia question from PostgreSQL.')
             else:
-                self._question_type = qt = random.choice(RQT_CHOICES[1:])
                 if row:
                     self.category = Category(**row)
                     return await CustomTriviaSession.next_question(self)
                 else:
-                    self._question_type = qt = random.choice(RQT_CHOICES[1:])
+                    self._question_type = qt = random.choice(RQT_NO_CUSTOM)
 
         if qt == RandomQuestionType.DEFAULT:
             self.category = random.choice(list(Category._default_categories.values()))
