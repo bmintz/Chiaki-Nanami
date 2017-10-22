@@ -336,9 +336,17 @@ class ListPaginator(BaseReactionPaginator):
                     and m.content.isdigit()
                     )
 
+        def remove_check(reaction, user):
+            return (reaction.message.id == self._message.id
+                    and user.id == self.context.author.id
+                    and reaction.emoji == '\N{INPUT SYMBOL FOR NUMBERS}')
+
+
         description = (
-            f'Please enter a number from 1 to {len(self)}.\n'
-            'You may also click any of the reactions to leave this page.'
+            f'Please enter a number from 1 to {len(self)}.\n\n'
+            'You can also click the \N{INPUT SYMBOL FOR NUMBERS} to go back to where\n'
+            'we left off, or any of the other reactions to\n'
+            'navigate this paginator normally.'
         )
 
         embed = (discord.Embed(colour=self.colour, description=description)
@@ -349,20 +357,22 @@ class ListPaginator(BaseReactionPaginator):
         wait = functools.partial(asyncio.wait, timeout=60, return_when=asyncio.FIRST_COMPLETED)
         try:
             while True:
-                # The two futures are such that so the user doesn't get "stuck" in the
+                # The three futures are such that so the user doesn't get "stuck" in the
                 # number page. If they click on the number page by accident, then they
                 # should have an easy way out.
                 #  
-                # Thus we have to wait for two events:
+                # Thus we have to wait for three events:
                 # 1. the reaction if the user really wants to go to a different page,
-                # 2. and the actual number of the page they want to go to.
+                # 2. the removal of the numbered reaction if the user wants to go back,m
+                # 3. and the actual number of the page they want to go to.
 
                 with _always_done_future(ctx.bot.wait_for('message', check=check)) as f1, \
-                     _always_done_future(ctx.bot.wait_for('reaction_add', check=self._check_reaction)) as f2:
+                     _always_done_future(ctx.bot.wait_for('reaction_add', check=self._check_reaction)) as f2, \
+                     _always_done_future(ctx.bot.wait_for('reaction_remove', check=remove_check)) as f3:
                     # ...
                     await self._message.edit(embed=embed)
 
-                    done, pending = await wait((f1, f2))
+                    done, pending = await wait((f1, f2, f3))
                     if not done:
                         # Effectively a timeout.
                         return self._current
@@ -381,10 +391,11 @@ class ListPaginator(BaseReactionPaginator):
                             embed.description = f"That's not between 1 and {len(self)}..."
                             embed.colour = 0xf44336
                     else:
-                        # The user probably added a reaction.
+                        # The user probably added or removed a reaction.
                         react, user = result
                         if react.emoji == '\N{INPUT SYMBOL FOR NUMBERS}':
-                            continue # fail silently
+                            # User exited, go back to where we left off.
+                            return self._current
 
                         # Treat it as if it was a normal reaction case.
                         try:
