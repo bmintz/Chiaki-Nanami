@@ -376,7 +376,7 @@ class RandomTriviaSession(BaseTriviaSession):
                         OFFSET FLOOR(RANDOM() * (
                             SELECT COUNT(*)
                             FROM trivia_categories
-                            WHERE category_id={guild_id}
+                            WHERE guild_id={guild_id}
                         ))
                         LIMIT 1
                     """
