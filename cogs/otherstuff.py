@@ -346,6 +346,13 @@ class OtherStuffs(Cog):
         embed.set_thumbnail(url=ctx.author.avatar_url)
         await message.edit(embed=embed)
 
+    # TODO: Make hi be an alias to this (it's an alias for ->welcome rn)
+    @commands.command(hidden=True)
+    async def hello(self, ctx):
+        """Makes me say hello."""
+        await ctx.send("Hey hey, I'm Chiaki. Say hi to MIkusaba for me <3")
+
+
 
 def setup(bot):
     bot.add_cog(OtherStuffs(bot))
