@@ -101,7 +101,6 @@ def default_last_n(n=50):
     return lambda: collections.deque(maxlen=n)
 
 class ServerPages(BaseReactionPaginator):
-    _first_step = True
     async def server_color(self):
         try:
             result = self._colour
@@ -117,11 +116,14 @@ class ServerPages(BaseReactionPaginator):
         return self.context.guild
 
     @page('\N{INFORMATION SOURCE}')
+    async def default_(self):
+        return await Meta.server_embed(self.guild)
+
     async def default(self):
         """Shows this page (basic information about this server)"""
-        embed = await Meta.server_embed(self.guild)
+        embed = await self.default_()
         value = 'Confused? Click the \N{WHITE QUESTION MARK ORNAMENT} button for help.'
-        return embed if not self._first_step else embed.add_field(name='\u200b', value=value, inline=False)
+        return embed.add_field(name='\u200b', value=value, inline=False)
 
     @page('\N{CAMERA}')
     def icon(self):
@@ -143,7 +145,6 @@ class ServerPages(BaseReactionPaginator):
     @page('\N{WHITE QUESTION MARK ORNAMENT}')
     def help_page(self):
         """Shows this page"""
-        self._first_step = False
         return (discord.Embed(description=self.reaction_help)
                .set_author(name='Welcome to the help thing!')
                )
