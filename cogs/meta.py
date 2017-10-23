@@ -117,7 +117,49 @@ class ServerPages(BaseReactionPaginator):
 
     @page('\N{INFORMATION SOURCE}')
     async def default_(self):
-        return await Meta.server_embed(self.guild)
+        server = self.guild
+
+        highest_role = server.role_hierarchy[0]
+        description = f"Owned by {server.owner}"
+        features = '\n'.join(server.features) or 'None'
+        counts = (f'{len(getattr(server, thing))} {thing.title()}' 
+                  for thing in ('roles', 'emojis'))
+        channels = (f'{len(getattr(server, thing))} {thing.replace("_channels", " ").title()}' 
+                   for thing in ('categories', 'text_channels', 'voice_channels'))
+
+        statuses = collections.OrderedDict.fromkeys(['Online', 'Idle', 'Dnd', 'Offline'], 0)
+        statuses.update(collections.Counter(m.status.name.title() for m in server.members if not m.bot))
+        statuses['DND'] = statuses.pop('Dnd')
+        statuses.move_to_end('Offline')
+        statuses['Bots'] = sum(m.bot for m in server.members)
+        member_stats = '\n'.join(starmap('{1} {0}'.format, statuses.items()))
+
+        explicit_filter = str(server.explicit_content_filter).title().replace('_', ' ')
+
+        embed = (discord.Embed(description=description, timestamp=server.created_at)
+                 .set_author(name=server.name)
+                 .add_field(name="Highest Role", value=highest_role)
+                 .add_field(name="Region", value=str(server.region).title())
+                 .add_field(name="Verification Level", value=server.verification_level.name.title())
+                 .add_field(name="Explicit Content Filter", value=explicit_filter)
+                 .add_field(name="Special Features", value=features)
+                 .add_field(name='Counts', value='\n'.join(counts))
+                 .add_field(name=pluralize(Channel=len(server.channels)), value='\n'.join(channels))
+                 # Members doesn't have to be pluralized because we can guarantee that there
+                 # will be at least two members in the server.
+                 # - The bot can't be the only person in the server, because that would imply
+                 #   that the bot owns the server, which is no longer possible.
+                 # - If the bot doesn't own the server, then the owner must be there,
+                 #   which means there is more than one person in the server.
+                 .add_field(name=f'{len(server.members)} Members', value=member_stats)
+                 .set_footer(text=f'ID: {server.id} | Created')
+                 )
+
+        icon = server.icon_url_as(format='png')
+        if icon:
+            embed.set_thumbnail(url=icon)
+            embed.colour = await self.server_color()
+        return embed
 
     async def default(self):
         """Shows this page (basic information about this server)"""
@@ -126,9 +168,20 @@ class ServerPages(BaseReactionPaginator):
         return embed.add_field(name='\u200b', value=value, inline=False)
 
     @page('\N{CAMERA}')
-    def icon(self):
+    async def icon(self):
         """Shows the server's icon"""
-        return Meta.server_icon(self.guild)
+        server = self.guild
+        icon = (discord.Embed(title=f"{server}'s icon")
+               .set_footer(text=f"ID: {server.id}"))
+
+        icon_url = server.icon_url_as(format='png')
+        if icon_url:
+            icon.set_image(url=icon_url)
+            icon.colour = await url_color(icon_url)
+        else:
+            icon.description = "This server has no icon :("
+
+        return icon
 
     @page('\N{THINKING FACE}')
     async def emojis(self):
@@ -395,11 +448,6 @@ class Meta(Cog):
                .set_footer(text='Created')
                )
 
-    @staticmethod
-    async def server_colour(server):
-        icon = server.icon_url
-        return await url_color(icon) if icon else discord.Colour.default()
-
     @info.command(name='channel')
     async def info_channel(self, ctx, channel: union(discord.TextChannel, discord.VoiceChannel)=None):
         """Shows info about a voice or text channel."""
@@ -410,50 +458,6 @@ class Meta(Cog):
         channel_embed.colour = self.bot.colour
 
         await ctx.send(embed=channel_embed)
-
-    @staticmethod
-    async def server_embed(server):
-        highest_role = server.role_hierarchy[0]
-        description = f"Owned by {server.owner}"
-        features = '\n'.join(server.features) or 'None'
-        counts = (f'{len(getattr(server, thing))} {thing.title()}' 
-                  for thing in ('roles', 'emojis'))
-        channels = (f'{len(getattr(server, thing))} {thing.replace("_channels", " ").title()}' 
-                   for thing in ('categories', 'text_channels', 'voice_channels'))
-
-        statuses = collections.OrderedDict.fromkeys(['Online', 'Idle', 'Dnd', 'Offline'], 0)
-        statuses.update(collections.Counter(m.status.name.title() for m in server.members if not m.bot))
-        statuses['DND'] = statuses.pop('Dnd')
-        statuses.move_to_end('Offline')
-        statuses['Bots'] = sum(m.bot for m in server.members)
-        member_stats = '\n'.join(starmap('{1} {0}'.format, statuses.items()))
-
-        explicit_filter = str(server.explicit_content_filter).title().replace('_', ' ')
-
-        server_embed = (discord.Embed(description=description, timestamp=server.created_at)
-                       .set_author(name=server.name)
-                       .add_field(name="Highest Role", value=highest_role)
-                       .add_field(name="Region", value=str(server.region).title())
-                       .add_field(name="Verification Level", value=server.verification_level.name.title())
-                       .add_field(name="Explicit Content Filter", value=explicit_filter)
-                       .add_field(name="Special Features", value=features)
-                       .add_field(name='Counts', value='\n'.join(counts))
-                       .add_field(name=pluralize(Channel=len(server.channels)), value='\n'.join(channels))
-                       # Members doesn't have to be pluralized because we can guarantee that there
-                       # will be at least two members in the server.
-                       # - The bot can't be the only person in the server, because that would imply
-                       #   that the bot owns the server, which is no longer possible.
-                       # - If the bot doesn't own the server, then the owner must be there,
-                       #   which means there is more than one person in the server.
-                       .add_field(name=f'{len(server.members)} Members', value=member_stats)
-                       .set_footer(text=f'ID: {server.id} | Created')
-                       )
-
-        icon = server.icon_url_as(format='png')
-        if icon:
-            server_embed.set_thumbnail(url=icon)
-            server_embed.colour = await Meta.server_colour(server)
-        return server_embed
 
     @info.command(name='server', aliases=['guild'])
     @commands.guild_only()
@@ -482,19 +486,6 @@ class Meta(Cog):
         members = [str(m) for m in sorted(ctx.guild.members, key=attrgetter("top_role", "joined_at"), reverse=True)]
         pages = ListPaginator(ctx, members, title=f'Members in {ctx.guild} ({len(members)})')
         await pages.interact()
-
-    @staticmethod
-    async def server_icon(server):
-        icon = (discord.Embed(title=f"{server}'s icon")
-               .set_footer(text=f"ID: {server.id}"))
-
-        icon_url = server.icon_url_as(format='png')
-        if icon_url:
-            icon.set_image(url=icon_url)
-            icon.colour = await url_color(icon_url)
-        else:
-            icon.description = "This server has no icon :("
-        return icon
 
     @commands.command()
     async def roles(self, ctx, member: disambiguate.DisambiguateMember=None):
