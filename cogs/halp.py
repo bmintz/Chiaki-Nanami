@@ -92,8 +92,11 @@ class Help(Cog):
         self.bot.remove_command('help')
         self.bot.remove_command('h')
 
-        with open('data/tips.json') as f:
-            self.tips_list = json.load(f)
+        try:
+            with open('data/tips.json') as f:
+                self.tips_list = json.load(f)
+        except FileNotFoundError:
+            self.tips_list = []
 
     help = default_help_command(name='help', aliases=['h'])
     halp = default_help_command(str.upper, name='halp', aliases=['HALP'], hidden=True)
