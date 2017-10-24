@@ -246,10 +246,11 @@ class BaseReactionPaginator:
             if not future.done():
                 future.cancel()
 
-            if delete_after:
-                await message.delete()
-            else:
-                await message.clear_reactions()
+            with contextlib.suppress(discord.HTTPException):
+                if delete_after:
+                    await message.delete()
+                else:
+                    await message.clear_reactions()
 
     @property
     def reaction_help(self):
