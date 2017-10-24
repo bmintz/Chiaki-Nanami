@@ -499,7 +499,18 @@ class Minesweeper(Cog):
 
         await ctx.send(f'Starting a {level} minesweeper game...')
         with manager.temp_session(ctx.author.id, MinesweeperSession(ctx, board)) as inst:
-            time = await inst.run()
+            # Wrapping this in try-except because these exceptions will be
+            # raised in the game itself. We don't want the global error handlers
+            # taking care of these because they're notr really error but
+            # more along the lines of flow control.
+            try:
+                time = await inst.run()
+            except HitMine as error:
+                x, y = error.point
+                return await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
+            except asyncio.CancelledError:
+                return await ctx.send(f'Ok, cya later...')
+
             if time is None:
                 return
 
@@ -530,17 +541,6 @@ class Minesweeper(Cog):
             await ctx.send(e)
         else:
             await self._do_minesweeper(ctx, Level.custom, board, record_time=False)
-
-    @minesweeper.error
-    @minesweeper_custom.error
-    async def minesweeper_error(self, ctx, error):
-        cause = error.__cause__
-
-        if isinstance(cause, HitMine):
-            x, y = cause.point
-            await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
-        if isinstance(cause, asyncio.CancelledError):
-            await ctx.send(f'Ok, cya later...')
 
     @minesweeper.command(name='stop')
     async def minesweeper_stop(self, ctx, level: Level):
