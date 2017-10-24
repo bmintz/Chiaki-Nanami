@@ -32,9 +32,7 @@ url_colour = url_color
 
 
 async def user_color(user):
-    if ColorThief:
-        avatar = user.avatar_url_as(format=None)
-        return await url_color(avatar)
-    return getattr(user, 'colour', discord.Colour.default())
+    return await url_color(user.avatar_url_as(static_format='png'))
 user_colour = user_color
 
+        
