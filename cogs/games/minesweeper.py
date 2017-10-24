@@ -522,17 +522,20 @@ class Minesweeper(Cog):
     async def minesweeper_custom(self, ctx, width: ranged(3, 20), height: ranged(3, 20), mines: int):
         """Starts a custom minesweeper game."""
         if not 9 <= width * height <= 170:
-            raise ValueError("Can't have a board of that size due to emoji bugs sorry ;-;")
-        board = Board(width, height, mines)
-        await self._do_minesweeper(ctx, Level.custom, board, record_time=False)
+            return await ctx.send("Can't have a board of that size due to emoji bugs sorry ;-;")
+
+        try:
+            board = Board(width, height, mines)
+        except ValueError as e:
+            await ctx.send(e)
+        else:
+            await self._do_minesweeper(ctx, Level.custom, board, record_time=False)
 
     @minesweeper.error
     @minesweeper_custom.error
     async def minesweeper_error(self, ctx, error):
         cause = error.__cause__
 
-        if isinstance(cause, ValueError):
-            await ctx.send(cause)
         if isinstance(cause, HitMine):
             x, y = cause.point
             await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
