@@ -50,6 +50,9 @@ class RacehorseEmoji(commands.Converter):
 
     async def convert(self, ctx, arg):
         emoji_ = await self._converter.convert(ctx, arg)
+        # XXX: The emoji library doesn't have certain emojis.
+        #      So those emojis will fail. (eg :gay_pride_flag:)
+        #      These special cases will have to be added as I go.
         if isinstance(emoji_, str) and emoji_ not in emoji.UNICODE_EMOJI:
             raise commands.BadArgument(f'{arg} is not a valid emoji ;-;')
 
@@ -249,8 +252,8 @@ class Racing(Cog):
         session.close_early()
         await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
 
-    @race.command(name='horse')
-    async def race_horse(self, ctx, horse: RacehorseEmoji=None):
+    @race.command(name='horse', aliases=['ride'])
+    async def race_horse(self, ctx, emoji: RacehorseEmoji=None):
         """Sets your horse for the race.
 
         Custom emojis are allowed. But they have to be in a server that I'm in.
@@ -264,13 +267,13 @@ class Racing(Cog):
                        "You don't have a horse. I'll give you one when you race though!")
             return await ctx.send(message)
 
-        await (ctx.session.insert.add_row(Racehorse(user_id=ctx.author.id, emoji=horse))
+        await (ctx.session.insert.add_row(Racehorse(user_id=ctx.author.id, emoji=emoji))
                                  .on_conflict(Racehorse.user_id)
                                  .update(Racehorse.emoji)
                )
-        await ctx.send(f'Ok, you can now use {horse}')
+        await ctx.send(f'Ok, you can now use {emoji}')
 
-    @race.command(name='nohorse')
+    @race.command(name='nohorse', aliases=['noride'])
     async def race_nohorse(self, ctx):
         """Removes your custom race."""
         # Gonna do two queries for the sake of user experience/dialogue here
