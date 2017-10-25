@@ -21,7 +21,7 @@ class _TwoPlayerWaiter:
     def wait(self):
         future = self._future
         if future is None:
-            future = self._future = asyncio.ensure_future(asyncio.wait_for(self._event.wait(), timeout=60))
+            future = self._future = asyncio.ensure_future(asyncio.wait_for(self._event.wait(), timeout=300))
         return future
 
     def confirm(self, member):
@@ -119,7 +119,7 @@ class TwoPlayerGameCog(Cog):
         title = f'{ctx.author} has {action} a game of {self.__class__.name}!'
         description = (
             f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join and play!\n'
-            'This will expire in 10 minutes.'
+            'This will expire in 5 minutes.'
         )
 
         return (discord.Embed(colour=0x00FF00, description=description)
