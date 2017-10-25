@@ -40,6 +40,7 @@ class Tile(enum.Enum):
 class Board:
     def __init__(self):
         self._board = [[Tile.NONE] * NUM_ROWS for _ in range(NUM_COLS)]
+        self._last_column = None
 
     def __str__(self):
         fmt = ''.join(itertools.repeat('{}', NUM_COLS))
@@ -49,8 +50,9 @@ class Board:
         return Tile.NONE not in itertools.chain.from_iterable(self._board)
 
     def place(self, column, piece):
-        column = self._board[column]
-        column[column.index(Tile.NONE)] = piece
+        board_column = self._board[column]
+        board_column[board_column.index(Tile.NONE)] = piece
+        self._last_column = column
 
     # TODO: Mark the winning line. This is significantly harder than TTT
 
@@ -78,6 +80,13 @@ class Board:
         lines = itertools.chain(self.horizontals(), self.verticals(),
                                 self.diagonals(), self.anti_diagonals())
         return first_true(lines, (None, ), is_full)[0]
+
+    @property
+    def top_row(self):
+        numbers = [f'{i}\U000020e3' for i in range(1, NUM_COLS + 1)]
+        if self._last_column is not None:
+            numbers[self._last_column] = '\U000023ec'
+        return ''.join(numbers)
 
 
 Player = namedtuple('Player', 'user symbol')
@@ -137,8 +146,8 @@ class ConnectFourSession:
         screen = self._game_screen
         user = self._current.user
 
-        numbers = ''.join(f'{i}\U000020e3' for i in range(1, NUM_COLS + 1))
-        screen.description = f'**Current Board:**\n\n{numbers}\n{self.board}'
+        b = self.board
+        screen.description = f'**Current Board:**\n\n{b.top_row}\n{b}'
         screen.set_thumbnail(url=user.avatar_url)
         screen.set_field_at(1, name='Current Move', value=str(user), inline=False)
 
