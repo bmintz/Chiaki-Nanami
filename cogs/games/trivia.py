@@ -333,35 +333,21 @@ RQT_CHOICES = list(RandomQuestionType)
 RQT_NO_CUSTOM = [RandomQuestionType.DEFAULT, RandomQuestionType.OTDB]
 
 
-class RandomTriviaSession(BaseTriviaSession):
+class RandomTriviaSession(OTDBTriviaSession):
     """Trivia Game using ALL categories, both custom, default AND OTDB."""
     _toggle_using_cache = OTDBTriviaSession._toggle_using_cache
     _question_cache = OTDBTriviaSession._question_cache
 
-
-    def __init__(self, ctx, category=None):
-        super().__init__(ctx, _otdb_category)
-        self._pending = collections.deque(maxlen=50)
-
-        if len(self._question_cache) >= MIN_CACHE_SIZE:
-            # Only prime 10 questions, because it's rare for a trivia game to go 
-            # longer than that. So pre-filling the pending queue with any more
-            # questions would just be a waste.
-            self._pending.extend(random.sample(self._question_cache, 10))
-
-        self._question_type = None
-
     def _check_answer(self, message):
         if self._question_type == RandomQuestionType.OTDB:
-            return OTDBTriviaSession._check_answer(self, message)
-        return super()._check_answer(message)
-
+            return super()._check_answer(message)
+        return BaseTriviaSession._check_answer(self, message)
 
     async def _show_question(self, n):
         if self._question_type == RandomQuestionType.OTDB:
-            await OTDBTriviaSession._show_question(self, n)
-        else:
             await super()._show_question(n)
+        else:
+            await BaseTriviaSession._show_question(self, n)
 
     async def next_question(self):
         self._question_type = qt = random.choice(RQT_CHOICES)
