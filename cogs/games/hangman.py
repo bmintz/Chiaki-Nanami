@@ -116,7 +116,8 @@ class HangmanSession:
                 self._guesses.append(content)
 
             self.edit_screen()
-            await guess.delete()
+            with contextlib.suppress(discord.HTTPException):
+                await guess.delete()
             try:
                 if self.is_completed():
                     self._game_screen.set_author(name='Hangman Completed!')
@@ -228,6 +229,7 @@ class Hangman(Cog):
 
     @hangman.command(name='stop')
     async def hangman_stop(self, ctx):
+        """Stops a running hangman game."""
         instance = self.manager.get_session(ctx.channel)
         if instance is None:
             return await ctx.send('There is no hangman running right now...')
@@ -236,6 +238,7 @@ class Hangman(Cog):
 
     @hangman.command(name='categories')
     async def hangman_categories(self, ctx):
+        """Stops a running hangman game."""
         categories = self.all_categories(ctx.guild)
         embeds = ListPaginator(ctx, sorted(categories), title=f'List of Categories for {ctx.guild}',
                                colour=discord.Colour.blurple())
