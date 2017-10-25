@@ -2,6 +2,7 @@ import asyncio
 import asyncqlio
 import contextlib
 import discord
+import emoji
 import heapq
 import random
 import time
@@ -48,11 +49,11 @@ class RacehorseEmoji(commands.Converter):
     _converter = converter.union(discord.Emoji, str)
 
     async def convert(self, ctx, arg):
-        emoji = await self._converter.convert(ctx, arg)
-        if isinstance(emoji, str) and len(emoji) != 1:
-            raise commands.BadArgument(f'{emoji} is not a valid emoji ;-;')
+        emoji_ = await self._converter.convert(ctx, arg)
+        if isinstance(emoji_, str) and emoji_ not in emoji.UNICODE_EMOJI:
+            raise commands.BadArgument(f'{arg} is not a valid emoji ;-;')
 
-        return str(emoji)
+        return str(emoji_)
 
 
 class Racer:
