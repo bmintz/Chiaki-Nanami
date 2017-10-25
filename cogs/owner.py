@@ -159,6 +159,7 @@ class Owner(Cog, hidden=True):
 
     @commands.command()
     async def botav(self, ctx, *, avatar):
+        """Changes my avatar."""
         with open(avatar, 'rb') as f:
             await self.bot.user.edit(avatar=f.read())
         await ctx.send('\N{OK HAND SIGN}')
@@ -205,6 +206,11 @@ class Owner(Cog, hidden=True):
 
     @commands.command()
     async def say(self, ctx, *, msg):
+        """Makes me say a message.
+
+        A zero-width space (`\\u200b`) is put at the start of the
+        message to avoid accidentally triggering other bots.
+        """
         await ctx.message.delete()
         # make sure commands for other bots (or even from itself) can't be executed
         await ctx.send(f"\u200b{msg}")
@@ -225,6 +231,7 @@ class Owner(Cog, hidden=True):
 
     @commands.command(aliases=['chaincmd'])
     async def chaincommand(self, ctx, *commands):
+        """Executes a series of commands"""
         for cmd in commands:
             with temp_attr(ctx.message, 'content', cmd):
                 await self.bot.process_commands(ctx.message)

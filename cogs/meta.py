@@ -683,6 +683,11 @@ class Meta(Cog):
 
     @commands.command(aliases=['av'])
     async def avatar(self, ctx, *, user: disambiguate.DisambiguateMember=None):
+        """Shows a member's avatar. 
+
+        If no user is specified I show your avatar.
+        """
+
         if user is None:
             user = ctx.author
         avatar_url = user.avatar_url_as(static_format='png')

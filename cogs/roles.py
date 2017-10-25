@@ -218,6 +218,7 @@ class Roles(Cog):
     @commands.command(name='delautorole', aliases=['daar'])
     @commands.has_permissions(manage_roles=True, manage_guild=True)
     async def del_auto_assign_role(self, ctx):
+        """Removes the auto-assign-role set by `{prefix}autorole`"""
         query = ctx.session.select(AutoRoles).where(AutoRoles.guild_id == ctx.guild.id)
         role = await query.first()
         if role is None:

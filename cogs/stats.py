@@ -201,6 +201,7 @@ class Stats(Cog):
     @commands.command(name='testerr')
     @commands.is_owner()
     async def test_error(self, ctx):
+        """Tests the error logger webhook."""
         NO
 
     async def send_guild_stats(self, guild, colour, header):

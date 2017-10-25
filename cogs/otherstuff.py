@@ -166,12 +166,14 @@ class OtherStuffs(Cog):
 
     @copypasta.command(name="groups")
     async def copypasta_groups(self, ctx):
+        """Shows all the copypasta catergoies"""
         pastas = itertools.starmap('`{0}.` {1}'.format, enumerate(c['category'] for c in self.copypastas))
         embed = discord.Embed(title="All the categories (and their indices)", description='\n'.join(pastas))
         await ctx.send(embed=embed)
 
     @copypasta.command(name="pastas")
     async def copypasta_pastas(self, ctx, index: int):
+        """Shows all the copypastas in a given category."""
         pastas = self.copypastas[index]
         category, copypastas = pastas['category'], pastas['copypastas']
         description = '\n'.join([f'\N{BULLET} {c}' for c in copypastas])

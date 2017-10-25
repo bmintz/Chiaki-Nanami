@@ -422,12 +422,16 @@ class Permissions(InitRoot):
     def _make_command(value, name, *, desc):
         format_entity = functools.partial(ENTITY_EXPLANATION.format, action=name.lower())
 
+        participle = desc.split(' ', 1)[0][:-1]
+        participle = (participle[:-1] if participle[-1] == 'e' else participle) + 'ing'
+
+        base_doc_string = f'Group for {participle.lower()} commands or cogs.'
         cmd_doc_string = f'{desc} a command.\n{format_entity(thing="a command")}'
         cog_doc_string = f'{desc} a cog.\n{format_entity(thing="a cog")}'
         all_doc_string = (f'{desc} all cogs, and subsequently all commands.\n'
                           f'{format_entity(thing="all cogs")}')
 
-        @commands.group(name=name)
+        @commands.group(name=name, help=base_doc_string)
         @commands.has_permissions(manage_guild=True)
         async def group(self, ctx):
             # XXX: I'm not exactly sure whether this should be the same

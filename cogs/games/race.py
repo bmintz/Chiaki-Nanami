@@ -219,6 +219,8 @@ class Racing(Cog):
 
     @commands.group(invoke_without_command=True)
     async def race(self, ctx):
+        """Starts a race. Or if one has already started, joins one."""
+
         if ctx.subcommand_passed:
             # Just fail silently if someone input something like ->race Nadeko aaaa
             return
