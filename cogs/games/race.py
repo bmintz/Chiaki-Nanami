@@ -258,7 +258,7 @@ class Racing(Cog):
 
         Custom emojis are allowed. But they have to be in a server that I'm in.
         """
-        if not horse:
+        if not emoji:
             query = ctx.session.select.from_(Racehorse).where(Racehorse.user_id == ctx.author.id)
             selection = await query.first()
 
