@@ -8,7 +8,7 @@ from collections import namedtuple
 from more_itertools import first_true
 
 from . import errors
-from .bases import two_player_plugin
+from .bases import TwoPlayerGameCog
 
 from ..utils.context_managers import temp_message
 
@@ -127,13 +127,10 @@ class TicTacToeSession:
     def __init__(self, ctx, opponent):
         self.ctx = ctx
         self.board = Board(ctx._ttt_size)
-        self._opponent = opponent
-        self._opponent_ready = asyncio.Event()
+        self.opponent = opponent
 
-    def _init_players(self):
-        xo = (Tile.X, Tile.O) if random.random() < 0.5 else (Tile.O, Tile.X)
-        self.players = list(map(Player, (self.ctx.author, self.opponent), xo))
-        random.shuffle(self.players)
+        xo = random.sample((Tile.X, Tile.O), 2)
+        self.players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
         self._current = None
         self._runner = None
 
@@ -147,26 +144,6 @@ class TicTacToeSession:
                             .add_field(name='Current Player', value=None, inline=False)
                             .add_field(name='Instructions', value=help_text)
                             )
-
-    @property
-    def opponent(self):
-        return self._opponent
-
-    @opponent.setter
-    def opponent(self, member):
-        if member == self.ctx.author:
-            raise ValueError("You can't join a game that you've created. Are you really that lonely?")
-        if self._opponent is not None and self._opponent != member:
-            raise ValueError(f"You cannot join this game. It's for {self._opponent}")
-
-        self._opponent = member
-        self._opponent_ready.set()
-
-    def wait_for_opponent(self):
-        return asyncio.wait_for(self._opponent_ready.wait(), timeout=5 * 60)
-
-    def is_running(self):
-        return self._opponent_ready.is_set()
 
     def get_coords(self,string):
         lowered = string.lower()
@@ -259,7 +236,6 @@ class TicTacToeSession:
                     return Stats(winner, turn)
 
     async def run(self):
-        self._init_players()
         try:
             return await self._loop()
         finally:
@@ -279,7 +255,7 @@ class TicTacToeSession:
 BOARD_SIZE_EMOJIS = list(map('{}\U000020e3'.format, range(3, 8))) + ['\N{BLACK SQUARE FOR STOP}']
 
 
-class TicTacToe(two_player_plugin('TicTacToe', cls=TicTacToeSession, aliases=['ttt']), name='Tic-Tac-Toe'):
+class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession, aliases=['ttt']):
     @staticmethod
     async def get_board_size(ctx):
         embed = (discord.Embed(colour=0x00FF00, description='Click one of the reactions below!')
@@ -301,22 +277,15 @@ class TicTacToe(two_player_plugin('TicTacToe', cls=TicTacToeSession, aliases=['t
                 raise errors.RageQuit(f'{ctx.author} cancelled selecting the board size')
             return int(react.emoji[0])
 
-    @staticmethod
-    def _make_invite_embed(ctx, member):
+    def _create_invite(self, ctx, member):
         size = ctx._ttt_size
-        return (super(TicTacToe, TicTacToe)._make_invite_embed(ctx, member)
+        return (super()._create_invite(ctx, member)
                .set_footer(text=f'Board size: {size} x {size}'))
 
-    async def _do_game(self, ctx, member):
-        # XXX: This check is done twice, it's a fast check, but still a double-check
-        if self.manager.session_exists(ctx.channel):
-            message = ("There's a Tic-Tac-Toe running in this channel right now. "
-                       "Gomen'nasai... ;-;")
-            return await ctx.send(message)
-
+    async def _invite_member(self, ctx, member):
         ctx._ttt_size = await self.get_board_size(ctx)
-        await super()._do_game(ctx, member)
+        await super()._invite_member(ctx, member)
 
 
 def setup(bot):
-    bot.add_cog(TicTacToe())
+    bot.add_cog(TicTacToe(bot))

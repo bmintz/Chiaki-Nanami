@@ -1,137 +1,105 @@
 import asyncio
-import copy
+import contextlib
 import discord
 import functools
-import inspect
 import random
-import re
-import sys as _sys
 
 from discord.ext import commands
 
-from .manager import SessionManager
-
-from ..utils.context_managers import temp_attr
-from ..utils.converter import CheckedMember, NoSelfArgument
-from ..utils.formats import multi_replace
-
 from core.cog import Cog
 
-_clean_sig = functools.partial(multi_replace, replacements={**dict.fromkeys('<>[]', ''), '|': '/'})
+from ..utils.converter import CheckedMember, NoSelfArgument
 
 
-# templates for the plugins...
+class _TwoPlayerWaiter:
+    def __init__(self, author, recipient):
+        self._author = author
+        self._recipient = recipient
+        self._future = None
+        self._event = asyncio.Event()
 
-two_player_plugin_template = '''\
-class {typename}(Cog, name='{game_name}'):
-    def __init__(self):
-        self.manager = SessionManager()
+    def wait(self):
+        future = self._future
+        if future is None:
+            future = self._future = asyncio.ensure_future(asyncio.wait_for(self._event.wait(), timeout=60))
+        return future
 
-    async def _help(self, ctx):
-        description = 'To start a game, use one of the commands below!'
-        create, invite, join = sorted(ctx.command.commands, key=str)
-        create_name = 'To start a game for anyone to join, type'
-        invite_name = 'To invite a specific person, type'
-        accept_name = 'To join a game, type'
-        make_sig = lambda cmd: f'`{{ctx.prefix}}{{_clean_sig(cmd.signature)}}`'
+    def confirm(self, member):
+        if self._recipient is None:
+            self._recipient = member
+        elif member != self._recipient:
+            raise RuntimeError('This game is not for you!')
 
-        embed = (discord.Embed(title='{game_name} Help', colour=0x00FF00, description=description)
-                .add_field(name=create_name, value=make_sig(create), inline=False)
-                .add_field(name=invite_name, value=make_sig(invite), inline=False)
-                .add_field(name=accept_name, value=make_sig(join)  , inline=False)
-                )
-        await ctx.send(embed=embed)
+        self._event.set()
 
-    @staticmethod
-    def _make_invite_embed(ctx, member):
-        action = 'invited you to' if member else 'created'
-        title = f'{{ctx.author}} has {{action}} a game of {game_name}!'
-        description = (f'Type `{{ctx.prefix}}{{ctx.command.root_parent}} join` to join and play!\\n'
-                        'This will expire in 10 minutes.')
+    def done(self):
+        return bool(self._future and self._future.done())
 
-        return (discord.Embed(colour=0x00FF00, description=description)
-               .set_author(name=title)
-               .set_thumbnail(url=ctx.author.avatar_url)
-               )
 
-    async def _start_invite(self, ctx, member):
-        invite_embed = self._make_invite_embed(ctx, member)
+@contextlib.contextmanager
+def _swap_item(obj, item, new_val):
+    obj[item] = new_val
+    try:
+        yield 
+    finally:
+        if item in obj:
+            del obj[item]
 
-        if member is None:
-            await ctx.send(embed=invite_embed)
-            return
 
-        # attempt to DM them, if that fails, fall back to mentioning them on the channel.
-        try:
-            temp_desc = (f'Type `{{ctx.prefix}}{{ctx.command.root_parent}} join` in channel '
-                         f'**#{{ctx.channel}}** in **{{ctx.guild}}** to join and play!\\n'
-                          'This will expire in 10 minutes.')
+_two_player_help = '''
+Starts a game of {name}
 
-            with temp_attr(invite_embed, 'description', temp_desc):
-                await member.send(embed=invite_embed)
-        except discord.HTTPException:
-            await ctx.send(member.mention, embed=invite_embed)
-        else:
-            await ctx.send(f'DM has been sent to {{member}}!')
+You can specify a user to invite them to play with
+you. Leaving out the user creates a game that anyone
+can join.
+'''
 
-    async def _do_game(self, ctx, member):
-        if self.manager.session_exists(ctx.channel):
-            return await ctx.send("There's a Connect-4 running in this channel "
-                                  "right now. I think... ;-;")
+_two_player_join_help = '''
+Joins a {name} game.
 
-        with self.manager.temp_session(ctx.channel, {cls}(ctx, member)) as inst:
-            await self._start_invite(ctx, member)
-            await inst.wait_for_opponent()
-            stats = await inst.run()
-            if stats.winner is None:
-                return await ctx.send('It looks like nobody won :(')
+This either must be for you, or for everyone.
+'''
 
-            user = stats.winner.user
-            winner_embed = (discord.Embed(colour=0x00FF00, description=f'Game took {{stats.turns}} turns to complete.')
-                           .set_thumbnail(url=user.avatar_url)
-                           .set_author(name=f'{{user}} is the winner!')
-                           )
+_two_player_create_help = 'Deprecated alias to `{name}`.'
+_two_player_invite_help = 'Deprecated alias to `{name} @user`.'
 
-            await ctx.send(embed=winner_embed)
 
-    @commands.group(name={name!r}, aliases={aliases!r})
-    async def group(self, ctx):
-        """Shows how to start up {game_name}"""
-        if not (ctx.invoked_subcommand or ctx.subcommand_passed):
-            await self._help(ctx)
+_MemberConverter = CheckedMember(offline=False, bot=False, include_self=False)
 
-    @group.command(name='create', aliases=['start'])
-    async def group_create(self, ctx):
-        """Starts a game of {game_name} where anyone can join"""
-        await self._do_game(ctx, None)
 
-    @group.command(name='invite')
-    async def group_invite(self, ctx, *, challenger: CheckedMember(offline=False, bot=False, include_self=False)):
-        """Invites a specific person to a game of {game_name}"""
-        await self._do_game(ctx, challenger)
+class TwoPlayerGameCog(Cog):
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.running_games = {}
 
-    @group.command(name='join', aliases=['accept'])
-    async def group_join(self, ctx):
-        """Joins a game of {game_name}."""
-        session = self.manager.get_session(ctx.channel)
-        if session is None:
-            return await ctx.send(f'There is no {game_name} game for you to join...')
+    def __init_subclass__(cls, *, game_cls, cmd=None, aliases=(), **kwargs):
+        super().__init_subclass__(**kwargs)
 
-        if session.is_running():
-            return await ctx.send(f"Sorry, there's already a {game_name} game running in this channel... ;-;")
+        cls.__game_class__ = game_cls
+        cmd_name = cmd or cls.__name__.lower()
 
-        session.opponent = ctx.author
-        await ctx.send(f"Alright {{ctx.author.mention}}. You're in!")
+        group_help = _two_player_help.format(name=cls.name)
+        group_command = commands.group(
+            name=cmd_name, aliases=aliases, help=group_help, invoke_without_command=True
+        )(cls._game)
 
-    @group_create.error
-    @group_invite.error
-    @group_join.error
-    async def error(self, ctx, error):
-        cause = error.__cause__
-        if isinstance(cause, ValueError):
-            await ctx.send(str(cause))
-        if isinstance(cause, asyncio.TimeoutError):
-            await ctx.send('No one joined in time... :(')
+        gc = group_command.command
+        create_help = _two_player_create_help.format(name=cmd_name)
+        create_command = gc(name='create', help=create_help)(cls._game_create)
+
+        invite_help = _two_player_invite_help.format(name=cmd_name)
+        invite_command = gc(name='invite', help=invite_help)(cls._game_invite)
+
+        join_help = _two_player_join_help.format(name=cls.name)
+        join_command = gc(name='join', help=join_help)(cls._game_join)
+
+        setattr(cls, f'{cmd_name}', group_command)
+        setattr(cls, f'{cmd_name}_create', create_command)
+        setattr(cls, f'{cmd_name}_invite', invite_command)
+        setattr(cls, f'{cmd_name}_join', join_command)
+        setattr(cls, f'_{cls.__name__}__error', cls._error)
+
+    async def _error(self, ctx, error):
         if isinstance(error, NoSelfArgument):
             message = random.choice((
                 "Don't play with yourself. x3",
@@ -139,49 +107,78 @@ class {typename}(Cog, name='{game_name}'):
                 "Self inviting, huh... :eyes:",
             ))
             await ctx.send(message)
-'''
+        elif issubclass(type(error), commands.BadArgument):
+            await ctx.send(error)
 
-def make_plugin(typename, template, cls=None, name=None, *, verbose=False, module=None,
-                game_name=None, aliases=()):
-    """Returns a plugin for a given template and class name.
+    def _create_invite(self, ctx, member):
+        action = 'invited you to' if member else 'created'
+        title = f'{ctx.author} has {action} a game of {self.__class__.name}!'
+        description = (
+            f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join and play!\n'
+            'This will expire in 10 minutes.'
+        )
 
-    This is used because as of right now, there is no easy way to subclass a
-    certain plugin and get unique commands, as all inherited commands
-    are the same object.
-    """
+        return (discord.Embed(colour=0x00FF00, description=description)
+               .set_author(name=title)
+               .set_thumbnail(url=ctx.author.avatar_url)
+               )
 
-    # This is a hack.
-    name = name or typename.lower()
-    game_name = game_name or re.sub(r"(\w)([A-Z])", r"\1 \2", typename)
+    async def _invite_member(self, ctx, member):
+        invite_embed = self._create_invite(ctx, member)
 
-    class_definition = template.format(
-        typename=typename,
-        name=name,
-        aliases=aliases,
-        cls=cls.__name__,
-        game_name=game_name
-    )
+        if member is None:
+            await ctx.send(embed=invite_embed)
+        else:
+            await ctx.send(f'{member.mention}, you have a challenger!', embed=invite_embed)
 
-    namespace = {'__name__': 'namedtuple_%s' % typename, **globals(), cls.__name__: cls}
-    exec(class_definition, namespace)
-    result = namespace[typename]
-    result._source = class_definition
-    if verbose:
-        print(result._source)
+    async def _end_game(self, ctx, inst, result):
+        if result.winner is None:
+            return await ctx.send('It looks like nobody won :(')
 
-    # In a discord.py context, the __module__ variable needs to be set this way
-    # because Bot.remove_cog relies on it when unloading the extension.
-    # Failure to set it properly means the extension and the cog's module won't
-    # match, which means that the cog will not unload, making a subsequent reload
-    # fail as commands in that cog would be registered already.
-    if module is None:
+        user = result.winner.user
+        winner_embed = (discord.Embed(colour=0x00FF00, description=f'Game took {result.turns} turns to complete.')
+                        .set_thumbnail(url=user.avatar_url)
+                        .set_author(name=f'{user} is the winner!')
+                       )
+
+        await ctx.send(embed=winner_embed)
+
+    async def _game(self, ctx, *, member: _MemberConverter = None):
+        if ctx.channel.id in self.running_games:
+            return await ctx.send("There's a {self.__class__.name} game already running in this channel...")
+
+        put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
+
+        await self._invite_member(ctx, member)
+        with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
+            waiter = self.running_games[ctx.channel.id]
+            await waiter.wait()
+
+        with put_in_running(self.__game_class__(ctx, waiter._recipient)):
+            inst = self.running_games[ctx.channel.id]
+            result = await inst.run()
+
+        await self._end_game(ctx, inst, result)
+
+    async def _game_join(self, ctx):
+        waiter = self.running_games.get(ctx.channel.id)
+        if waiter is None:
+            return await ctx.send(f"There's no {self.__class__.name} for you to join...")
+
+        if not isinstance(waiter, _TwoPlayerWaiter):
+            return await ctx.send('Sorry... you were late. ;-;')
+
         try:
-            module = _sys._getframe(1).f_globals.get('__name__', '__main__')
-        except (AttributeError, ValueError):
-            pass
-    if module is not None:
-        result.__module__ = module
+            waiter.confirm(ctx.author)
+        except RuntimeError as e:
+            await ctx.send(e)
+        else:
+            await ctx.send(f'Alright {ctx.author.mention}, good luck!')
 
-    return result
+    async def _game_create(self, ctx):
+        await ctx.send(f'This subcommand is deprecated, use `->ttt` instead.')
+        await ctx.invoke(ctx.command.root_parent)
 
-two_player_plugin = functools.partial(make_plugin, template=two_player_plugin_template)
+    async def _game_invite(self, ctx, *, member: _MemberConverter):
+        await ctx.send(f'This subcommand is deprecated, use `->ttt @{member}` instead.')
+        await ctx.invoke(ctx.command.root_parent, member=member)

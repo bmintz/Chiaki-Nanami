@@ -8,7 +8,7 @@ from collections import namedtuple
 from more_itertools import first_true, one, windowed
 
 from . import errors
-from .bases import two_player_plugin
+from .bases import TwoPlayerGameCog
 
 from ..utils.context_managers import temp_message
 
@@ -88,13 +88,10 @@ class ConnectFourSession:
     def __init__(self, ctx, opponent):
         self.ctx = ctx
         self.board = Board()
-        self._opponent = opponent
-        self._opponent_ready = asyncio.Event()
+        self.opponent = opponent
 
-    def _init_players(self):
-        xo = (Tile.X, Tile.O) if random.random() < 0.5 else (Tile.O, Tile.X)
-        self.players = list(map(Player, (self.ctx.author, self.opponent), xo))
-        random.shuffle(self.players)
+        xo = random.sample((Tile.X, Tile.O), 2)
+        self.players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
         self._current = None
         self._runner = None
 
@@ -107,26 +104,6 @@ class ConnectFourSession:
                             .add_field(name='Current Player', value=None, inline=False)
                             .add_field(name='Instructions', value=instructions)
                             )
-
-    @property
-    def opponent(self):
-        return self._opponent
-
-    @opponent.setter
-    def opponent(self, member):
-        if member == self.ctx.author:
-            raise ValueError("You can't join a game that you've created. Are you really that lonely?")
-        if self._opponent is not None and self._opponent != member:
-            raise ValueError(f"You cannot join this game. It's for {self._opponent}")
-
-        self._opponent = member
-        self._opponent_ready.set()
-
-    def wait_for_opponent(self):
-        return asyncio.wait_for(self._opponent_ready.wait(), timeout=600)
-
-    def is_running(self):
-        return self._opponent_ready.is_set()
 
     @staticmethod
     def get_column(string):
@@ -192,7 +169,6 @@ class ConnectFourSession:
                     return Stats(winner, turn)
 
     async def run(self):
-        self._init_players()
         try:
             return await self._loop()
         finally:
@@ -205,16 +181,11 @@ class ConnectFourSession:
     def winner(self):
         return discord.utils.get(self.players, symbol=self.board.winner)
 
-class Connect4(two_player_plugin('Connect4', cls=ConnectFourSession,
-               game_name='Connect 4', aliases=['con4']), name='Connect 4'):
-
-
-
-    @staticmethod
-    def _make_invite_embed(ctx, member):
-        return (super(Connect4, Connect4)._make_invite_embed(ctx, member)
+class Connect4(TwoPlayerGameCog, name='Connect 4', game_cls=ConnectFourSession, aliases=['con4']):
+    def _make_invite_embed(self, ctx, member):
+        return (super()._make_invite_embed(ctx, member)
                .set_footer(text='Board size: 7 x 6'))
 
 
 def setup(bot):
-    bot.add_cog(Connect4())
+    bot.add_cog(Connect4(bot))
