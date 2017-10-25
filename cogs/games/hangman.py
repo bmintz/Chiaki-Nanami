@@ -177,7 +177,6 @@ class Hangman(Cog):
         self.manager = SessionManager()
         self.bot.loop.create_task(self._load_categories())
         self.default_categories = {}
-        self.custom_categories = {}
 
     def __unload(self):
         self.manager.cancel_all()
@@ -193,12 +192,10 @@ class Hangman(Cog):
 
     async def _get_category(self, ctx, category):
         lowered = category.lower()
-        with contextlib.suppress(KeyError):
-            return self.default_categories[lowered]
-
-        custom_category = self.custom_categories[ctx.guild].get(lowered)
-        if custom_category is None:
+        c = self.default_categories.get(lowered)
+        if not c:
             raise commands.BadArgument(f"Category {category} doesn't exist... :(")
+        return c
 
     @staticmethod
     def _get_random_word(words):
