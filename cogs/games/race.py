@@ -254,19 +254,19 @@ class Racing(Cog):
 
         Custom emojis are allowed. But they have to be in a server that I'm in.
         """
-        query = ctx.session.select.from_(Racehorse).where(Racehorse.user_id == ctx.author.id)
-        selection = await query.first()
-
         if not horse:
+            query = ctx.session.select.from_(Racehorse).where(Racehorse.user_id == ctx.author.id)
+            selection = await query.first()
+
             message = (f'{selection.emoji} will be racing on your behalf, I think.'
                        if selection else
                        "You don't have a horse. I'll give you one when you race though!")
             return await ctx.send(message)
 
-        selection = selection or Racehorse(member_id=ctx.author.id)
-        selection.emoji = horse
-        await ctx.session.add(selection)
-
+        await (ctx.session.insert.add_row(Racehorse(user_id=ctx.author.id, emoji=horse))
+                                 .on_conflict(Racehorse.user_id)
+                                 .update(Racehorse.emoji)
+               )
         await ctx.send(f'Ok, you can now use {horse}')
 
     @race.command(name='nohorse')
