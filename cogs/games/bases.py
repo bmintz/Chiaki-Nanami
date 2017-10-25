@@ -149,7 +149,7 @@ class TwoPlayerGameCog(Cog):
 
     async def _game(self, ctx, *, member: _MemberConverter = None):
         if ctx.channel.id in self.running_games:
-            return await ctx.send("There's a {self.__class__.name} game already running in this channel...")
+            return await ctx.send(f"There's a {self.__class__.name} game already running in this channel...")
 
         put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
 
@@ -160,7 +160,7 @@ class TwoPlayerGameCog(Cog):
                 await waiter.wait()
             except asyncio.TimeoutError:
                 if member:
-                    return await ctx.send("{member.mention} couldn't join in time... :/")
+                    return await ctx.send(f"{member.mention} couldn't join in time... :/")
                 else:
                     return await ctx.send('No one joined in time. :(')
 
