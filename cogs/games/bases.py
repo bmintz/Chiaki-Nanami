@@ -156,7 +156,13 @@ class TwoPlayerGameCog(Cog):
         await self._invite_member(ctx, member)
         with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
             waiter = self.running_games[ctx.channel.id]
-            await waiter.wait()
+            try:
+                await waiter.wait()
+            except asyncio.TimeoutError:
+                if member:
+                    return await ctx.send("{member.mention} couldn't join in time... :/")
+                else:
+                    return await ctx.send('No one joined in time. :(')
 
         with put_in_running(self.__game_class__(ctx, waiter._recipient)):
             inst = self.running_games[ctx.channel.id]
