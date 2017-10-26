@@ -96,11 +96,41 @@ _status_colors = {
     discord.Status.invisible : discord.Colour.default(),
 }
 
+# Provided by Discord Bots
+# TOOD: Mirror this on a different server for self-hosts.
+
+_ONLINE_EMOJI    = '<:online:313956277808005120>'
+_IDLE_EMOJI      = '<:away:313956277220802560>'
+_DND_EMOJI       = '<:dnd:313956276893646850>'
+_OFFLINE_EMOJI   = '<:offline:313956277237710868>'
+_STREAMING_EMOJI = '<:streaming:313956277132853248>'
+_BOT_TAG         = '<:botTag:230105988211015680>'
+
+
+# This dict will be modified in on_ready to make sure 
+# we have the emoji URLs too.
+_status_emojis = {
+    'Online': _ONLINE_EMOJI,
+    'Idle': _IDLE_EMOJI,
+    'DND': _DND_EMOJI,
+    'Offline': _OFFLINE_EMOJI,
+    'Bots': _BOT_TAG,
+}
+
+
+def _normal_member_status_format(_, statuses):
+    return '\n'.join(starmap('{1} {0}'.format, statuses.items()))
+
+def _status_with_emojis(_, statuses):
+    return '\n'.join(f'{_status_emojis[k]} {v}' for k, v in statuses.items())
+
 
 def default_last_n(n=50):
     return lambda: collections.deque(maxlen=n)
 
 class ServerPages(BaseReactionPaginator):
+    _formatter = _normal_member_status_format
+
     async def server_color(self):
         try:
             result = self._colour
@@ -132,7 +162,7 @@ class ServerPages(BaseReactionPaginator):
         statuses['DND'] = statuses.pop('Dnd')
         statuses.move_to_end('Offline')
         statuses['Bots'] = sum(m.bot for m in server.members)
-        member_stats = '\n'.join(starmap('{1} {0}'.format, statuses.items()))
+        member_stats = self._formatter(statuses)
 
         explicit_filter = str(server.explicit_content_filter).title().replace('_', ' ')
 
@@ -235,12 +265,39 @@ class ChannelPaginator(ListPaginator):
                 .set_footer(text=f'Page {idx + 1}/{len(self)} | Category ID: {category_id}')
                 )
 
+DISCORD_BOTS_ID = 110373943822540800
+
 class Meta(Cog):
     """Info related commands"""
 
     def __init__(self, bot):
         self.bot = bot
         self.process = psutil.Process()
+        # When this cog is reloaded the on_ready won't be called again.
+        # But if the bot isn't ready the guild won't be in the cache, creating
+        # a false negative.
+        if bot.is_ready():
+            self._init_emojis()
+
+    def _init_emojis(self):
+        global _status_emojis
+
+        if self.bot.get_guild(DISCORD_BOTS_ID):
+            ServerPages._formatter = _status_with_emojis
+            for e in list(_status_emojis.values()):
+                # emoji format is <:name:id>. We want just the id part
+                emoji_id = e.rpartition(':')[2][:-1]
+                emoji = self.bot.get_emoji(int(emoji_id))
+
+                try:
+                    status = discord.Status(emoji.name)
+                except ValueError:
+                    _status_emojis['Bot'] = emoji.url
+                else:
+                    _status_emojis[status] = emoji.url
+
+    async def on_ready(self):
+        self._init_emojis()
 
     @commands.command()
     @commands.guild_only()
@@ -260,16 +317,21 @@ class Meta(Cog):
         roles = str_join(', ', reversed(user.roles[1:]))
         await ctx.send("```\n{}\n```".format(fmt.format(user, roles)))
 
-    @staticmethod
-    async def _user_embed(member):
+    def _user_embed(self, member):
         avatar_url = member.avatar_url
 
-        colour = _status_colors[member.status]
+        is_streaming = member.game and member.game.type == 1
+        if self.bot.get_guild(DISCORD_BOTS_ID):
+            icon = _status_emojis['Bot'] if member.bot else _status_emojis[member.status]
+            colour = member.colour
+        else:
+            icon = discord.Embed.Empty
+            colour = 0x593695 if is_streaming else _status_colors[member.status]
+
         if not member.game:
             playing = 'Not playing anything...'
-        elif member.game.type == 1:
+        elif is_streaming:
             playing = f'Streaming [**{member.game}**]({member.game.url})'
-            colour = 0x593695  # streaming colour
         else:
             playing = f"Playing **{member.game}**"
 
@@ -277,7 +339,7 @@ class Meta(Cog):
 
         return  (discord.Embed(colour=colour, description=playing)
                 .set_thumbnail(url=avatar_url)
-                .set_author(name=str(member))
+                .set_author(name=str(member), icon_url=icon)
                 .add_field(name="Display Name", value=member.display_name)
                 .add_field(name="Created at", value=nice_time(member.created_at))
                 .add_field(name=f"Joined server at", value=nice_time(member.joined_at))
@@ -330,7 +392,7 @@ class Meta(Cog):
         """Gets some userful info because why not"""
         if member is None:
             member = ctx.author
-        await ctx.send(embed=await self._user_embed(member))
+        await ctx.send(embed=self._user_embed(member))
 
     @info.command(name='mee6')
     @commands.guild_only()
