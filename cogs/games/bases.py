@@ -50,6 +50,11 @@ def _swap_item(obj, item, new_val):
             del obj[item]
 
 
+@contextlib.contextmanager
+def _dummy_cm(*args, **kwargs):
+    yield
+
+
 _two_player_help = '''
 Starts a game of {name}
 
@@ -75,6 +80,7 @@ class TwoPlayerGameCog(Cog):
     def __init__(self, bot):
         super().__init__(bot)
         self.running_games = {}
+        self._invited_games = {}
 
     def __init_subclass__(cls, *, game_cls, cmd=None, aliases=(), **kwargs):
         super().__init_subclass__(**kwargs)
@@ -151,24 +157,38 @@ class TwoPlayerGameCog(Cog):
         if ctx.channel.id in self.running_games:
             return await ctx.send(f"There's a {self.__class__.name} game already running in this channel...")
 
+        if member is not None:
+            pair = (ctx.author.id, member.id)
+            channel_id = self._invited_games.get(pair)
+            if channel_id:
+                return await ctx.send(
+                    "Um, you've already invited them in "
+                    f"<#{channel_id}>, please don't spam them.."
+                )
+
+            cm = _swap_item(self._invited_games, pair, ctx.channel.id)
+        else:
+            cm = _dummy_cm()
+
         put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
 
-        await self._invite_member(ctx, member)
-        with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
-            waiter = self.running_games[ctx.channel.id]
-            try:
-                await waiter.wait()
-            except asyncio.TimeoutError:
-                if member:
-                    return await ctx.send(f"{member.mention} couldn't join in time... :/")
-                else:
-                    return await ctx.send('No one joined in time. :(')
+        with cm:
+            await self._invite_member(ctx, member)
+            with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
+                waiter = self.running_games[ctx.channel.id]
+                try:
+                    await waiter.wait()
+                except asyncio.TimeoutError:
+                    if member:
+                        return await ctx.send(f"{member.mention} couldn't join in time... :/")
+                    else:
+                        return await ctx.send('No one joined in time. :(')
 
-        with put_in_running(self.__game_class__(ctx, waiter._recipient)):
-            inst = self.running_games[ctx.channel.id]
-            result = await inst.run()
+            with put_in_running(self.__game_class__(ctx, waiter._recipient)):
+                inst = self.running_games[ctx.channel.id]
+                result = await inst.run()
 
-        await self._end_game(ctx, inst, result)
+            await self._end_game(ctx, inst, result)
 
     async def _game_join(self, ctx):
         waiter = self.running_games.get(ctx.channel.id)
