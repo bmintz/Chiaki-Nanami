@@ -190,7 +190,7 @@ class Owner(Cog, hidden=True):
         traceback.print_exc()
         await ctx.send("Baka! You didn't code me properly  >///<")
 
-    @commands.command(aliases=['kys'])
+    @commands.command()
     async def die(self, ctx):
         """Shuts the bot down"""
         await ctx.release()  # Needed because logout closes the DatabaseInterface.
