@@ -96,33 +96,13 @@ _status_colors = {
     discord.Status.invisible : discord.Colour.default(),
 }
 
-# Provided by Discord Bots
-# TOOD: Mirror this on a different server for self-hosts.
-
-_ONLINE_EMOJI    = '<:online:313956277808005120>'
-_IDLE_EMOJI      = '<:away:313956277220802560>'
-_DND_EMOJI       = '<:dnd:313956276893646850>'
-_OFFLINE_EMOJI   = '<:offline:313956277237710868>'
-_STREAMING_EMOJI = '<:streaming:313956277132853248>'
-_BOT_TAG         = '<:botTag:230105988211015680>'
-
-
-# This dict will be modified in on_ready to make sure 
-# we have the emoji URLs too.
-_status_emojis = {
-    'Online': _ONLINE_EMOJI,
-    'Idle': _IDLE_EMOJI,
-    'DND': _DND_EMOJI,
-    'Offline': _OFFLINE_EMOJI,
-    'Bots': _BOT_TAG,
-}
-
 
 def _normal_member_status_format(_, statuses):
     return '\n'.join(starmap('{1} {0}'.format, statuses.items()))
 
-def _status_with_emojis(_, statuses):
-    return '\n'.join(f'{_status_emojis[k]} {v}' for k, v in statuses.items())
+def _status_with_emojis(self, statuses):
+    c = self.context.bot.emoji_config
+    return '\n'.join(f'{getattr(c, "bot_tag" if k == "Bots" else k.lower())} {v}' for k, v in statuses.items())
 
 
 def default_last_n(n=50):
@@ -279,22 +259,13 @@ class Meta(Cog):
         if bot.is_ready():
             self._init_emojis()
 
+    def has_config_emojis(self):
+        attributes = ('online', 'idle', 'dnd', 'offline', 'streaming', 'bot_tag')
+        return all(map(self.bot.emoji_config.__getattribute__, attributes))
+
     def _init_emojis(self):
-        global _status_emojis
-
-        if self.bot.get_guild(DISCORD_BOTS_ID):
+        if self.has_config_emojis():
             ServerPages._formatter = _status_with_emojis
-            for e in list(_status_emojis.values()):
-                # emoji format is <:name:id>. We want just the id part
-                emoji_id = e.rpartition(':')[2][:-1]
-                emoji = self.bot.get_emoji(int(emoji_id))
-
-                try:
-                    status = discord.Status(emoji.name)
-                except ValueError:
-                    _status_emojis['Bot'] = emoji.url
-                else:
-                    _status_emojis[status] = emoji.url
 
     async def on_ready(self):
         self._init_emojis()
@@ -321,11 +292,12 @@ class Meta(Cog):
         avatar_url = member.avatar_url
 
         is_streaming = member.game and member.game.type == 1
-        if self.bot.get_guild(DISCORD_BOTS_ID):
-            icon = _status_emojis['Bot'] if member.bot else _status_emojis[member.status]
+        status = 'bot_tag' if member.bot else member.status.value
+        icon = getattr(self.bot.emoji_config, status)
+        if icon:
             colour = member.colour
         else:
-            icon = discord.Embed.Empty
+            icon = discord.Embed.Emptsy
             colour = 0x593695 if is_streaming else _status_colors[member.status]
 
         if not member.game:
@@ -339,7 +311,7 @@ class Meta(Cog):
 
         return  (discord.Embed(colour=colour, description=playing)
                 .set_thumbnail(url=avatar_url)
-                .set_author(name=str(member), icon_url=icon)
+                .set_author(name=str(member), icon_url=icon.url)
                 .add_field(name="Display Name", value=member.display_name)
                 .add_field(name="Created at", value=nice_time(member.created_at))
                 .add_field(name=f"Joined server at", value=nice_time(member.joined_at))

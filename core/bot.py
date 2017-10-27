@@ -4,6 +4,7 @@ import asyncqlio
 import collections
 import contextlib
 import discord
+import emoji
 import functools
 import inspect
 import json
@@ -43,6 +44,16 @@ def _parse_emoji_for_reaction(emoji):
     if m is not None:
         return f'{m[1]}:{m[2]}'
     return emoji
+
+
+class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
+    def __str__(self):
+        return self.emoji
+
+    @property
+    def url(self):
+        hexes = '-'.join(hex(ord(c))[2:] for c in self.emoji)
+        return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
 
 
 _MINIMAL_PERMISSIONS = [
@@ -134,6 +145,30 @@ class Chiaki(commands.Bot):
             self.load_extension(ext)
 
         self._game_task = self.loop.create_task(self.change_game())
+
+    def _import_emojis(self):
+        import emojis
+
+        d = {}
+        for name, em in inspect.getmembers(emojis):
+            if name[0] == '_':
+                continue
+
+            if isinstance(em, int):
+                em = self.get_emoji(em)
+            elif isinstance(em, str):
+                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
+                if match:
+                    em = self.get_emoji(int(match[1]))
+                elif em in emoji.UNICODE_EMOJI:
+                    em = _ProxyEmoji(em)
+                elif em:
+                    log.warn('Unknown Emoji: %r', em)
+
+            d[name] = em
+
+        del emojis  # break reference to module for easy reloading
+        self.emoji_config = collections.namedtuple('EmojiConfig', d)(**d)
 
     def _dispatch_from_scheduler(self, entry):
         self.dispatch(entry.event, entry)
@@ -237,6 +272,7 @@ class Chiaki(commands.Bot):
         print(self.user.name)
         print(self.user.id)
         print('------')
+        self._import_emojis()
         self.db_scheduler.run()
 
         if not hasattr(self, 'appinfo'):

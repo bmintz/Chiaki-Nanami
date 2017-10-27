@@ -4,4 +4,6 @@ __pycache__
 dependencies
 jsonfiles/
 
+# Ignore the config files
 config.py
+emojis.py
