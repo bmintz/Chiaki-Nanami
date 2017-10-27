@@ -297,7 +297,7 @@ class Meta(Cog):
         if icon:
             colour = member.colour
         else:
-            icon = discord.Embed.Emptsy
+            icon = discord.Embed.Empty
             colour = 0x593695 if is_streaming else _status_colors[member.status]
 
         if not member.game:
