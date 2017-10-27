@@ -38,14 +38,6 @@ command_log = logging.getLogger('commands')
 command_log.addHandler(file_handler('commands'))
 
 
-EMOJI_REGEX = re.compile(r'<:(.+?):([0-9]{15,21})>')
-def _parse_emoji_for_reaction(emoji):
-    m = EMOJI_REGEX.match(emoji)
-    if m is not None:
-        return f'{m[1]}:{m[2]}'
-    return emoji
-
-
 class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
     def __str__(self):
         return self.emoji
@@ -373,22 +365,6 @@ class Chiaki(commands.Bot):
         if not wh_url:
             return None
         return discord.Webhook.from_url(wh_url, adapter=discord.AsyncWebhookAdapter(self.session))
-
-    @property
-    def confirm_reaction_emoji(self):
-        return _parse_emoji_for_reaction(self.confirm_emoji)
-
-    @property
-    def deny_reaction_emoji(self):
-        return _parse_emoji_for_reaction(self.deny_emoji)
-
-    @property
-    def confirm_emoji(self):
-        return config.confirm_emoji
-
-    @property
-    def deny_emoji(self):
-        return config.deny_emoji
 
     # ------ misc. properties ------
 

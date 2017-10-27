@@ -170,8 +170,9 @@ class Context(commands.Context):
             if not destination.permissions_for(self.me).add_reactions:
                 raise RuntimeError('Bot does not have Add Reactions permission.')
 
-        confirm_emoji, deny_emoji = emojis = [self.bot.confirm_emoji, self.bot.deny_emoji]
-        is_valid_emoji = frozenset(emojis).__contains__
+        config = self.bot.emoji_config
+        confirm_emoji, deny_emoji = emojis = [config.confirm, config.deny]
+        is_valid_emoji = frozenset(map(str, emojis)).__contains__
 
         instructions = f'React with {confirm_emoji} to confirm or {deny_emoji} to deny\n'
 
@@ -189,10 +190,27 @@ class Context(commands.Context):
                 return False
 
             result = is_valid_emoji(str(emoji))
+            print(emojis)
             print(result, 'emoji:', emoji)
             return result
 
-        for em in [self.bot.confirm_reaction_emoji, self.bot.deny_reaction_emoji]:
+        for em in emojis:
+            # Standard unicode emojis are wrapped in _ProxyEmoji in core/bot.py
+            # because we need a url property. This is an issue because
+            # message.add_reaction will just happily pass the _ProxyEmoji raw,
+            # causing a 400 Bad Request due to Discord not recognizing the object.
+            #
+            # This is the cleanest way to do it withour resorting to monkey-
+            # patching the discord.Message.add_reaction method. Since we're using
+            # the emojis defined in emojis.py, we only need to worry about two types:
+            # _ProxyEmoji and discord.Emoji, so we can just do a simple isinstance
+            # check for discord.Emoji so we don't need to import _ProxyEmoji.
+            #
+            # It also doesn't matter if the confirm/deny emojis are None. That's the
+            # user's fault.
+            if not isinstance(em, discord.Emoji):
+                em = str(em)
+
             await msg.add_reaction(em)
 
         if reacquire:
@@ -200,7 +218,8 @@ class Context(commands.Context):
 
         try:
             emoji, *_, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
-            return str(emoji) == confirm_emoji
+            # Extra str cast for the case of _ProxyEmojis
+            return str(emoji) == str(confirm_emoji)
         finally:
             if reacquire:
                 await self.acquire()
