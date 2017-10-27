@@ -133,7 +133,7 @@ class TwoPlayerGameCog(Cog):
                 "Self inviting, huh... :eyes:",
             ))
             await ctx.send(message)
-        elif issubclass(type(error), commands.BadArgument):
+        elif issubclass(type(error), commands.BadArgument) and not type(error) is commands.BadArgument:
             await ctx.send(error)
 
     def _create_invite(self, ctx, member):
