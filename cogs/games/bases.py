@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import discord
 import functools
+import inspect
 import random
 
 from discord.ext import commands
@@ -69,37 +70,6 @@ def _swap_item(obj, item, new_val):
 def _dummy_cm(*args, **kwargs):
     yield
 
-
-_two_player_help = '''
-Starts a game of {name}
-
-You can specify a user to invite them to play with
-you. Leaving out the user creates a game that anyone
-can join.
-'''
-
-_two_player_join_help = '''
-Joins a {name} game.
-
-This either must be for you, or for everyone.
-'''
-
-_two_player_decline_help = '''
-Declines a {name} game.
-
-This game must be for you. (i.e. through `{cmd} @user`)
-'''
-
-_two_player_close_help = '''
-Closes a {name} game, stopping anyone from joining.
-
-You must be the creator of the game.
-'''
-
-_two_player_create_help = 'Deprecated alias to `{name}`.'
-_two_player_invite_help = 'Deprecated alias to `{name} @user`.'
-
-
 _MemberConverter = CheckedMember(offline=False, bot=False, include_self=False)
 
 
@@ -115,33 +85,22 @@ class TwoPlayerGameCog(Cog):
         cls.__game_class__ = game_cls
         cmd_name = cmd or cls.__name__.lower()
 
-        group_help = _two_player_help.format(name=cls.name)
+        group_help = inspect.getdoc(cls._game).format(name=cls.name)
         group_command = commands.group(
             name=cmd_name, aliases=aliases, help=group_help, invoke_without_command=True
         )(cls._game)
+        setattr(cls, f'{cmd_name}', group_command)
 
         gc = group_command.command
-        create_help = _two_player_create_help.format(name=cmd_name)
-        create_command = gc(name='create', help=create_help)(cls._game_create)
+        for name, member in inspect.getmembers(cls):
+            if not name.startswith('_game_'):
+                continue
 
-        invite_help = _two_player_invite_help.format(name=cmd_name)
-        invite_command = gc(name='invite', help=invite_help)(cls._game_invite)
+            name = name[6:]
+            help = inspect.getdoc(member).format(name=cls.name, cmd=cmd_name)
+            command = gc(name=name, help=help)(member)
+            setattr(cls, f'{cmd_name}_{name}', command)
 
-        join_help = _two_player_join_help.format(name=cls.name)
-        join_command = gc(name='join', help=join_help)(cls._game_join)
-
-        decline_help = _two_player_decline_help.format(name=cls.name, cmd=cmd_name)
-        decline_command = gc(name='decline', help=decline_help)(cls._game_decline)
-
-        close_help = _two_player_close_help.format(name=cls.name, cmd=cmd_name)
-        close_command = gc(name='close', help=close_help)(cls._game_close)
-
-        setattr(cls, f'{cmd_name}', group_command)
-        setattr(cls, f'{cmd_name}_create', create_command)
-        setattr(cls, f'{cmd_name}_invite', invite_command)
-        setattr(cls, f'{cmd_name}_join', join_command)
-        setattr(cls, f'{cmd_name}_decline', decline_command)
-        setattr(cls, f'{cmd_name}_close', close_command)
         setattr(cls, f'_{cls.__name__}__error', cls._error)
 
     async def _error(self, ctx, error):
@@ -189,6 +148,13 @@ class TwoPlayerGameCog(Cog):
         await ctx.send(embed=winner_embed)
 
     async def _game(self, ctx, *, member: _MemberConverter = None):
+        """Starts a game of {name}
+
+        You can specify a user to invite them to play with
+        you. Leaving out the user creates a game that anyone
+        can join.
+        """
+
         if ctx.channel.id in self.running_games:
             return await ctx.send(f"There's a {self.__class__.name} game already running in this channel...")
 
@@ -232,6 +198,11 @@ class TwoPlayerGameCog(Cog):
             await self._end_game(ctx, inst, result)
 
     async def _game_join(self, ctx):
+        """Joins a {name} game.
+
+        This either must be for you, or for everyone.
+        """
+
         waiter = self.running_games.get(ctx.channel.id)
         if waiter is None:
             return await ctx.send(f"There's no {self.__class__.name} for you to join...")
@@ -247,6 +218,11 @@ class TwoPlayerGameCog(Cog):
             await ctx.send(f'Alright {ctx.author.mention}, good luck!')
 
     async def _game_decline(self, ctx):
+        """Declines a {name} game.
+
+        This game must be for you. (i.e. through `{cmd} @user`)
+        """
+
         waiter = self.running_games.get(ctx.channel.id)
         if waiter is None:
             return await ctx.send(f"There's no {self.__class__.name} for you to decline...")
@@ -256,6 +232,10 @@ class TwoPlayerGameCog(Cog):
                 await ctx.message.add_reaction('\U00002705')
 
     async def _game_close(self, ctx):
+        """Closes a {name} game, stopping anyone from joining.
+
+        You must be the creator of the game.
+        """
         waiter = self.running_games.get(ctx.channel.id)
         if waiter is None:
             return await ctx.send(f"There's no {self.__class__.name} for you to decline...")
@@ -265,9 +245,11 @@ class TwoPlayerGameCog(Cog):
                 await ctx.message.add_reaction('\U00002705')
 
     async def _game_create(self, ctx):
+        """Deprecated alias to `{cmd}`."""
         await ctx.send(f'This subcommand is deprecated, use `->ttt` instead.')
         await ctx.invoke(ctx.command.root_parent)
 
     async def _game_invite(self, ctx, *, member: _MemberConverter):
+        """Deprecated alias to `{cmd} @user`."""
         await ctx.send(f'This subcommand is deprecated, use `->ttt @{member}` instead.')
         await ctx.invoke(ctx.command.root_parent, member=member)
