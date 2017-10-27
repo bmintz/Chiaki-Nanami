@@ -36,6 +36,12 @@ class _TwoPlayerWaiter:
 
         self._event.set()
 
+    def cancel(self, member):
+        if self._recipient != member:
+            return False
+
+        return self._future.cancel()
+
     def done(self):
         return bool(self._future and self._future.done())
 
@@ -67,6 +73,12 @@ _two_player_join_help = '''
 Joins a {name} game.
 
 This either must be for you, or for everyone.
+'''
+
+_two_player_decline_help = '''
+Declines a {name} game.
+
+This game must be for you. (i.e. through `{cmd} @user`)
 '''
 
 _two_player_create_help = 'Deprecated alias to `{name}`.'
@@ -103,10 +115,14 @@ class TwoPlayerGameCog(Cog):
         join_help = _two_player_join_help.format(name=cls.name)
         join_command = gc(name='join', help=join_help)(cls._game_join)
 
+        decline_help = _two_player_decline_help.format(name=cls.name, cmd=cmd_name)
+        decline_command = gc(name='decline', help=decline_help)(cls._game_decline)
+
         setattr(cls, f'{cmd_name}', group_command)
         setattr(cls, f'{cmd_name}_create', create_command)
         setattr(cls, f'{cmd_name}_invite', invite_command)
         setattr(cls, f'{cmd_name}_join', join_command)
+        setattr(cls, f'{cmd_name}_decline', decline_command)
         setattr(cls, f'_{cls.__name__}__error', cls._error)
 
     async def _error(self, ctx, error):
@@ -183,6 +199,8 @@ class TwoPlayerGameCog(Cog):
                         return await ctx.send(f"{member.mention} couldn't join in time... :/")
                     else:
                         return await ctx.send('No one joined in time. :(')
+                except asyncio.CancelledError:
+                    return await ctx.send(f'{ctx.author.mention}, {member} declined your challenge. :(')
 
             with put_in_running(self.__game_class__(ctx, waiter._recipient)):
                 inst = self.running_games[ctx.channel.id]
@@ -204,6 +222,15 @@ class TwoPlayerGameCog(Cog):
             await ctx.send(e)
         else:
             await ctx.send(f'Alright {ctx.author.mention}, good luck!')
+
+    async def _game_decline(self, ctx):
+        waiter = self.running_games.get(ctx.channel.id)
+        if waiter is None:
+            return await ctx.send(f"There's no {self.__class__.name} for you to decline...")
+
+        if isinstance(waiter, _TwoPlayerWaiter) and waiter.cancel(ctx.author):
+            with contextlib.suppress(discord.HTTPException):
+                await ctx.message.add_reaction('\U00002705')
 
     async def _game_create(self, ctx):
         await ctx.send(f'This subcommand is deprecated, use `->ttt` instead.')
