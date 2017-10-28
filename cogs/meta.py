@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import psutil
+import re
 import sys
 
 from contextlib import redirect_stdout
@@ -17,7 +18,7 @@ from io import StringIO
 from itertools import chain, islice, starmap
 from math import log10
 from more_itertools import sliced
-from operator import attrgetter
+from operator import attrgetter, methodcaller
 
 from .utils import cache, disambiguate
 from .utils.colours import url_color, user_color
@@ -27,6 +28,7 @@ from .utils.errors import InvalidUserArgument, ResultsNotFound
 from .utils.formats import *
 from .utils.misc import group_strings, str_join, nice_time, ordinal
 from .utils.paginator import BaseReactionPaginator, ListPaginator, page
+from .utils.subprocesses import run_subprocess
 
 from core.cog import Cog
 
@@ -246,6 +248,7 @@ class ChannelPaginator(ListPaginator):
                 )
 
 DISCORD_BOTS_ID = 110373943822540800
+
 
 class Meta(Cog):
     """Info related commands"""
@@ -592,6 +595,63 @@ class Meta(Cog):
 
         for p in paginator.pages:
             await ctx.send(p)
+
+    # Credits to Reina
+    @staticmethod
+    async def _get_github_url():
+        url, _ = await run_subprocess('git remote get-url origin')
+        return url.strip()[:-4]  # remove .git\n
+
+    async def _get_recent_commits(self, *, limit=None):
+        url = await self._get_github_url()
+        cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
+        if limit is not None:
+            cmd += f' -{limit}'
+
+        return (await run_subprocess(cmd))[0]
+
+    @commands.command()
+    async def commits(self, ctx, limit=10):
+        """Shows the latest changes made to the bot.
+
+        The default is the latest 10 changes.
+        """
+        changes = await self._get_recent_commits(limit=limit)
+
+        def truncate_sub(m):
+            return truncate(m[1], 47, "...")
+
+        # By default git show doesn't truncate the commit messages.
+        # %<(N,trunc) truncates them but it also pads messages that are
+        # shorter than N columns, which is NOT what we want.
+        #
+        # One attempt was to use sed as shown here:
+        # https://stackoverflow.com/a/24604658
+        #
+        # However since we're attempting to make this a cross-platform bot,
+        # we can't use sed as it's not available in Windows and there's no
+        # equivalent of it, causing it to fail. As a result, we're forced to
+        # use regex.
+        #
+        # We know two things for sure about the commit line:
+        # 1. The hash hyper link goes by the format of [`{hash}`]({commit_url})
+        # 2. The relative committer time is wrapped in parentheses, i.e. ({delta})
+        #
+        # We use a regex solution to fish out the commit message, which
+        # is wrapped in <> from the function above since we know for sure
+        # neither the hash or commiter date will have <> in them.
+        #
+        # Not sure what the performance backlash is since it's regex,
+        # but from naive timings it doesn't look like it takes too long.
+        # (only 3 ms, which isn't that much compared to HTTP requests.)
+
+        lines = (
+            re.sub(r'<(.*)>', truncate_sub, change)
+            for change in changes.splitlines()
+        )
+
+        pages = ListPaginator(ctx, lines, title='Latest Changes', lines_per_page=10)
+        await pages.interact()
 
     @staticmethod
     async def _inrole(ctx, *roles, members, final='and'):
