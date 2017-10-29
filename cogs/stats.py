@@ -11,6 +11,7 @@ from discord.ext import commands
 from more_itertools import ilen, partition
 
 from .utils import errors
+from .utils.disambiguate import DisambiguateGuild
 from .utils.formats import pluralize
 from .utils.misc import emoji_url
 from .utils.paginator import ListPaginator, EmbedFieldPages
@@ -85,7 +86,6 @@ def _ci_lower_bound(pos, n, confidence):
     z = _pnormaldist(1-(1-confidence)/2)
     phat = 1.0*pos/n
     return (phat + z*z/(2*n) - z * math.sqrt((phat*(1-phat)+z*z/(4*n))/n))/(1+z*z/n)
-
 
 
 class Stats(Cog):
@@ -244,6 +244,40 @@ class Stats(Cog):
     async def test_error(self, ctx):
         """Tests the error logger webhook."""
         NO
+
+    @commands.command(name='isbotfarm')
+    @commands.is_owner()
+    async def _is_bot_farm(self, ctx, *, server: DisambiguateGuild):
+        """Checks if a server is considered to be a "bot collection" server.
+
+        A bot collection server is a server that has a high
+        ratio of bots to members.
+        """
+        bots = sum(m.bot for m in server.members)
+        total = server.member_count
+
+        bot_farm = self.is_bot_farm(server)
+        description = (
+            f'**Members**: {total}\n'
+            f'**Bots**: {bots}\n'
+        )
+
+        if bot_farm:
+            message = f'**Yes**, {server} is a \nbot collection server'
+            colour = 0xF44336
+        else:
+            colour = 0x4CAF50
+            message = f'**No.** {server} is not \na bot collection server'
+
+        embed = (discord.Embed(colour=colour, description=description)
+                 .set_author(name=server.name)
+                 .add_field(name='Is it a bot collection server?', value=message)
+                 )
+
+        if server.icon:
+            embed.set_thumbnail(url=server.icon_url)
+
+        await ctx.send(embed=embed)
 
     # Determining if a server is a "bot collection server" is no easy task,
     # because there are a lot of edge cases in servers where it might not be
