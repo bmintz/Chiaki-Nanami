@@ -279,6 +279,23 @@ class Stats(Cog):
 
         await ctx.send(embed=embed)
 
+    @commands.command(name='leavebotfarms')
+    @commands.is_owner()
+    async def leave_bot_farms(self, ctx):
+        """Leaves any servers that are considered to be "bot collections".
+
+        A bot collection server is a server that has a high
+        ratio of bots to members.
+        """
+        bot_farms = list(filter(self.is_bot_farm, ctx.bot.guilds))
+        if not bot_farms:
+            return await ctx.send("Thankfully I'm not in any bot collections...")
+
+        for g in bot_farms:
+            await g.leave()
+
+        await ctx.send(f"Left **{len(bot_farms)}** servers. Hope you don't miss them, cuz I don't!")
+
     # Determining if a server is a "bot collection server" is no easy task,
     # because there are a lot of edge cases in servers where it might not be
     # a bot farm but merely a testing server with only a few bots.
