@@ -59,6 +59,47 @@ class RacehorseEmoji(commands.Converter):
         return str(emoji_)
 
 
+MINIMUM_REQUIRED_MEMBERS = 2
+# fields can only go up to 25
+MAXIMUM_REQUIRED_MEMBERS = 25
+
+class _RaceWaiter:
+    def __init__(self, author):
+        self.members = []
+        self._author = author
+        self._future = None
+        self._full = asyncio.Event()
+
+    async def wait(self):
+        future = self._future
+        if not future:
+            self._future = future = asyncio.ensure_future(asyncio.wait_for(self._full.wait(), timeout=30))
+
+        with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+            await future
+
+        return len(self.members) >= 2
+
+    def close(self, member):
+        if not self._future:
+            return
+
+        if self._author != member:
+            return
+
+        self._future.cancel()
+
+    async def add_member(self, session, member):
+        #if any(r.user.id == member.id for r in self.members):
+        #    raise RuntimeError("You're already in the race!")
+
+        horse = await _get_race_horse(session, member.id)
+        self.members.append(Racer(member, horse))
+
+        if len(self.members) >= MAXIMUM_REQUIRED_MEMBERS:
+            self._full.set()
+
+
 class Racer:
     def __init__(self, user, animal=None):
         self.animal = animal or random.choice(ANIMALS)
@@ -69,6 +110,7 @@ class Racer:
     def update(self):
         if self.is_finished():
             return
+
         self.distance += random.triangular(0, 10, 3)
         if self.is_finished() and self._end == self._start:
             self._end = time.perf_counter()
@@ -83,9 +125,8 @@ class Racer:
 
         finished = self.is_finished()
         end_line = "|" * (not finished)
-        finish_flag = '\N{CHEQUERED FLAG}' * finished
 
-        return f'|{buffer[:position]}{self.animal}{buffer[position:]}{end_line} {finish_flag}'
+        return f'|{buffer[:position]}{self.animal}{buffer[position:]}{end_line}'
 
     @property
     def position(self):
@@ -95,68 +136,39 @@ class Racer:
     def time_taken(self):
         return self._end - self._start
 
-
 class RacingSession:
-    MINIMUM_REQUIRED_MEMBERS = 2
-    # fields can only go up to 25
-    MAXIMUM_REQUIRED_MEMBERS = 25
-
-    def __init__(self, ctx):
+    def __init__(self, ctx, players):
         self.ctx = ctx
-        self.players = []
+        self.players = players
+        self._winners = set()
         self._start = None
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
                       .set_author(name='Race has started!')
                       .set_footer(text='Current Leader: None')
                       )
-        self._closed = asyncio.Event()
-
-    async def add_member(self, member):
-        horse = await _get_race_horse(self.ctx.session, member.id)
-        self.players.append(Racer(member, horse))
-
-    async def add_member_checked(self, member):
-        if self.is_closed():
-            return await self.ctx.send('You were a little late to the party!')
-        if self.already_joined(member):
-            return await self.ctx.send("You're already in the race!")
-
-        await self.add_member(member)
-
-        if len(self.players) >= self.MAXIMUM_REQUIRED_MEMBERS:
-            self._closed.set()
-
-        await self.ctx.send(f"Okay, {member.mention}. Good luck!")
-
-    def already_joined(self, user):
-        return any(r.user == user for r in self.players)
-
-    def has_enough_members(self):
-        return len(self.players) >= self.MINIMUM_REQUIRED_MEMBERS
-
-    def is_closed(self):
-        return self._closed.is_set()
-
-    def close_early(self):
-        self._closed.set()
 
     def update_game(self):
         for player in self.players:
             player.update()
 
+        if not self._winners:
+            self._winners.update(r for r in self.players if r.is_finished())
+
     def _member_fields(self):
-        return map(attrgetter('user', 'progress'), self.players)
+        for player in self.players:
+            extra = ('\N{TROPHY}' if player in self._winners else '\N{CHEQUERED FLAG}' if player.is_finished() else '')
+            yield player.user, f'{player.progress} {extra}'
 
     def update_current_embed(self):
         for i, (name, value) in enumerate(self._member_fields()):
             self._track.set_field_at(i, name=name, value=value, inline=False)
 
-        leader = self.leader
-        position = min(leader.position, 100)
-        self._track.set_footer(text=f'Current Leader: {leader.user} ({position :.2f}m)')
-
-    async def wait_until_full(self):
-        await self._closed.wait()
+        if self._winners:
+            self._track.set_footer(text=f'Winner: {", ".join(str(s.user) for s in self._winners)}')
+        else:
+            leader = max(self.players, key=attrgetter('position'))
+            position = min(leader.position, 100)
+            self._track.set_footer(text=f'Current Leader: {leader.user} ({position :.2f}m)')
 
     async def _loop(self):
         for name, value in self._member_fields():
@@ -185,7 +197,7 @@ class RacingSession:
         # Cannot use '\N' because the medal characters don't have a name
         # I can only refer to them by their code points.
         for title, (char, racer) in zip(names, enumerate(self.top_racers(), start=0x1f947)):
-            use_flag = "\N{CHEQUERED FLAG}" * racer.is_finished()
+            use_flag = "\N{TROPHY}" * (racer in self._winners)
             name = f'{title} {use_flag}'
             value = f'{chr(char)} {racer.animal} {racer.user}\n({racer.time_taken :.2f}s)'
             embed.add_field(name=name, value=value, inline=False)
@@ -202,13 +214,6 @@ class RacingSession:
 
     def is_completed(self):
         return all(r.is_finished() for r in self.players)
-
-    @property
-    def leader(self):
-        finished = [p for p in self.players if p.is_finished()]
-        if not finished:
-            return max(self.players, key=attrgetter('position'))
-        return min(finished, key=attrgetter('time_taken'))
 
 class Racing(Cog):
     """Be the animal you wish to beat. Wait."""
@@ -227,18 +232,28 @@ class Racing(Cog):
 
         session = self.manager.get_session(ctx.channel)
         if session is not None:
-            return await session.add_member_checked(ctx.author)
+            try:
+                await session.add_member(ctx.session, ctx.author)
+            except AttributeError:
+                # Probably the race itself
+                return await ctx.send('Sorry... you were late...')
+            except Exception as e:
+                await ctx.send(e)
+            else:
+                return await ctx.send(f'Ok, {ctx.author.mention}, good luck!')
 
-        with self.manager.temp_session(ctx.channel, RacingSession(ctx)) as inst:
-            await inst.add_member(ctx.author)
-            await ctx.send(f'Race has started! Type {ctx.prefix}{ctx.invoked_with} to join!')
+        with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.author)) as waiter:
+            await waiter.add_member(ctx.session, ctx.author)
+            await ctx.send(
+                f'Race has started! Type `{ctx.prefix}{ctx.invoked_with}` to join! '
+                f'Be quick though, you only have 30 seconds, or until {ctx.author.mention} '
+                f'closes the race with `{ctx.prefix}{ctx.invoked_with} close!`'
+            )
 
-            with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(inst.wait_until_full(), timeout=30)
+            if not await waiter.wait():
+                return await ctx.send("Can't start the race. There weren't enough people. ;-;")
 
-            if not inst.has_enough_members():
-                return await ctx.send("Can't start race. Not enough people :(")
-
+        with self.manager.temp_session(ctx.channel, RacingSession(ctx, waiter.members)) as inst:
             await asyncio.sleep(random.uniform(0.25, 0.75))
             await inst.run()
 
@@ -248,11 +263,14 @@ class Racing(Cog):
         session = self.manager.get_session(ctx.channel)
         if session is None:
             return await ctx.send('There is no session to close, silly...')
-        elif session.is_closed():
+
+        try:
+            session.close(ctx.author)
+        except AttributeError:
             return await ctx.send("Um, I don't think you can close a race that's "
                                   "running right now...")
-        session.close_early()
-        await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
+        else:
+            await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
 
     @race.command(name='horse', aliases=['ride'])
     async def race_horse(self, ctx, emoji: RacehorseEmoji=None):
