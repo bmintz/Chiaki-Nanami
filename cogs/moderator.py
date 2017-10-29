@@ -773,9 +773,15 @@ class Moderator(Cog):
 
     async def on_guild_channel_create(self, channel):
         server = channel.guild
-        role = await self._setdefault_muted_role(server)
+
+        # Don't bother creating a mute role if there isn't one set, because
+        # people might just want to create a channel without having to deal
+        # with moderation commands. Only when people want to use the actual
+        # mute command should we create the muted role if there isn't one.
+        role = await self._get_muted_role(server)
         if role is None:
             return
+
         await self._regen_muted_role_perms(role, channel)
 
     async def on_member_join(self, member):
