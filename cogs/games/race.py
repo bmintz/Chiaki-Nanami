@@ -220,7 +220,7 @@ class Racing(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.manager = SessionManager()
-        self._md = self.bot.db.bind_tables(Racehorse)
+        self._md = self.bot.db.bind_tables(_Table)
 
     @commands.group(invoke_without_command=True)
     async def race(self, ctx):
