@@ -69,6 +69,7 @@ class Racer:
     def update(self):
         if self.is_finished():
             return
+
         self.distance += random.triangular(0, 10, 3)
         if self.is_finished() and self._end == self._start:
             self._end = time.perf_counter()
@@ -104,6 +105,7 @@ class RacingSession:
     def __init__(self, ctx):
         self.ctx = ctx
         self.players = []
+        self._winners = set()
         self._start = None
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
                       .set_author(name='Race has started!')
@@ -118,8 +120,8 @@ class RacingSession:
     async def add_member_checked(self, member):
         if self.is_closed():
             return await self.ctx.send('You were a little late to the party!')
-        if self.already_joined(member):
-            return await self.ctx.send("You're already in the race!")
+        #if self.already_joined(member):
+        #    return await self.ctx.send("You're already in the race!")
 
         await self.add_member(member)
 
@@ -144,6 +146,9 @@ class RacingSession:
         for player in self.players:
             player.update()
 
+        if not self._winners:
+            self._winners.update(r for r in self.players if r.is_finished())
+
     def _member_fields(self):
         return map(attrgetter('user', 'progress'), self.players)
 
@@ -151,9 +156,12 @@ class RacingSession:
         for i, (name, value) in enumerate(self._member_fields()):
             self._track.set_field_at(i, name=name, value=value, inline=False)
 
-        leader = self.leader
-        position = min(leader.position, 100)
-        self._track.set_footer(text=f'Current Leader: {leader.user} ({position :.2f}m)')
+        if self._winners:
+            self._track.set_footer(text=f'Winner: {", ".join(str(s.user) for s in self._winners)}')
+        else:
+            leader = max(self.players, key=attrgetter('position'))
+            position = min(leader.position, 100)
+            self._track.set_footer(text=f'Current Leader: {leader.user} ({position :.2f}m)')
 
     async def wait_until_full(self):
         await self._closed.wait()
@@ -185,7 +193,7 @@ class RacingSession:
         # Cannot use '\N' because the medal characters don't have a name
         # I can only refer to them by their code points.
         for title, (char, racer) in zip(names, enumerate(self.top_racers(), start=0x1f947)):
-            use_flag = "\N{CHEQUERED FLAG}" * racer.is_finished()
+            use_flag = "\N{CHEQUERED FLAG}" * (racer in self._winners)
             name = f'{title} {use_flag}'
             value = f'{chr(char)} {racer.animal} {racer.user}\n({racer.time_taken :.2f}s)'
             embed.add_field(name=name, value=value, inline=False)
@@ -202,13 +210,6 @@ class RacingSession:
 
     def is_completed(self):
         return all(r.is_finished() for r in self.players)
-
-    @property
-    def leader(self):
-        finished = [p for p in self.players if p.is_finished()]
-        if not finished:
-            return max(self.players, key=attrgetter('position'))
-        return min(finished, key=attrgetter('time_taken'))
 
 class Racing(Cog):
     """Be the animal you wish to beat. Wait."""
