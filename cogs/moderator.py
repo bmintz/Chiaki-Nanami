@@ -564,7 +564,17 @@ class Moderator(Cog):
     @commands.command(usage=['192060404501839872 stfu about your gf'])
     @commands.has_permissions(manage_messages=True)
     async def mute(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
-        """Mutes a user (obviously)"""
+        """Mutes a user (obviously)
+
+        This command might take a while when this is used for the 
+        first time, as, I have to create a role, and update the 
+        channel permissions accordingly. 
+
+        If you want to speed up this process, create a muted
+        role yourself and use `{prefix}setmuterole`. However,
+        this only happens once.
+        (not so obviously)
+        """
         self._check_user(ctx, member)
         when = ctx.message.created_at + duration.delta
         await self._do_mute(member, when)
