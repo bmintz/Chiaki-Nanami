@@ -13,6 +13,9 @@ carbon_key = ''
 # The API key for Discord Bots. Again, keep this private.
 bots_key = ''
 
+# The API key for Discord Bot List. As usual, keep this private.
+bot_list_key = ''
+
 # The credentials to log into your PostgreSQL database.
 # Please keep this private.
 psql_user = ''
