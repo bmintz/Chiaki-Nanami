@@ -84,9 +84,8 @@ class Racer:
 
         finished = self.is_finished()
         end_line = "|" * (not finished)
-        finish_flag = '\N{CHEQUERED FLAG}' * finished
 
-        return f'|{buffer[:position]}{self.animal}{buffer[position:]}{end_line} {finish_flag}'
+        return f'|{buffer[:position]}{self.animal}{buffer[position:]}{end_line}'
 
     @property
     def position(self):
@@ -120,8 +119,8 @@ class RacingSession:
     async def add_member_checked(self, member):
         if self.is_closed():
             return await self.ctx.send('You were a little late to the party!')
-        #if self.already_joined(member):
-        #    return await self.ctx.send("You're already in the race!")
+        if self.already_joined(member):
+            return await self.ctx.send("You're already in the race!")
 
         await self.add_member(member)
 
@@ -150,7 +149,9 @@ class RacingSession:
             self._winners.update(r for r in self.players if r.is_finished())
 
     def _member_fields(self):
-        return map(attrgetter('user', 'progress'), self.players)
+        for player in self.players:
+            extra = ('\N{TROPHY}' if player in self._winners else '\N{CHEQUERED FLAG}' if player.is_finished() else '')
+            yield player.user, f'{player.progress} {extra}'
 
     def update_current_embed(self):
         for i, (name, value) in enumerate(self._member_fields()):
@@ -193,7 +194,7 @@ class RacingSession:
         # Cannot use '\N' because the medal characters don't have a name
         # I can only refer to them by their code points.
         for title, (char, racer) in zip(names, enumerate(self.top_racers(), start=0x1f947)):
-            use_flag = "\N{CHEQUERED FLAG}" * (racer in self._winners)
+            use_flag = "\N{TROPHY}" * (racer in self._winners)
             name = f'{title} {use_flag}'
             value = f'{chr(char)} {racer.animal} {racer.user}\n({racer.time_taken :.2f}s)'
             embed.add_field(name=name, value=value, inline=False)
