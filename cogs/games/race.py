@@ -244,7 +244,11 @@ class Racing(Cog):
 
         with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.author)) as waiter:
             await waiter.add_member(ctx.session, ctx.author)
-            await ctx.send(f'Race has started! Type {ctx.prefix}{ctx.invoked_with} to join!')
+            await ctx.send(
+                f'Race has started! Type `{ctx.prefix}{ctx.invoked_with}` to join! '
+                f'Be quick though, you only have 30 seconds, or until {ctx.author.mention} '
+                f'closes the race with `{ctx.prefix}{ctx.invoked_with} close!`'
+            )
 
             if not await waiter.wait():
                 return await ctx.send("Can't start the race. There weren't enough people. ;-;")
