@@ -41,6 +41,14 @@ extensions = []
 
 # The possible games the bot will randomly choose from for the playing status.
 # These are not cycled.
+#
+# There are a few formats you can put in your playing status. Such as:
+# {server_count} = how many servers the bot is in
+# {user_count} = how many users the bots shares a server with
+# {version} = the bot's version number
+#
+# Note that if you want to have either { or } in your string you have
+# to double them up. For e.g. {{status}}
 games = []
 
 # ----------------------- COLOURS ---------------------

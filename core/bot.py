@@ -227,8 +227,15 @@ class Chiaki(commands.Bot):
         await self.wait_until_ready()
         while True:
             name = random.choice(config.games)
-            await self.change_presence(game=discord.Game(name=name, type=0))
-            await asyncio.sleep(random.uniform(0.5, 10) * 60)
+            formatted = name.format(
+                server_count=self.guild_count, 
+                user_count=self.user_count,
+                version=self.__version__,
+
+            )
+
+            await self.change_presence(game=discord.Game(name=formatted, type=0))
+            await asyncio.sleep(random.uniform(0.5, 2) * 60)
 
     def run(self):
         super().run(config.token, reconnect=True)
@@ -356,12 +363,10 @@ class Chiaki(commands.Bot):
 
     @property
     def guild_count(self):
-        print('called!')
         return len(self._connection._guilds)
 
     @property
     def user_count(self):
-        print('user called!')
         return len(self._connection._users)
 
     # ------ Config-related properties ------
