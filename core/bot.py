@@ -341,6 +341,29 @@ class Chiaki(commands.Bot):
     async def on_command_completion(self, ctx):
         self.command_counter['succeeded'] += 1
 
+    # ------ Viewlikes ------
+
+    # Note these views and properties look deceptive. They look like a thin 
+    # wrapper len(self.guilds). However, the reason why these are here is
+    # to avoid a temporary list to get the len of. Bot.guilds and Bot.users
+    # creates a list which can cause a massive hit in performance later on.
+
+    def guildsview(self):
+        return self._connection._guilds.values()
+
+    def usersview(self):
+        return self._connection._users.values()
+
+    @property
+    def guild_count(self):
+        print('called!')
+        return len(self._connection._guilds)
+
+    @property
+    def user_count(self):
+        print('user called!')
+        return len(self._connection._users)
+
     # ------ Config-related properties ------
 
     @discord.utils.cached_property

@@ -338,7 +338,7 @@ class Meta(Cog):
                  .set_thumbnail(url=bot.user.avatar_url)
                  .set_author(name=str(bot.user))
                  .add_field(name='Creator', value=bot.creator)
-                 .add_field(name='Servers', value=len(bot._connection._guilds.values()))
+                 .add_field(name='Servers', value=bot.guild_count)
                  .add_field(name='Python', value=platform.python_version())
                  .add_field(name='Library', value=DISCORD_PY_LIB)
                  .add_field(name='Useful links', value=useful_links, inline=False)

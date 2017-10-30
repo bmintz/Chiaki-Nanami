@@ -41,7 +41,7 @@ class Botlists(Cog, hidden=True):
     async def _update_carbonitex(self):
         payload = {
             'key': self._carbon_key,
-            'servercount': len(self.bot.guilds)
+            'servercount': self.bot.guild_count
         }
 
         async with self.bot.session.post(CARBONITEX_BOTDATA_URL, data=payload) as resp:
@@ -49,7 +49,7 @@ class Botlists(Cog, hidden=True):
 
     async def _update_dbots(self):
         payload = json.dumps({
-            'server_count': len(self.bot.guilds)
+            'server_count': self.bot.guild_count
         })
 
         headers = {
@@ -68,7 +68,7 @@ class Botlists(Cog, hidden=True):
         }
 
         data = {
-            'server_count': len(self.bot.guilds),
+            'server_count': self.bot.guild_count,
             'shard_count': len(self.bot.shards)
         }
 

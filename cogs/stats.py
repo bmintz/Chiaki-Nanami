@@ -177,8 +177,8 @@ class Stats(Cog):
         message_field = f'{bot.message_counter} messages\n({average_messages :.2f} messages/sec)'
 
         text, voice = partition(lambda c: isinstance(c, discord.TextChannel), bot.get_all_channels())
-        presence = (f"{len(bot.guilds)} Servers\n{ilen(text)} Text Channels\n"
-                    f"{ilen(voice)} Voice Channels\n{len(bot.users)} Users")
+        presence = (f"{bot.guild_count} Servers\n{ilen(text)} Text Channels\n"
+                    f"{ilen(voice)} Voice Channels\n{bot.user_count} Users")
 
         chiaki_embed = (discord.Embed(description=bot.appinfo.description, colour=self.bot.colour)
                         .set_author(name=str(ctx.bot.user), icon_url=bot.user.avatar_url)
@@ -287,7 +287,7 @@ class Stats(Cog):
         A bot collection server is a server that has a high
         ratio of bots to members.
         """
-        bot_farms = list(filter(self.is_bot_farm, ctx.bot.guilds))
+        bot_farms = list(filter(self.is_bot_farm, ctx.bot.guildsview()))
         if not bot_farms:
             return await ctx.send("Thankfully I'm not in any bot collections...")
 
