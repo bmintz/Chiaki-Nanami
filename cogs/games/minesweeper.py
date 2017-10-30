@@ -63,9 +63,9 @@ class MinesweeperLeaderboard(EmbedFieldPages):
 
 
 class Level(enum.Enum):
-    beginner = enum.auto()
-    intermediate = enum.auto()
-    expert = enum.auto()
+    beginner = easy = enum.auto()
+    intermediate = medium = enum.auto()
+    expert = hard = enum.auto()
     custom = enum.auto()
 
     def __str__(self):
@@ -77,7 +77,8 @@ class Level(enum.Enum):
         try:
             return cls[lowered]
         except KeyError:
-            raise commands.BadArgument(f'No level called {arg}.') from None
+            difficulties = '\n'.join(str(m).lower() for m in cls)
+            raise commands.BadArgument(f'"{arg}"" is not a valid level. Valid difficulties:\n{difficulties}') from None
 
 class FlagType(enum.Enum):
     default = None
