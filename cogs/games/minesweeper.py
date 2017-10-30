@@ -1,4 +1,5 @@
 import asyncio
+import asyncqlio
 import contextlib
 import discord
 import enum
@@ -14,8 +15,8 @@ from string import ascii_lowercase, ascii_uppercase
 from .manager import SessionManager
 
 from ..utils.converter import ranged
-from ..utils.misc import REGIONAL_INDICATORS
-from ..utils.paginator import BaseReactionPaginator, page
+from ..utils.misc import emoji_url, nice_time, REGIONAL_INDICATORS
+from ..utils.paginator import BaseReactionPaginator, EmbedFieldPages, page
 from ..utils.time import duration_units
 
 from core.cog import Cog
@@ -31,10 +32,40 @@ class HitMine(MinesweeperException):
         super().__init__(f'hit a mine on {x + 1} {y + 1}')
 
 
+
+_Table = asyncqlio.table_base()
+
+class MinesweeperGame(_Table, table_name='minesweeper_games'):
+    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
+
+    level = asyncqlio.Column(asyncqlio.SmallInt)
+    won = asyncqlio.Column(asyncqlio.Boolean)
+
+    guild_id = asyncqlio.Column(asyncqlio.BigInt)
+    user_id = asyncqlio.Column(asyncqlio.BigInt)
+    played_at = asyncqlio.Column(asyncqlio.Timestamp)
+
+    time = asyncqlio.Column(asyncqlio.Real)
+    minesweeper_time_idx = asyncqlio.Index(time)
+
+
+class MinesweeperLeaderboard(EmbedFieldPages):
+    def __init__(self, *args, level, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.per_page = 5
+        self._header = f'Fastest times for {level}'
+
+    def _create_embed(self, idx, page):
+        embed = super()._create_embed(idx, page)
+        return embed.set_author(name=self._header, icon_url=emoji_url('\N{COLLISION SYMBOL}'))
+
+    numbered = None
+
+
 class Level(enum.Enum):
-    beginner = enum.auto()
-    intermediate = enum.auto()
-    expert = enum.auto()
+    beginner = easy = enum.auto()
+    intermediate = medium = enum.auto()
+    expert = hard = enum.auto()
     custom = enum.auto()
 
     def __str__(self):
@@ -46,7 +77,8 @@ class Level(enum.Enum):
         try:
             return cls[lowered]
         except KeyError:
-            raise commands.BadArgument(f'No level called {arg}.') from None
+            difficulties = '\n'.join(str(m).lower() for m in cls)
+            raise commands.BadArgument(f'"{arg}"" is not a valid level. Valid difficulties:\n{difficulties}') from None
 
 class FlagType(enum.Enum):
     default = None
@@ -488,7 +520,32 @@ class Minesweeper(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.manager_bucket = {level: SessionManager() for level in Level}
-        # self.leaderboard = JSONFile('minesweeperlb.json')
+        self._md = self.bot.db.bind_tables(_Table)
+
+    async def _get_record_text(self, ctx, level, time):
+        # Check if it's the world record
+        query = """SELECT MIN(time) as "world_record"
+                   FROM minesweeper_games
+                   WHERE won AND level = {level};
+                """
+        world_record = (await ctx.session.fetch(query, {'level': level.value}))['world_record']
+        print(world_record, time)
+
+        if world_record is None or time < world_record:
+            return "You've broken the world record. Congratulations!!"
+
+        # Check if it's a personal best
+        query = """SELECT MIN(time) as "pb"
+                   FROM minesweeper_games
+                   WHERE won AND level = {level} AND user_id = {user_id};
+                """
+        params = {'level': level.value, 'user_id': ctx.author.id}
+        personal_best = (await ctx.session.fetch(query, params))['pb']
+
+        if personal_best is None or time < personal_best:
+            return "This is a new personal best!"
+
+        return ''
 
     async def _do_minesweeper(self, ctx, level, board, *, record_time=True):
         manager = self.manager_bucket[level]
@@ -503,24 +560,46 @@ class Minesweeper(Cog):
             # raised in the game itself. We don't want the global error handlers
             # taking care of these because they're notr really error but
             # more along the lines of flow control.
+            won = False
             try:
                 time = await inst.run()
             except HitMine as error:
                 x, y = error.point
-                return await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
+                await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
+                time = 0
             except asyncio.CancelledError:
                 return await ctx.send(f'Ok, cya later...')
+            else:
+                won = True
 
-            if time is None:
-                return
-
+        if won and time:
             rounded = round(time, 2)
-            text = f'You beat game in {duration_units(rounded)}.'
-            win_embed = (discord.Embed(title='A winner is you!', colour=0x00FF00, timestamp=datetime.utcnow(), description=text)
+            text = f'You beat Minesweeper on {level} in {duration_units(rounded)}.'
+
+            extra_text = ''
+            # Check if the player broke the world record.
+            if record_time:
+                extra_text = await self._get_record_text(ctx, level, time)
+
+            description = f'{text}\n{extra_text}'
+
+            win_embed = (discord.Embed(colour=0x00FF00, timestamp=datetime.utcnow(), description=description)
+                        .set_author(name='A winner is you!')
                         .set_thumbnail(url=ctx.author.avatar_url)
                         )
 
             await ctx.send(embed=win_embed)
+
+        if record_time:
+            await ctx.session.add((MinesweeperGame(
+                level=level.value,
+                won=won,
+
+                guild_id=ctx.guild.id,
+                user_id=ctx.author.id,
+                played_at=ctx.message.created_at,
+                time=time or 0,
+            )))
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     async def minesweeper(self, ctx, level: Level=Level.beginner):
@@ -556,14 +635,28 @@ class Minesweeper(Cog):
 
         session.stop()
 
-    # XXX: Add these later when I connect the DB to this
-    # @minesweeper.command(name='leaderboard', aliases=['lb'])
-    async def minesweeper_leaderboard(self, ctx, level: Level):
-        pass
+    @minesweeper.command(name='leaderboard', aliases=['lb'])
+    async def minesweeper_leaderboard(self, ctx, level: Level=Level.beginner):
+        """Returns the top 25 fastest times for a difficulty level of minesweeper. Defaults to Beginner."""
+        query = (ctx.session.select.from_(MinesweeperGame)
+                            .where((MinesweeperGame.won == True)
+                                   & (MinesweeperGame.level == level.value))
+                            .order_by(MinesweeperGame.time)
+                            .limit(25)
+                )
 
-    # @minesweeper.command(name='rank')
-    async def minesweeper_rank(self, ctx, level: Level):
-        pass
+        entries = []
+        add_entry = entries.append
+        async for row in await query.all():
+            name = duration_units(row.time)
+            server = ctx.bot.get_guild(row.guild_id) or f'<Unknown server, ID={row.guild_id}>'
+            value = f'Achieved by: <@{row.user_id}> in {server} on `{nice_time(row.played_at)}`'
+
+            add_entry((name, value))
+
+        pages = MinesweeperLeaderboard(ctx, entries, level=level, inline=False)
+        await pages.interact()
+
 
 def setup(bot):
     bot.add_cog(Minesweeper(bot))
