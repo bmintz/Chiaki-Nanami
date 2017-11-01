@@ -238,8 +238,23 @@ class Chiaki(commands.Bot):
         self.table_base.setup_tables()
 
     async def create_tables(self):
-        for table in self.table_base.tables.values():
-            await table.create()
+        # This hack is here because asyncqlio doesn't make a query that checks
+        # if an existing index is ok. Maybe I should make an issue this but
+        # MySQL doesn't support CREATE INDEX IF NOT EXISTS which might make
+        # the issue even harder.
+
+        old_idx_ddl_sql = asyncqlio.Index.get_ddl_sql
+
+        def new_ddl_sql(index):
+            return old_idx_ddl_sql(index).replace('INDEX', 'INDEX IF NOT EXISTS', 1)
+
+        asyncqlio.Index.get_ddl_sql = new_ddl_sql
+        try:
+            for table in self.table_base.tables.values():
+                await table.create()
+        finally:
+            asyncqlio.Index.get_ddl_sql = old_idx_ddl_sql
+
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
