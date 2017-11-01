@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from discord.ext import commands
 from functools import reduce
 
+from .tables.base import TableBase
 from .utils import cache, errors
 from .utils.misc import emoji_url, truncate, unique
 from .utils.paginator import EmbedFieldPages
@@ -27,10 +28,7 @@ class ModLogError(errors.ChiakiException):
     pass
 
 
-_Table = asyncqlio.table_base()
-
-
-class Case(_Table, table_name='modlog'):
+class Case(TableBase, table_name='modlog'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     channel_id = asyncqlio.Column(asyncqlio.BigInt)
     message_id = asyncqlio.Column(asyncqlio.BigInt)
@@ -47,7 +45,7 @@ class Case(_Table, table_name='modlog'):
     extra = asyncqlio.Column(asyncqlio.Text, default='{}')
 
 
-class CaseTarget(_Table, table_name='modlog_targets'):
+class CaseTarget(TableBase, table_name='modlog_targets'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     entry_id = asyncqlio.Column(asyncqlio.Integer, foreign_key=asyncqlio.ForeignKey(Case.id))
     user_id = asyncqlio.Column(asyncqlio.BigInt)
@@ -90,7 +88,7 @@ for k, v in list(_mod_actions.items()):
 MASSBAN_THUMBNAIL = emoji_url('\N{NO ENTRY}')
 
 
-class ModLogConfig(_Table, table_name='modlog_config'):
+class ModLogConfig(TableBase, table_name='modlog_config'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     channel_id = asyncqlio.Column(asyncqlio.BigInt, default=0)
 
@@ -149,7 +147,6 @@ class CaseNumber(commands.Converter):
 class ModLog(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._md = bot.db.bind_tables(_Table)
         self._cache_cleaner = asyncio.ensure_future(self._clean_cache())
         self._cache_locks = collections.defaultdict(asyncio.Event)
         self._cache = set()

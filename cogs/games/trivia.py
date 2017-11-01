@@ -20,6 +20,7 @@ from html import unescape
 
 from . import manager
 
+from ..tables.base import TableBase
 from ..utils.misc import base_filename, emoji_url
 
 from core.cog import Cog
@@ -30,10 +31,7 @@ _logger = logging.getLogger(__name__)
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
 
-_Table = asyncqlio.table_base()
-
-
-class Category(_Table, table_name='trivia_categories'):
+class Category(TableBase, table_name='trivia_categories'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     guild_id = asyncqlio.Column(asyncqlio.BigInt)
     guild_id_idx = asyncqlio.Index(guild_id)
@@ -60,7 +58,7 @@ class Category(_Table, table_name='trivia_categories'):
         return result
 
 
-class Question(_Table, table_name='trivia_questions'):
+class Question(TableBase, table_name='trivia_questions'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     category_id = asyncqlio.Column(asyncqlio.Integer, foreign_key=asyncqlio.ForeignKey(Category.id))
     category_id_idx = asyncqlio.Index(category_id)
@@ -409,7 +407,6 @@ class Trivia(Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
         self.manager = manager.SessionManager()
 
         self.bot.loop.create_task(self._load_default_categories())

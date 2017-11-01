@@ -12,7 +12,8 @@ from operator import attrgetter
 
 from .manager import SessionManager
 
-from ..utils import converter, jsonf
+from ..tables.base import TableBase
+from ..utils import converter
 
 from core.cog import Cog
 
@@ -28,8 +29,7 @@ ANIMALS = [
 ]
 
 
-_Table = asyncqlio.table_base()
-class Racehorse(_Table, table_name='racehorses'):
+class Racehorse(TableBase, table_name='racehorses'):
     user_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     # For custom horses we're gonna support custom emojis here.
     # Custom emojis are in the format <:name:id>
@@ -220,7 +220,6 @@ class Racing(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.manager = SessionManager()
-        self._md = self.bot.db.bind_tables(_Table)
 
     @commands.group(invoke_without_command=True)
     async def race(self, ctx):

@@ -4,13 +4,13 @@ import copy
 
 from discord.ext import commands
 
+from .tables.base import TableBase
 from .utils.paginator import ListPaginator
 
 from core.cog import Cog
 
-_Table = asyncqlio.table_base()
 
-class Alias(_Table, table_name='command_aliases'):
+class Alias(TableBase, table_name='command_aliases'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
 
     guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True)
@@ -43,7 +43,6 @@ class AliasName(commands.Converter):
 class Aliases(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
 
     # idk if this should be in a command group...
     #

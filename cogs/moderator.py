@@ -11,6 +11,7 @@ from collections import Counter, deque, namedtuple
 from discord.ext import commands
 from operator import attrgetter, contains, itemgetter
 
+from .tables.base import TableBase
 from .utils import dbtypes, errors, formats, time
 from .utils.context_managers import redirect_exception, temp_attr
 from .utils.converter import in_, union
@@ -20,9 +21,8 @@ from .utils.paginator import ListPaginator, EmbedFieldPages
 
 from core.cog import Cog
 
-_Table = asyncqlio.table_base()
 
-class Warn(_Table, table_name='warn_entries'):
+class Warn(TableBase, table_name='warn_entries'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
 
     guild_id = asyncqlio.Column(asyncqlio.BigInt)
@@ -33,17 +33,17 @@ class Warn(_Table, table_name='warn_entries'):
 
 
 # XXX: Should I have the timeout and punishments as one table?
-class WarnTimeout(_Table, table_name='warn_timeouts'):
+class WarnTimeout(TableBase, table_name='warn_timeouts'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     timeout = asyncqlio.Column(dbtypes.Interval)
 
-class WarnPunishment(_Table, table_name='warn_punishments'):
+class WarnPunishment(TableBase, table_name='warn_punishments'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     warns = asyncqlio.Column(asyncqlio.SmallInt, primary_key=True)
     type = asyncqlio.Column(asyncqlio.String(32))
     duration = asyncqlio.Column(asyncqlio.Integer, default=0)
 
-class MuteRole(_Table, table_name='muted_roles'):
+class MuteRole(TableBase, table_name='muted_roles'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     role_id = asyncqlio.Column(asyncqlio.BigInt)
 
@@ -106,7 +106,6 @@ _is_valid_punishment = frozenset(_warn_punishments).__contains__
 class Moderator(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
 
         self.slowmodes = JSONFile('slowmodes.json')
         self.slowmode_bucket = {}

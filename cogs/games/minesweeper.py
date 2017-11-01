@@ -14,6 +14,7 @@ from string import ascii_lowercase, ascii_uppercase
 
 from .manager import SessionManager
 
+from ..tables.base import TableBase
 from ..utils.converter import ranged
 from ..utils.misc import emoji_url, nice_time, REGIONAL_INDICATORS
 from ..utils.paginator import BaseReactionPaginator, EmbedFieldPages, page
@@ -35,7 +36,7 @@ class HitMine(MinesweeperException):
 
 _Table = asyncqlio.table_base()
 
-class MinesweeperGame(_Table, table_name='minesweeper_games'):
+class MinesweeperGame(TableBase, table_name='minesweeper_games'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
 
     level = asyncqlio.Column(asyncqlio.SmallInt)
@@ -520,7 +521,6 @@ class Minesweeper(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.manager_bucket = {level: SessionManager() for level in Level}
-        self._md = self.bot.db.bind_tables(_Table)
 
     async def _get_record_text(self, ctx, level, time):
         # Check if it's the world record

@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from functools import partial
 
+from .tables.base import TableBase
 from .utils import disambiguate
 from .utils.context_managers import temp_attr
 from .utils.misc import str_join
@@ -14,15 +15,12 @@ from .utils.misc import str_join
 from core.cog import Cog
 
 
-_Table = asyncqlio.table_base()
-
-
-class SelfRoles(_Table):
+class SelfRoles(TableBase):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     guild_id = asyncqlio.Column(asyncqlio.BigInt)
     role_id = asyncqlio.Column(asyncqlio.BigInt, unique=True)
 
-class AutoRoles(_Table):
+class AutoRoles(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     role_id = asyncqlio.Column(asyncqlio.BigInt)
 
@@ -118,7 +116,6 @@ class Roles(Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
 
     def __local_check(self, ctx):
         return bool(ctx.guild)

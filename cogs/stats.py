@@ -10,6 +10,7 @@ import traceback
 from discord.ext import commands
 from more_itertools import ilen, partition
 
+from .tables.base import TableBase
 from .utils import errors
 from .utils.disambiguate import DisambiguateGuild
 from .utils.formats import pluralize
@@ -19,7 +20,6 @@ from .utils.time import human_timedelta
 
 from core.cog import Cog
 
-_Table = asyncqlio.table_base()
 _ignored_exceptions = (
     commands.NoPrivateMessage,
     commands.DisabledCommand,
@@ -33,7 +33,7 @@ _ignored_exceptions = (
 ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
 
 
-class Command(_Table, table_name='commands'):
+class Command(TableBase, table_name='commands'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
     guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True, nullable=True)
     commands_guild_id_idx = asyncqlio.Index(guild_id)
@@ -91,7 +91,6 @@ def _ci_lower_bound(pos, n, confidence):
 class Stats(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
         self.process = psutil.Process()
 
     async def on_command(self, ctx):

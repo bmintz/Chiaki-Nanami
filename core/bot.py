@@ -22,6 +22,7 @@ from . import context
 from .cog import Cog
 from .formatter import ChiakiFormatter
 
+from cogs.tables.base import TableBase
 from cogs.utils import errors
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.misc import file_handler
@@ -36,6 +37,10 @@ log.addHandler(file_handler('chiakinanami'))
 
 command_log = logging.getLogger('commands')
 command_log.addHandler(file_handler('commands'))
+
+
+def _is_submodule(parent, child):
+    return parent == child or child.startswith(parent + ".")
 
 
 class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
@@ -109,6 +114,7 @@ class Chiaki(commands.Bot):
 
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
+        self.table_base = None
 
         try:
             with open('data/command_image_urls.json') as f:
@@ -126,6 +132,7 @@ class Chiaki(commands.Bot):
         psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
         self.db = asyncqlio.DatabaseInterface(psql)
         self.loop.run_until_complete(self._connect_to_db())
+
         self.db_scheduler = DatabaseScheduler(self.db, timefunc=datetime.utcnow)
         self.db_scheduler.add_callback(self._dispatch_from_scheduler)
 
@@ -213,6 +220,26 @@ class Chiaki(commands.Bot):
     # Bot.get_cog, so it will throw KeyError, and thus return an empty set.
     def get_cog_commands(self, name):
         return super().get_cog_commands(name.lower())
+
+    def load_extension(self, name):
+        super().load_extension(name)
+
+        # Bind all the tables to set up tables that were added here.
+        self.table_base = self.db.bind_tables(TableBase)
+
+    def unload_extension(self, name):
+        super().unload_extension(name)
+
+        # Delete the tables so that we don't have old table references
+        for k, v in list(self.table_base.tables.items()):
+            if _is_submodule(name, v.__module__):
+                del self.table_base.tables[k]
+
+        self.table_base.setup_tables()
+
+    async def create_tables(self):
+        for table in self.table_base.tables.values():
+            await table.create()
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):

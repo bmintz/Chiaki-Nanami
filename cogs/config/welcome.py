@@ -10,6 +10,7 @@ from more_itertools import one
 
 from ._initroot import InitRoot
 
+from ..tables.base import TableBase
 from ..utils import time
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
@@ -18,10 +19,8 @@ from ..utils.misc import nice_time, ordinal
 _DEFAULT_CHANNEL_CHANGE_URL = ('https://github.com/discordapp/discord-api-docs/blob/master/docs/'
                                'Change_Log.md#breaking-change-default-channels')
 
-_Table = asyncqlio.table_base()
 
-
-class ServerMessage(_Table, table_name='server_messages'):
+class ServerMessage(TableBase, table_name='server_messages'):
     # Cannot use a auto-increment primary key because it fucks
     # with ON CONFLICT in a strange way.
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
@@ -90,7 +89,6 @@ class WelcomeMessages(InitRoot):
 
     def __init__(self, bot):
         super().__init__(bot)
-        self._md = self.bot.db.bind_tables(_Table)
 
     # ------------ config helper functions --------------------
 

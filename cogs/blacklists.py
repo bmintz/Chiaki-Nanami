@@ -5,13 +5,13 @@ import discord
 
 from discord.ext import commands
 
+from .tables.base import TableBase
 from .utils import disambiguate
 from .utils.misc import emoji_url, truncate
 
 from core.cog import Cog
 
 
-_Table = asyncqlio.table_base()
 _blocked_icon = emoji_url('\N{NO ENTRY}')
 _unblocked_icon = emoji_url('\N{WHITE HEAVY CHECK MARK}')
 
@@ -33,7 +33,7 @@ class Blacklisted(commands.CheckFailure):
         return embed
 
 
-class Blacklist(_Table):
+class Blacklist(TableBase):
     snowflake = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     blacklisted_at = asyncqlio.Column(asyncqlio.Timestamp)
     reason = asyncqlio.Column(asyncqlio.String(2000), default='')
@@ -45,17 +45,6 @@ _GuildOrUser = disambiguate.union(discord.Guild, discord.User)
 class Blacklists(Cog, hidden=True):
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
-        # Unlike other cogs, this has to be created always. See below.
-        self.bot.loop.create_task(self._create_permissions())
-
-    # This function is here because if we don't create the table,
-    # the global check will just error out, and prevent any commands
-    # from being run.
-    async def _create_permissions(self):
-        async with self.bot.db.get_ddl_session() as session:
-            for name, table in self._md.tables.items():
-                await session.create_table(name, *table.columns)
 
     async def __local_check(self, ctx):
         return await ctx.bot.is_owner(ctx.author)

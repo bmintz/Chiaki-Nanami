@@ -7,6 +7,7 @@ import logging
 
 from discord.ext import commands
 
+from .tables.base import TableBase
 from .utils import formats
 from .utils.paginator import ListPaginator
 
@@ -18,10 +19,7 @@ class TagError(commands.UserInputError):
     pass
 
 
-_Table = asyncqlio.table_base()
-
-
-class Tag(_Table, table_name='tags'):
+class Tag(TableBase, table_name='tags'):
     name = asyncqlio.Column(asyncqlio.String, index=True, primary_key=True)
     # If this is an alias, this will be repurposed to point to the original tag.
     content = asyncqlio.Column(asyncqlio.String, default='')
@@ -79,7 +77,6 @@ class Tags(Cog):
     """You're it."""
     def __init__(self, bot):
         self.bot = bot
-        self._md = self.bot.db.bind_tables(_Table)
 
     async def __error(self, ctx, error):
         print('error!', error)

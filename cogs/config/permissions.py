@@ -11,6 +11,7 @@ from more_itertools import iterate, one, partition
 
 from ._initroot import InitRoot
 
+from ..tables.base import TableBase
 from ..utils import cache, formats, disambiguate
 from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
@@ -77,10 +78,7 @@ def _walk_parents(command):
     return iter(iterate(operator.attrgetter('parent'), command).__next__, None)
 
 
-_Table = asyncqlio.table_base()
-
-
-class CommandPermissions(_Table, table_name='permissions'):
+class CommandPermissions(TableBase, table_name='permissions'):
     id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
 
     guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True)
@@ -90,7 +88,7 @@ class CommandPermissions(_Table, table_name='permissions'):
     name = asyncqlio.Column(asyncqlio.String)
     whitelist = asyncqlio.Column(asyncqlio.Boolean)
 
-class Plonks(_Table):
+class Plonks(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True, primary_key=True)
 
     # this can either be a channel_id or an author_id
@@ -194,17 +192,6 @@ class Permissions(InitRoot):
 
     def __init__(self, bot):
         super().__init__(bot)
-        self._md = self.bot.db.bind_tables(_Table)
-        # Unlike other cogs, this has to be created always. See below.
-        self.bot.loop.create_task(self._create_permissions())
-
-    # This function is here because if we don't create the table,
-    # the global check will just error out, and prevent any commands
-    # from being run.
-    async def _create_permissions(self):
-        async with self.bot.db.get_ddl_session() as session:
-            for name, table in self._md.tables.items():
-                await session.create_table(name, *table.columns)
 
     async def __global_check_once(self, ctx):
         if not ctx.guild:
