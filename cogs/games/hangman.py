@@ -206,7 +206,11 @@ class Hangman(Cog):
 
     @commands.group(invoke_without_command=True)
     async def hangman(self, ctx, category):
-        """It's hangman..."""
+        """Starts a game of hangman.
+
+        To see all the categories you can choose, 
+        type `{prefix}hangman categories`
+        """
         if self.manager.session_exists(ctx.channel):
              return await ctx.send("A hangman game is already running in this channel...")
 
