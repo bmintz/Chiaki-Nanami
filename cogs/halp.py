@@ -183,12 +183,14 @@ class Help(Cog):
         await self._show_tip(ctx, random.randint(1, number))
 
     @commands.command()
-    # @commands.cooldown(rate=1, per=60, type=commands.BucketType.user)
+    @commands.cooldown(rate=1, per=60, type=commands.BucketType.user)
     async def feedback(self, ctx, *, message):
         """Gives feedback about the bot.
 
         This is a quick and easy way to either request features 
         or bug fixes without being in the support server.
+
+        You can only send feedback once every minute.
         """
 
         dest = self.bot.feedback_destination
