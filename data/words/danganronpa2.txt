@@ -1,4 +1,4 @@
-A list of characters in Super Dangan Ronpa 2
+# A list of characters in Super Dangan Ronpa 2
 Hinata Hajime
 Komaeda Nagito
 Nanami Chiaki

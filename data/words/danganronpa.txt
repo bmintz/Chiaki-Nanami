@@ -1,4 +1,4 @@
-#A list of characters in Danganronpa
+# A list of characters in Danganronpa
 Naegi Makoto
 Kirigiri Kyoko
 Enoshima Junko
