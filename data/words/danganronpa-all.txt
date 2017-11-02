@@ -1,0 +1,105 @@
+# ALL characters in Danganronpa, or at least most of them.
+
+# 1: Trigger Happy Havoc
+Naegi Makoto
+Kirigiri Kyoko
+Enoshima Junko
+Ikusaba Mukuro 
+Maizono Sayaka
+Kuwata Leon
+Oowada Mondo
+Fujisaki Chihiro
+Yamada Hifumi
+Ishimaru Kiyotaka
+Celestia Ludenberg
+Sakura Oogami
+Togami Byakuya
+Fukuwa Toko
+Asahina Aoi
+Hagakure Yasuhiro
+Kirigiri Jin
+
+# 2: Goodbye Despair
+Hinata Hajime
+Komaeda Nagito
+Nanami Chiaki
+Hanamura Teruteru
+Koizumi Mahiru
+Pekoyama Peko
+Mioda Ibuki
+Saionji Hiyoko
+Tsumiki Mikan
+Nidai Nekomaru
+Tanaka Gundam
+Sonia Nevermind
+Owari Akane
+Souda Kazuichi
+Kuzuryuu Fuyuhiko
+Kamukura Izuru
+
+# AE: Ultra Despair Girls
+Naegi Komaru
+Kemuri Jataro
+Utsugi Kotoko
+Daimon Masaru 
+Towa Monaca 
+Shingetsu Nagisa 
+Towa Haiji 
+Hagakure Hiroko 
+Fujisaki Taichi
+Asahina Yuta
+
+# V3: Killing Harmony
+Akamatsu Kaede
+Yonaga Angie
+Gokuhara Gonta
+Yumeno Himiko
+Ki-bo
+Momota Kaito
+Tojo Kirumi
+Oma Kokichi
+Shinguji Korekiyo
+Harukawa Maki
+Hoshi Ryoma
+Saihara Shuichi
+Chabashira Tenko
+Shirogane Tsumugi
+
+# End of Hope's Peak - Future Arc.
+Tengan Kazuo
+Munakata Kyosuke
+Kizakura Koichi
+Kimura Seiko
+Yukizome Chisa
+Sakakura Juzo
+Gekkogahara Miaya
+Ando Ruruka
+Izayoi Sonosuke
+Mitarai Ryota
+Bandai Daisaku
+Great Gozu 
+
+# Monos
+Monokuma
+Monomi
+Usami
+Kurokuma
+Shirokuma
+Monodam
+Monokid
+Monophanie
+Monosuke
+Monotaro
+
+# Novel Characters
+# There are a lot of characters but to avoid going too far I'm only gonna
+# include the ones that actually matter.
+
+# Danganronpa/Zero
+Otonashi Ryoko
+Matsuda Yasuke
+Kamishiro Yuto
+Madarai Isshiki
+
+# Kirigiri
+Samidare Yui
