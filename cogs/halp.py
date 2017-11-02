@@ -182,6 +182,36 @@ class Help(Cog):
         number = _get_tip_index() + 1
         await self._show_tip(ctx, random.randint(1, number))
 
+    @commands.command()
+    # @commands.cooldown(rate=1, per=60, type=commands.BucketType.user)
+    async def feedback(self, ctx, *, message):
+        """Gives feedback about the bot.
+
+        This is a quick and easy way to either request features 
+        or bug fixes without being in the support server.
+        """
+
+        dest = self.bot.feedback_destination
+        if not dest:
+            return
+
+        # Create the feedback embed
+        embed = (discord.Embed(colour=ctx.bot.colour, description=message, title='Feedback')
+                 .set_author(name=str(ctx.author), icon_url=ctx.author.avatar_url)
+                 .set_footer(text=f'Author ID: {ctx.author.id}')
+                 )
+
+        if ctx.guild:
+            embed.add_field(name='From', value=f'#{ctx.channel}\n(ID: {ctx.channel.id})', inline=False)
+            embed.add_field(name='In', value=f'{ctx.guild}\n(ID: {ctx.guild.id})', inline=False)
+        else:
+            embed.add_field(name='From', value=f'{ctx.channel}', inline=False)
+
+        embed.timestamp = ctx.message.created_at
+
+        await dest.send(embed=embed)
+        await ctx.send(':ok_hand:')
+
 
 def setup(bot):
     bot.add_cog(Help(bot))
