@@ -8,6 +8,7 @@ import random
 from discord.ext import commands
 
 from core.cog import Cog
+from core.deprecated import DeprecatedCommand
 
 from ..utils.converter import CheckedMember, NoSelfArgument
 
@@ -96,12 +97,22 @@ class TwoPlayerGameCog(Cog):
             if not name.startswith('_game_'):
                 continue
 
+
             name = name[6:]
+            if name in {'invite', 'create'}:
+                # Special treatment is needed for these two
+                continue
+
             help = inspect.getdoc(member).format(name=cls.name, cmd=cmd_name)
             command = gc(name=name, help=help)(member)
             setattr(cls, f'{cmd_name}_{name}', command)
 
         setattr(cls, f'_{cls.__name__}__error', cls._error)
+
+        # Deprecate create and invite
+        dc = functools.partial(gc, cls=DeprecatedCommand, version='1.2')
+        setattr(cls, f'{cmd_name}_create', dc(name='create', instead=f'{cmd_name}')(cls._game_create))
+        setattr(cls, f'{cmd_name}_invite', dc(name='invite', instead=f'{cmd_name} @user')(cls._game_invite))
 
     async def _error(self, ctx, error):
         if isinstance(error, NoSelfArgument):
@@ -246,10 +257,8 @@ class TwoPlayerGameCog(Cog):
 
     async def _game_create(self, ctx):
         """Deprecated alias to `{cmd}`."""
-        await ctx.send(f'This subcommand is deprecated, use `->ttt` instead.')
         await ctx.invoke(ctx.command.root_parent)
 
     async def _game_invite(self, ctx, *, member: _MemberConverter):
         """Deprecated alias to `{cmd} @user`."""
-        await ctx.send(f'This subcommand is deprecated, use `->ttt @{member}` instead.')
         await ctx.invoke(ctx.command.root_parent, member=member)
