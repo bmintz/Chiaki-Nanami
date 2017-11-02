@@ -253,6 +253,7 @@ class TicTacToeSession:
 
 
 BOARD_SIZE_EMOJIS = list(map('{}\U000020e3'.format, range(3, 8))) + ['\N{BLACK SQUARE FOR STOP}']
+_is_valid_board_size_emoji = frozenset(BOARD_SIZE_EMOJIS).__contains__
 
 
 class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession, aliases=['ttt']):
@@ -262,20 +263,27 @@ class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession,
                 .set_author(name=f'Please enter the size of the board {ctx.author}')
                 )
 
-        async with temp_message(ctx, embed=embed) as message:
+        async def add_reactions(message):
             for emoji in BOARD_SIZE_EMOJIS:
                 await message.add_reaction(emoji)
+
+        async with temp_message(ctx, embed=embed) as message:
+            future = asyncio.ensure_future(add_reactions(message))
 
             def check(react, user):
                 return (react.message.id == message.id
                         and user.id == ctx.author.id
-                        and react.emoji in BOARD_SIZE_EMOJIS
+                        and _is_valid_board_size_emoji(react.emoji)
                         )
 
-            react, user = await ctx.bot.wait_for('reaction_add', check=check)
-            if react.emoji == '\N{BLACK SQUARE FOR STOP}':
-                raise errors.RageQuit(f'{ctx.author} cancelled selecting the board size')
-            return int(react.emoji[0])
+            try:
+                react, user = await ctx.bot.wait_for('reaction_add', check=check)
+                if react.emoji == '\N{BLACK SQUARE FOR STOP}':
+                    raise errors.RageQuit(f'{ctx.author} cancelled selecting the board size')
+                return int(react.emoji[0])
+            finally:
+                if not future.done():
+                    future.cancel()
 
     def _create_invite(self, ctx, member):
         size = ctx._ttt_size
