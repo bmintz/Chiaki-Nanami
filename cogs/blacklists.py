@@ -57,6 +57,11 @@ class Blacklists(Cog, hidden=True):
         if row:
             raise Blacklisted('You have been blacklisted by the owner.', row.reason)
 
+        # Only check if it's in DM after checking the user to prevent users
+        # from attempting to bypass the blacklist through DM
+        if ctx.guild is None:
+            return True
+
         row = await get_blacklist(ctx.guild.id)
         if row:
             raise Blacklisted('This server has been blacklisted by the owner.', row.reason)
