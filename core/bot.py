@@ -436,6 +436,15 @@ class Chiaki(commands.Bot):
             return None
         return discord.Webhook.from_url(wh_url, adapter=discord.AsyncWebhookAdapter(self.session))
 
+    @discord.utils.cached_property
+    def feedback_destination(self):
+        dest = config.feedback_destination
+        if not dest:
+            return None
+        if isinstance(dest, int):
+            return self.get_channel(dest)
+        return discord.Webhook.from_url(dest, adapter=discord.AsyncWebhookAdapter(self.session))
+
     # ------ misc. properties ------
 
     @property
