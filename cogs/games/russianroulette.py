@@ -20,8 +20,8 @@ class RussianRouletteSession:
     def __init__(self, ctx):
         self.context = ctx
         self.players = deque()
+        self.pot = 0
 
-        self._running = False
         self._full = asyncio.Event()
         self._required_message = f'{ctx.prefix}click'
 
@@ -29,8 +29,9 @@ class RussianRouletteSession:
         self.players.appendleft(member)
 
     def add_member_checked(self, member):
-        if self._running:
+        if self._full.is_set():
             raise InvalidGameState("Sorry... you were late...")
+
         if member in self.players:
             raise InvalidGameState(f"{member.mention}, you are already playing!")
 
@@ -44,8 +45,8 @@ class RussianRouletteSession:
 
     def _check_number_players(self):
         if not self.has_enough_players():
-            raise InvalidGameState("Couldn't start Russian Roulette because "
-                                   "there wasn't enough people ;-;")
+            message = "Couldn't start Russian Roulette because there wasn't enough people ;-;"
+            raise InvalidGameState(message)
 
     def wait_until_full(self):
         return asyncio.wait_for(self._full.wait(), timeout=15)
@@ -54,7 +55,7 @@ class RussianRouletteSession:
         # some local declarations to avoid excessive dot lookup.
         wait_for = self.context.bot.wait_for
         send = self.context.send
-        self._running = True
+        self._full.set()
 
         while len(self.players) != 1:
             await asyncio.sleep(random.uniform(1, 2))
@@ -109,18 +110,21 @@ class RussianRoulette(Cog):
                 inst.add_member(ctx.author)
                 await ctx.send( 'Russian Roulette game is starting..., '
                                f'type {ctx.prefix}{ctx.invoked_with} to join')
-                winner = await inst.run()
+                try:
+                    winner = await inst.run()
+                except InvalidGameState as e:
+                    return await ctx.send(e)
+
             await ctx.send(f'{winner.mention} is the lone survivor. Congratulations...')
 
         else:
-            session.add_member_checked(ctx.author)
+            try:
+                session.add_member_checked(ctx.author)
+            except InvalidGameState as e:
+                return await ctx.send(e)
+
             await ctx.send(f'Alright {ctx.author.mention}. Good luck.')
 
-    @russian_roulette.error
-    async def rr_error(self, ctx, error):
-        cause = error.__cause__
-        if isinstance(cause, InvalidGameState):
-            await ctx.send(str(cause))
 
 def setup(bot):
     bot.add_cog(RussianRoulette())
