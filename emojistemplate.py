@@ -30,3 +30,7 @@ dnd = '\N{HEAVY BLACK HEART}'
 offline = '\N{BLACK HEART}'
 streaming = '\N{PURPLE HEART}'
 bot_tag = '\N{ROBOT FACE}'
+
+# ------- Currency Emoji -------------
+
+money = '\N{BANKNOTE WITH DOLLAR SIGN}'

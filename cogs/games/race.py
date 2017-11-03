@@ -8,12 +8,14 @@ import random
 import time
 
 from discord.ext import commands
+from more_itertools import first, one
 from operator import attrgetter
 
 from .manager import SessionManager
 
 from ..tables.base import TableBase
-from ..utils import converter
+from ..tables.currency import Currency
+from ..utils import converter, formats
 
 from core.cog import Cog
 
@@ -64,8 +66,10 @@ MINIMUM_REQUIRED_MEMBERS = 2
 MAXIMUM_REQUIRED_MEMBERS = 25
 
 class _RaceWaiter:
-    def __init__(self, author):
+    def __init__(self, bot, author):
         self.members = []
+        self.pot = 0
+        self._bot = bot
         self._author = author
         self._future = None
         self._full = asyncio.Event()
@@ -89,10 +93,28 @@ class _RaceWaiter:
 
         self._future.cancel()
 
-    async def add_member(self, session, member):
-        #if any(r.user.id == member.id for r in self.members):
-        #    raise RuntimeError("You're already in the race!")
+    async def _update_pot(self, member, amount):
+        if amount is None:
+            return
 
+        if amount <= 0:
+            raise ValueError(f"How can you bet {amount} anyway?")
+
+        async with self._bot.db.get_session() as session:
+            query = session.select.from_(Currency).where(Currency.user_id == member.id)
+            row = await query.first()
+            if not row or row.amount < amount:
+                raise RuntimeError(f"{member.mention}, you don't have enough...")
+
+            row.amount -= amount
+            await session.add(row)
+            self.pot += amount
+
+    async def add_member(self, session, member, amount):
+        if any(r.user.id == member.id for r in self.members):
+            raise RuntimeError("You're already in the race!")
+
+        await self._update_pot(member, amount)
         horse = await _get_race_horse(session, member.id)
         self.members.append(Racer(member, horse))
 
@@ -137,15 +159,18 @@ class Racer:
         return self._end - self._start
 
 class RacingSession:
-    def __init__(self, ctx, players):
+    def __init__(self, ctx, players, pot):
         self.ctx = ctx
         self.players = players
+        self.pot = pot
         self._winners = set()
         self._start = None
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
                       .set_author(name='Race has started!')
                       .set_footer(text='Current Leader: None')
                       )
+        if self.pot:
+            self._track.description = f'Pot: **{self.pot}**{self.ctx.bot.emoji_config.money}'
 
     def update_game(self):
         for player in self.players:
@@ -202,12 +227,36 @@ class RacingSession:
             value = f'{chr(char)} {racer.animal} {racer.user}\n({racer.time_taken :.2f}s)'
             embed.add_field(name=name, value=value, inline=False)
 
+        if self.pot:
+            if len(self._winners) == 1:
+                value = f'{first(self._winners).user.mention} won **{self.pot}**!'
+            else:
+                value = (
+                    f'{formats.human_join(w.user.mention for w in self._winners)} won '
+                    f'**{self.pot // len(self._winners)}** each!'
+                )
+
+            embed.add_field(name='\u200b', value=value, inline=False)
+
         await self.ctx.send(embed=embed)
+
+    async def _give_to_winners(self):
+        num_winners = len(self._winners)
+        amount = self.pot // num_winners
+        ids = [winner.user.id for winner in self._winners]
+
+        await (self.ctx.session.update.table(Currency)
+                               .set(Currency.amount + amount)
+                               .where(Currency.user_id.in_(*ids))
+               )
 
     async def run(self):
         self._start = time.perf_counter()
         await self._loop()
         await self._display_winners()
+
+        if self.pot:
+            await self._give_to_winners()
 
     def top_racers(self, n=3):
         return heapq.nsmallest(n, self.players, key=attrgetter('time_taken'))
@@ -222,27 +271,30 @@ class Racing(Cog):
         self.manager = SessionManager()
 
     @commands.group(invoke_without_command=True)
-    async def race(self, ctx):
-        """Starts a race. Or if one has already started, joins one."""
+    async def race(self, ctx, amount: int = None):
+        """Starts a race. Or if one has already started, joins one.
 
-        if ctx.subcommand_passed:
-            # Just fail silently if someone input something like ->race Nadeko aaaa
-            return
+        You can also bet some money. If you win, you will receive all the money.
+        """
 
         session = self.manager.get_session(ctx.channel)
         if session is not None:
             try:
-                await session.add_member(ctx.session, ctx.author)
+                await session.add_member(ctx.session, ctx.author, amount)
             except AttributeError:
                 # Probably the race itself
                 return await ctx.send('Sorry... you were late...')
             except Exception as e:
-                await ctx.send(e)
+                return await ctx.send(e)
             else:
                 return await ctx.send(f'Ok, {ctx.author.mention}, good luck!')
 
-        with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.author)) as waiter:
-            await waiter.add_member(ctx.session, ctx.author)
+        with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.bot, ctx.author)) as waiter:
+            try:
+                await waiter.add_member(ctx.session, ctx.author, amount)
+            except Exception as e:
+                return await ctx.send(e)
+
             await ctx.send(
                 f'Race has started! Type `{ctx.prefix}{ctx.invoked_with}` to join! '
                 f'Be quick though, you only have 30 seconds, or until {ctx.author.mention} '
@@ -250,9 +302,24 @@ class Racing(Cog):
             )
 
             if not await waiter.wait():
+                if amount is not None:
+                    # We can assert that there will only be one racer because there
+                    # must be at least two racers.
+                    user = one(waiter.members).user
+
+                    # Refund the user. We must use raw SQl because asyncqlio
+                    # doesn't support UPDATE SET column = expression yet.
+                    query = """INSERT INTO currency (user_id, amount)
+                                VALUES ({user_id}, {amount})
+                                ON CONFLICT (user_id)
+                                -- currency.amount is there to prevent ambiguities.
+                                DO UPDATE SET amount = currency.amount + {amount}
+                            """
+                    await ctx.session.execute(query, {'user_id': user.id, 'amount': amount})
+
                 return await ctx.send("Can't start the race. There weren't enough people. ;-;")
 
-        with self.manager.temp_session(ctx.channel, RacingSession(ctx, waiter.members)) as inst:
+        with self.manager.temp_session(ctx.channel, RacingSession(ctx, waiter.members, waiter.pot)) as inst:
             await asyncio.sleep(random.uniform(0.25, 0.75))
             await inst.run()
 
