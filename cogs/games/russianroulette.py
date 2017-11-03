@@ -9,6 +9,7 @@ from .manager import SessionManager
 
 from core.cog import Cog
 
+
 class InvalidGameState(Exception):
     pass
 
@@ -103,13 +104,16 @@ class RussianRoulette(Cog):
 
     @commands.command(name='russianroulette', aliases=['rusr'])
     async def russian_roulette(self, ctx):
-        """Starts a game of Russian Roulette"""
+        """Starts a game of Russian Roulette. Or joins one if one has already started."""
         session = self.manager.get_session(ctx.channel)
         if session is None:
             with self.manager.temp_session(ctx.channel, RussianRouletteSession(ctx)) as inst:
                 inst.add_member(ctx.author)
-                await ctx.send( 'Russian Roulette game is starting..., '
-                               f'type {ctx.prefix}{ctx.invoked_with} to join')
+                await ctx.send(
+                    f'Russian Roulette game is starting... Type {ctx.prefix}{ctx.invoked_with} '
+                    'to join! You have 15 seconds before it closes.'
+                )
+
                 try:
                     winner = await inst.run()
                 except InvalidGameState as e:
