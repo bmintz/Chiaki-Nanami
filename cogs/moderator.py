@@ -714,7 +714,7 @@ class Moderator(Cog):
         await ctx.guild.ban(member, reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
-        await ctx.bot.db_scheduler.add(duration, 'tempban_complete', (ctx.guild.id, member.id))
+        await ctx.bot.db_scheduler.add(duration.delta, 'tempban_complete', (ctx.guild.id, member.id))
 
     @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
     @commands.has_permissions(ban_members=True)
