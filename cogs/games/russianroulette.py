@@ -32,8 +32,8 @@ class RussianRouletteSession:
         if self._full.is_set():
             raise InvalidGameState("Sorry... you were late...")
 
-        #if member in self.players:
-        #    raise InvalidGameState(f"{member.mention}, you are already playing!")
+        if member in self.players:
+            raise InvalidGameState(f"{member.mention}, you are already playing!")
 
         if amount is not None:
             if amount <= 0:
@@ -74,6 +74,7 @@ class RussianRouletteSession:
         while len(self.players) != 1:
             await asyncio.sleep(random.uniform(1, 2))
             current = self.players.popleft()
+
             def check(m):
                 return (m.channel       == self.context.channel
                         and m.author.id == current.id
@@ -85,18 +86,20 @@ class RussianRouletteSession:
             try:
                 message = await wait_for('message', timeout=30, check=check)
             except asyncio.TimeoutError:
-                await send(f"{current.mention} took too long. They must've died "
-                            "a long time ago, and we didn't even realize it.")
+                await send(
+                    f"{current} took too long. They must've died a long time ago, "
+                    "and we didn't even realize it."
+                )
                 continue
 
             if not random.randrange(6):
-                await send(f"{current.mention} died... there's blood everywhere... "
-                            "brains all over the wall")
-                await asyncio.sleep(0.5)
-                await send('*shudders*')
+                await send(
+                    f"{current} died... there's blood everywhere... "
+                    "brains all over the wall... *shudders*"
+                )
                 continue
 
-            await send(f'{current.mention} lives to see another day...')
+            await send(f'{current} lives to see another day...')
             self.players.append(current)
 
     async def run(self):
