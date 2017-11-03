@@ -7,6 +7,8 @@ from discord.ext import commands
 
 from .manager import SessionManager
 
+from ..tables.currency import Currency
+
 from core.cog import Cog
 
 
@@ -26,17 +28,28 @@ class RussianRouletteSession:
         self._full = asyncio.Event()
         self._required_message = f'{ctx.prefix}click'
 
-    def add_member(self, member):
-        self.players.appendleft(member)
-
-    def add_member_checked(self, member):
+    async def add_member(self, member, amount):
         if self._full.is_set():
             raise InvalidGameState("Sorry... you were late...")
 
-        if member in self.players:
-            raise InvalidGameState(f"{member.mention}, you are already playing!")
+        #if member in self.players:
+        #    raise InvalidGameState(f"{member.mention}, you are already playing!")
 
-        self.add_member(member)
+        if amount is not None:
+            if amount <= 0:
+                raise InvalidGameState("Yeah... no. Bet something for once!")
+
+            async with self.context.db.get_session() as session:
+                query = session.select.from_(Currency).where(Currency.user_id == member.id)
+                row = await query.first()
+                if not row or row.amount < amount:
+                    raise InvalidGameState(f"{member.mention}, you don't have enough...")
+
+                row.amount -= amount
+                await session.add(row)
+                self.pot += amount
+
+        self.players.appendleft(member)
 
         if len(self.players) >= self.MAXIMUM_PLAYERS:
             self._full.set()
@@ -103,12 +116,21 @@ class RussianRoulette(Cog):
         self.manager = SessionManager()
 
     @commands.command(name='russianroulette', aliases=['rusr'])
-    async def russian_roulette(self, ctx):
-        """Starts a game of Russian Roulette. Or joins one if one has already started."""
+    async def russian_roulette(self, ctx, amount: int = None):
+        """Starts a game of Russian Roulette. Or joins one if one has already started.
+
+        You can also bet money. If you're the last one standing,
+        you win all the money that was bet in that game.
+        """
+
         session = self.manager.get_session(ctx.channel)
         if session is None:
             with self.manager.temp_session(ctx.channel, RussianRouletteSession(ctx)) as inst:
-                inst.add_member(ctx.author)
+                try:
+                    await inst.add_member(ctx.author, amount)
+                except InvalidGameState as e:
+                    return await ctx.send(e)
+
                 await ctx.send(
                     f'Russian Roulette game is starting... Type {ctx.prefix}{ctx.invoked_with} '
                     'to join! You have 15 seconds before it closes.'
@@ -119,11 +141,20 @@ class RussianRoulette(Cog):
                 except InvalidGameState as e:
                     return await ctx.send(e)
 
-            await ctx.send(f'{winner.mention} is the lone survivor. Congratulations...')
+            if inst.pot:
+                await (ctx.session.update.table(Currency)
+                                  .set(Currency.amount + inst.pot)
+                                  .where(Currency.user_id == winner.id)
+                       )
+                extra = f'You win **{inst.pot}**{ctx.bot.emoji_config.money}. Hope that was worth it...'
+            else:
+                extra = ''
+
+            await ctx.send(f'{winner.mention} is the lone survivor. Congratulations... {extra}')
 
         else:
             try:
-                session.add_member_checked(ctx.author)
+                await session.add_member(ctx.author, amount)
             except InvalidGameState as e:
                 return await ctx.send(e)
 
