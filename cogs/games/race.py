@@ -87,12 +87,12 @@ class _RaceWaiter:
 
     def close(self, member):
         if not self._future:
-            return
+            return False
 
         if self._author != member:
-            return
+            return False
 
-        self._future.cancel()
+        return self._future.cancel()
 
     async def _update_pot(self, member, amount):
         if amount is None:
@@ -341,12 +341,13 @@ class Racing(Cog):
             return await ctx.send('There is no session to close, silly...')
 
         try:
-            session.close(ctx.author)
+            success = session.close(ctx.author)
         except AttributeError:
             return await ctx.send("Um, I don't think you can close a race that's "
                                   "running right now...")
         else:
-            await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
+            if success:
+                await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
 
     @race.command(name='horse', aliases=['ride'])
     async def race_horse(self, ctx, emoji: RacehorseEmoji=None):
