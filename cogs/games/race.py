@@ -220,7 +220,6 @@ class RacingSession:
         format_racer = '{0.animal} {0.user} ({0.time_taken:.2f}s)'.format
 
         racers = sorted(self.players, key=attrgetter('time_taken'))
-        print(racers)
         duration = racers[-1].time_taken
         embed = (discord.Embed(title='Results', colour=0x00FF00)
                 .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
