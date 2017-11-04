@@ -4,11 +4,12 @@ import contextlib
 import discord
 import emoji
 import heapq
+import itertools
 import random
 import time
 
 from discord.ext import commands
-from more_itertools import first, one
+from more_itertools import first, one, partition
 from operator import attrgetter
 
 from .manager import SessionManager
@@ -212,20 +213,28 @@ class RacingSession:
                 message = await self.ctx.send(embed=self._track)
 
     async def _display_winners(self):
-        names = ['Winner', 'Runner Up', 'Third Runner Up']
+        format_racer = '{0.animal} {0.user} ({0.time_taken:.2f}s)'.format
 
         duration = time.perf_counter() - self._start
         embed = (discord.Embed(title='Results', colour=0x00FF00)
                 .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
                 )
 
-        # Cannot use '\N' because the medal characters don't have a name
-        # I can only refer to them by their code points.
-        for title, (char, racer) in zip(names, enumerate(self.top_racers(), start=0x1f947)):
-            use_flag = "\N{TROPHY}" * (racer in self._winners)
-            name = f'{title} {use_flag}'
-            value = f'{chr(char)} {racer.animal} {racer.user}\n({racer.time_taken :.2f}s)'
-            embed.add_field(name=name, value=value, inline=False)
+        racers = sorted(self.players, key=attrgetter('time_taken'))
+        others, winners = partition(self._winners.__contains__, racers)
+        winners, others = list(winners), itertools.islice(others, 2)
+
+        # List the winners first
+        name = f'Winner{"s" * (len(winners) != 1)} \N{TROPHY} '
+        value = '\n'.join(map(format_racer, winners))
+        embed.add_field(name=name, value=value, inline=False)
+
+        # List the others.
+        titles = ['Runner Up', 'Third Runner Up']
+        medals = ['\U0001f948', '\U0001f949']
+
+        for title, medal, racer in zip(titles, medals, others):
+            embed.add_field(name=f'{title} {medal}', value=format_racer(racer), inline=False)
 
         if self.pot:
             if len(self._winners) == 1:
@@ -257,9 +266,6 @@ class RacingSession:
 
         if self.pot:
             await self._give_to_winners()
-
-    def top_racers(self, n=3):
-        return heapq.nsmallest(n, self.players, key=attrgetter('time_taken'))
 
     def is_completed(self):
         return all(r.is_finished() for r in self.players)
