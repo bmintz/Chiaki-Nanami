@@ -186,6 +186,7 @@ class Money(Cog):
             return await ctx.send("You don't have enough...")
 
         m.amount -= amount
+        await ctx.session.add(m)
         await add_money(ctx.session, user.id, amount)
 
         # Also add it to the give log. This is so we can detect someone using
