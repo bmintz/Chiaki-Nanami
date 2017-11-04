@@ -15,7 +15,7 @@ from operator import attrgetter
 from .manager import SessionManager
 
 from ..tables.base import TableBase
-from ..tables.currency import Currency
+from ..tables.currency import Currency, add_money, get_money
 from ..utils import converter, formats
 
 from core.cog import Cog
@@ -102,8 +102,7 @@ class _RaceWaiter:
             raise ValueError(f"How can you bet {amount} anyway?")
 
         async with self._bot.db.get_session() as session:
-            query = session.select.from_(Currency).where(Currency.user_id == member.id)
-            row = await query.first()
+            row = await get_money(session, member.id)
             if not row or row.amount < amount:
                 raise RuntimeError(f"{member.mention}, you don't have enough...")
 
@@ -315,16 +314,7 @@ class Racing(Cog):
                     # We can assert that there will only be one racer because there
                     # must be at least two racers.
                     user = one(waiter.members).user
-
-                    # Refund the user. We must use raw SQl because asyncqlio
-                    # doesn't support UPDATE SET column = expression yet.
-                    query = """INSERT INTO currency (user_id, amount)
-                                VALUES ({user_id}, {amount})
-                                ON CONFLICT (user_id)
-                                -- currency.amount is there to prevent ambiguities.
-                                DO UPDATE SET amount = currency.amount + {amount}
-                            """
-                    await ctx.session.execute(query, {'user_id': user.id, 'amount': amount})
+                    await add_money(ctx.session, user.id, amount)
 
                 return await ctx.send("Can't start the race. There weren't enough people. ;-;")
 

@@ -12,7 +12,7 @@ from discord.ext import commands
 from PIL import Image
 
 from ..tables.base import TableBase
-from ..tables.currency import Currency
+from ..tables.currency import Currency, add_money, get_money
 from ..utils.converter import union
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
@@ -48,12 +48,6 @@ class DailyLog(TableBase):
     # time_idx = asyncqlio.Index(time)
 
     amount = asyncqlio.Column(asyncqlio.BigInt)
-
-
-async def _get_user_money(session, user_id):
-    query = session.select.from_(Currency).where(Currency.user_id == user_id)
-    return await query.first()
-
 
 
 class Side(enum.Enum):
@@ -150,7 +144,7 @@ class Money(Cog):
     async def cash(self, ctx, user: discord.Member = None):
         """Shows how much money you have."""
         user = user or ctx.author
-        money = await _get_user_money(ctx.session, user.id)
+        money = await get_money(ctx.session, user.id)
         if not (money and money.amount):
             return await ctx.send(f'{user.mention} has nothing :frowning:')
         await ctx.send(f'{user.mention} has **{money.amount}** {self.money_emoji}!')
@@ -178,17 +172,6 @@ class Money(Cog):
         embed = discord.Embed(colour=ctx.bot.colour, description='\n'.join(fields))
         await ctx.send(embed=embed)
 
-    async def _add_money(self, session, user_id, amount):
-        # Add the money to the user. We must use raw SQl because asyncqlio
-        # doesn't support UPDATE SET column = expression yet.
-        query = """INSERT INTO currency (user_id, amount) 
-                    VALUES ({user_id}, {amount})
-                    ON CONFLICT (user_id) 
-                    -- currency.amount is there to prevent ambiguities.
-                    DO UPDATE SET amount = currency.amount + {amount}
-                """
-        await session.execute(query, {'user_id': user_id, 'amount': amount})
-
     @commands.command()
     async def give(self, ctx, amount: positive_int, user: discord.Member):
         """Gives some of your money to another user.
@@ -198,12 +181,12 @@ class Money(Cog):
         if ctx.author == user:
             return await ctx.send('Yeah... how would that work?')
 
-        m = await _get_user_money(ctx.session, ctx.author.id)
+        m = await get_money(ctx.session, ctx.author.id)
         if not m or m.amount < amount:
             return await ctx.send("You don't have enough...")
 
         m.amount -= amount
-        await self._add_money(ctx.session, user.id, amount)
+        await add_money(ctx.session, user.id, amount)
 
         # Also add it to the give log. This is so we can detect someone using
         # alts to give a main account more money.
@@ -220,14 +203,14 @@ class Money(Cog):
     @commands.is_owner()
     async def award(self, ctx, amount: int, *, user: discord.User):
         """Awards some money to a user"""
-        await self._add_money(ctx.session, user.id, amount)
+        await add_money(ctx.session, user.id, amount)
         await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()
     @commands.is_owner()
     async def take(self, ctx, amount: int, *, user: discord.User):
         """Takes some money away from a user"""
-        m = await _get_user_money(ctx.session, user.id)
+        m = await get_money(ctx.session, user.id)
         if m is None:
             return await ctx.send(f"{user.mention} has no money left. "
                                   "You might be cruel, but I'm not...")
@@ -318,7 +301,7 @@ class Money(Cog):
         side = side_or_number
 
         if amount is not None:
-            row = await _get_user_money(ctx.session, ctx.author.id)
+            row = await get_money(ctx.session, ctx.author.id)
             if not row or amount > row.amount:
                 return await ctx.send("You don't have enough...")
 
@@ -387,7 +370,7 @@ class Money(Cog):
                )
 
         amount = random.randint(100, 200)
-        await self._add_money(ctx.session, author_id, amount)
+        await add_money(ctx.session, author_id, amount)
 
         # Add it to the log so we can use this later.
         await ctx.session.add(DailyLog(
