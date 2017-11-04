@@ -387,7 +387,7 @@ class Money(Cog):
                )
 
         amount = random.randint(100, 200)
-        await self._add_money(ctx.session, user.id, amount)
+        await self._add_money(ctx.session, author_id, amount)
 
         # Add it to the log so we can use this later.
         await ctx.session.add(DailyLog(
