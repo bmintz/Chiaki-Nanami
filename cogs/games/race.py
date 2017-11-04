@@ -128,14 +128,17 @@ class Racer:
         self.animal = animal or random.choice(ANIMALS)
         self.user = user
         self.distance = 0
-        self._start = self._end = time.perf_counter()
+        self._start = self._end = None
 
     def update(self):
+        if self._start is None:
+            self._start = time.perf_counter()
+
         if self.is_finished():
             return
 
         self.distance += random.triangular(0, 10, 3)
-        if self.is_finished() and self._end == self._start:
+        if self.is_finished() and self._end is None:
             self._end = time.perf_counter()
 
     def is_finished(self):
@@ -165,7 +168,6 @@ class RacingSession:
         self.players = players
         self.pot = pot
         self._winners = set()
-        self._start = None
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
                       .set_author(name='Race has started!')
                       .set_footer(text='Current Leader: None')
@@ -212,15 +214,18 @@ class RacingSession:
             except discord.NotFound:
                 message = await self.ctx.send(embed=self._track)
 
+            await asyncio.sleep(random.uniform(1, 3))
+
     async def _display_winners(self):
         format_racer = '{0.animal} {0.user} ({0.time_taken:.2f}s)'.format
 
-        duration = time.perf_counter() - self._start
+        racers = sorted(self.players, key=attrgetter('time_taken'))
+        print(racers)
+        duration = racers[-1].time_taken
         embed = (discord.Embed(title='Results', colour=0x00FF00)
                 .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
                 )
 
-        racers = sorted(self.players, key=attrgetter('time_taken'))
         others, winners = partition(self._winners.__contains__, racers)
         winners, others = list(winners), itertools.islice(others, 2)
 
@@ -260,7 +265,6 @@ class RacingSession:
                )
 
     async def run(self):
-        self._start = time.perf_counter()
         await self._loop()
         await self._display_winners()
 
