@@ -4,10 +4,11 @@ import random
 
 from collections import deque
 from discord.ext import commands
+from more_itertools import one
 
 from .manager import SessionManager
 
-from ..tables.currency import Currency
+from ..tables.currency import Currency, add_money
 
 from core.cog import Cog
 
@@ -142,6 +143,12 @@ class RussianRoulette(Cog):
                 try:
                     winner = await inst.run()
                 except InvalidGameState as e:
+                    if amount is not None:
+                        # We can assert that there will only be one racer because there
+                        # must be at least two players.
+                        user = one(inst.players)
+                        await add_money(ctx.session, user.id, amount)
+
                     return await ctx.send(e)
 
             if inst.pot:
