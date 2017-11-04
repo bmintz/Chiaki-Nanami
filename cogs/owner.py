@@ -10,6 +10,7 @@ import traceback
 from discord.ext import commands
 
 from .utils.context_managers import temp_attr
+from .utils.disambiguate import DisambiguateGuild
 
 from core.cog import Cog
 
@@ -254,6 +255,13 @@ class Owner(Cog, hidden=True):
 
         print('success!', ctx.session, 'state of new session:', ctx.session)
         await ctx.send('\N{OK HAND SIGN}')
+
+    @commands.command()
+    async def leave(self, ctx, server: DisambiguateGuild):
+        """Leaves a server. Defaults to the current server."""
+        await server.leave()
+        with contextlib.suppress(discord.HTTPException):
+            await ctx.send('\N{OK HAND SIGN}')
 
 
 def setup(bot):
