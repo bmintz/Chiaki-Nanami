@@ -103,8 +103,8 @@ _chiaki_formatter = ChiakiFormatter(width=MAX_FORMATTER_WIDTH, show_check_failur
 
 
 class Chiaki(commands.Bot):
-    __version__ = '1.0.2'
-    version_info = VersionInfo(major=1, minor=0, micro=1)
+    __version__ = '1.1.0'
+    version_info = VersionInfo(major=1, minor=1, micro=0)
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
