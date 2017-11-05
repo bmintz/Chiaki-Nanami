@@ -146,8 +146,8 @@ class Money(Cog):
         user = user or ctx.author
         money = await get_money(ctx.session, user.id)
         if not (money and money.amount):
-            return await ctx.send(f'{user.mention} has nothing :frowning:')
-        await ctx.send(f'{user.mention} has **{money.amount}** {self.money_emoji}!')
+            return await ctx.send(f'{user} has nothing :frowning:')
+        await ctx.send(f'{user} has **{money.amount}** {self.money_emoji}!')
 
     @commands.command(aliases=['lb'])
     async def leaderboard(self, ctx):
