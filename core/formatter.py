@@ -380,10 +380,13 @@ class GeneralHelpPaginator(ListPaginator):
             "[Check the code out here (it's fire!)](https://github.com/Ikusaba-san/Chiaki-Nanami)\n"
         )
 
+        feedback = f'Use `{self.context.prefix}feedback your message`!'
+
         return (discord.Embed(colour=self.colour)
                 .set_thumbnail(url=bot.user.avatar_url)
                 .set_author(name="You've reached the end of the help page!")
                 .add_field(name='For more help', value=support, inline=False)
+                .add_field(name='To suggest any new features or bug fixes', value=feedback, inline=False)
                 .add_field(name='And for some other useful links...', value=useful_links, inline=False)
                 )
 
