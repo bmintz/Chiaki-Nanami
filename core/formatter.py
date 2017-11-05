@@ -292,13 +292,14 @@ class GeneralHelpPaginator(ListPaginator):
     def intro(self):
         """The intro, ie the thing you just saw."""
         instructions = (
-            'This is the help page for me!\n'
-            'Press \N{BLACK RIGHT-POINTING TRIANGLE} to see what this help has in store!'
+            'Press \N{BLACK RIGHT-POINTING TRIANGLE} to see what this help has in store!\n'
+            'For extra help, go to the last page (press \N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR})\n'
+            'for some useful links and commands.'
         )
 
         return (discord.Embed(colour=self.colour, description=self.context.bot.description)
                 .set_author(name=f"Hi, {self.context.author}. I'm {self.context.bot.user}!")
-                .add_field(name="\u200b", value=instructions, inline=False)
+                .add_field(name="Welcome to my help page!", value=instructions, inline=False)
                 .set_image(url=CHIAKI_INTRO_URL)
                 )
 
