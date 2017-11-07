@@ -325,6 +325,14 @@ class Permissions(InitRoot):
             # "Fast" path
             return True
 
+        # Do not disable the actual permission commands. Even though we prevent
+        # it in the module and command subcommands, we disable everything in
+        # `->disable all`, meaning these get disabled as well, causing strange
+        # issues.
+        root = ctx.command.root_parent or ctx.command
+        if root in {self.enable, self.disable, self.undo}:
+            return True
+
         dummy_server = Server(ctx.guild)
 
         objects = itertools.chain(
