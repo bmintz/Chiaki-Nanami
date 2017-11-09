@@ -236,7 +236,7 @@ class Hangman(Cog):
 
     @hangman.command(name='categories')
     async def hangman_categories(self, ctx):
-        """Stops a running hangman game."""
+        """Lists all the possible categories for Hangman."""
         categories = self.default_categories
         embeds = ListPaginator(ctx, sorted(categories), title=f'List of Categories for {ctx.guild}',
                                colour=discord.Colour.blurple())
