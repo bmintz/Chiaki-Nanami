@@ -581,7 +581,7 @@ class ModLog(Cog):
         config.channel_id = channel.id
 
         await ctx.session.add(config)
-        await ctx.send('Ok, {channel.mention} it is then!')
+        await ctx.send(f'Ok, {channel.mention} it is then!')
 
     @commands.group(name='modactions', aliases=['modacts'], invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
