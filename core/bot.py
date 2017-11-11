@@ -298,6 +298,10 @@ class Chiaki(commands.Bot):
         await self.custom_prefixes.put(guild.id, sorted(set(prefixes), reverse=True))
 
     async def process_commands(self, message):
+        # prevent responding to other bots
+        if message.author.bot:
+            return
+
         ctx = await self.get_context(message, cls=context.Context)
 
         if ctx.command is None:
@@ -375,10 +379,7 @@ class Chiaki(commands.Bot):
 
     async def on_message(self, message):
         self.message_counter += 1
-
-        # prevent other selfs from triggering commands
-        if not message.author.bot:
-            await self.process_commands(message)
+        await self.process_commands(message)
 
     async def on_command(self, ctx):
         self.command_counter['commands'] += 1
