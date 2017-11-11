@@ -177,12 +177,29 @@ class Owner(Cog, hidden=True):
         ctx.bot.unload_extension(cog)
         await ctx.send('Ok onii-chan~')
 
-    @commands.command()
+    @commands.group(invoke_without_command=True)
     async def reload(self, ctx, cog: str):
         """Reloads a bot-extension (one with a setup method)"""
         ctx.bot.unload_extension(cog)
         ctx.bot.load_extension(cog)
         await ctx.send('Ok onii-chan~')
+
+    @reload.command(name='emojis')
+    async def reload_emojis(self, ctx):
+        """Reloads the `emojis.py` file"""
+        # The imports are here to make removal easier in case this doesn't work.
+        import emojis, importlib
+        importlib.reload(emojis)
+        ctx.bot._import_emojis()
+        await ctx.send('Yay onii-chan~! ^w^')
+
+    @reload.command(name='config')
+    async def reload_config(self, ctx):
+        """Reloads the `config.py` file"""
+        # The imports are here to make removal easier in case this doesn't work.
+        import config, importlib
+        importlib.reload(config)
+        await ctx.send('Ok onii-chan~! uwu')
 
     @load.error
     @unload.error
