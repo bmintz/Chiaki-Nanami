@@ -551,38 +551,29 @@ class Meta(Cog):
         pages = ListPaginator(ctx, emojis, title=f'Emojis in {ctx.guild}')
         await pages.interact()
 
-    @commands.command(name='githubsource', aliases=['ghsource'])
-    async def github_source(self, ctx, *, command: BotCommand = None):
-        """Displays the github link for the source code of a particular command.
+    # ----------------- Github Related Commands -------------------
 
-        Keep in mind that although this is less spammy. It may be inaccurate or
-        even in a completely different place if last-minute changes were applied
-        to the code and weren't pushed to GitHub.
+    # Credits to Reina
+    @staticmethod
+    async def _get_github_url():
+        url, _ = await run_subprocess('git remote get-url origin')
+        return url.strip()[:-4]  # remove .git\n
 
-        If you truly want the most accurate code, use `{prefix}source`.
-        """
-        source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/dev'
-        if command is None: 
-            return await ctx.send(source_url)
+    @staticmethod
+    async def _get_branch():
+        return (await run_subprocess('git rev-parse --abbrev-ref HEAD'))[0].rstrip()
 
-        src = command.callback.__code__
-        lines, firstlineno = inspect.getsourcelines(src)
-        lastline = firstlineno + len(lines) - 1
-        # We don't use the built-in commands so we can eliminate this branch
-        location = os.path.relpath(src.co_filename).replace('\\', '/')
+    async def _get_recent_commits(self, *, limit=None):
+        url = await self._get_github_url()
+        cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
+        if limit is not None:
+            cmd += f' -{limit}'
 
-        url = f'<{source_url}/{location}#L{firstlineno}-L{lastline}>'
-        await ctx.send(url)
+        return (await run_subprocess(cmd))[0]
 
-    @commands.command()
-    @commands.cooldown(rate=2, per=5, type=commands.BucketType.user)
-    async def source(self, ctx, *, command: BotCommand):
-        """Displays the source code for a particular command.
-
-        There is a per-user, 2 times per 5 seconds cooldown in order to prevent spam.
-        """
+    async def _display_raw(self, ctx, lines):
         paginator = commands.Paginator(prefix='```py')
-        for line in inspect.getsourcelines(command.callback)[0]:
+        for line in lines:
             # inspect.getsourcelines returns the lines with the newlines at the
             # end. However, the paginator will add it's own newlines when joining
             # up the lines. We don't want to have double lines. So we have to
@@ -596,19 +587,31 @@ class Meta(Cog):
         for p in paginator.pages:
             await ctx.send(p)
 
-    # Credits to Reina
-    @staticmethod
-    async def _get_github_url():
-        url, _ = await run_subprocess('git remote get-url origin')
-        return url.strip()[:-4]  # remove .git\n
+    @commands.command()
+    async def source(self, ctx, *, command: BotCommand = None):
+        """Displays the source code for a command.
 
-    async def _get_recent_commits(self, *, limit=None):
-        url = await self._get_github_url()
-        cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
-        if limit is not None:
-            cmd += f' -{limit}'
+        If the source code has too many lines \u2014 10 lines for me \u2014 
+        it displays the Github URL.
+        """
+        if command is None: 
+            source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/dev'
+            return await ctx.send(source_url)
 
-        return (await run_subprocess(cmd))[0]
+        src = command.callback.__code__
+        lines, firstlineno = inspect.getsourcelines(command.callback)
+        if len(lines) < 10:
+            return await self._display_raw(ctx, lines)
+
+        branch = await self._get_branch()
+        source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/{branch}'
+
+        lastline = firstlineno + len(lines) - 1
+        # We don't use the built-in commands so we can eliminate this branch
+        location = os.path.relpath(src.co_filename).replace('\\', '/')
+
+        url = f'<{source_url}/{location}#L{firstlineno}-L{lastline}>'
+        await ctx.send(url)
 
     @commands.command()
     async def commits(self, ctx, limit=10):
