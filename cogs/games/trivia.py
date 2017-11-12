@@ -1,5 +1,4 @@
 import asyncio
-import asyncpg
 import asyncqlio
 import collections
 import contextlib

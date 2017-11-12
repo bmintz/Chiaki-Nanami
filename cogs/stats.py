@@ -1,4 +1,3 @@
-import aiohttp
 import asyncqlio
 import discord
 import datetime

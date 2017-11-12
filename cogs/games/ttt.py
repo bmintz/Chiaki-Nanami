@@ -213,7 +213,7 @@ class TicTacToeSession:
             user, tile = self._current
             self._update_display()
             async with temp_message(self.ctx, content=f'{user.mention} It is your turn.',
-                                    embed=self._game_screen) as m:
+                                    embed=self._game_screen):
                 while True:
                     try:
                         x, y = await self.get_input()

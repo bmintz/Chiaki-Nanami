@@ -1,5 +1,4 @@
 import discord
-import functools
 import json
 import random
 
@@ -9,7 +8,7 @@ from datetime import datetime
 from .utils.converter import BotCogConverter, BotCommand
 from .utils.formats import multi_replace
 from .utils.misc import emoji_url, truncate
-from .utils.paginator import BaseReactionPaginator, ListPaginator
+from .utils.paginator import ListPaginator
 
 from core.cog import Cog
 

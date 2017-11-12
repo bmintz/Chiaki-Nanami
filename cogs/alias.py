@@ -1,5 +1,4 @@
 import asyncqlio
-import collections
 import copy
 
 from discord.ext import commands

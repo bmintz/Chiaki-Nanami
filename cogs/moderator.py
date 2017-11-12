@@ -7,16 +7,16 @@ import functools
 import heapq
 import itertools
 
-from collections import Counter, deque, namedtuple
+from collections import Counter, namedtuple
 from discord.ext import commands
-from operator import attrgetter, contains, itemgetter
+from operator import attrgetter
 
 from .tables.base import TableBase
 from .utils import dbtypes, errors, formats, time
-from .utils.context_managers import redirect_exception, temp_attr
-from .utils.converter import in_, union
+from .utils.context_managers import temp_attr
+from .utils.converter import union
 from .utils.jsonf import JSONFile
-from .utils.misc import emoji_url, ordinal
+from .utils.misc import ordinal
 from .utils.paginator import ListPaginator, EmbedFieldPages
 
 from core.cog import Cog

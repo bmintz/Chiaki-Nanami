@@ -132,14 +132,8 @@ class Board:
         return f'{type(self).__name__}({self.width}, {self.height}, {len(self.mines)})'
 
     def __str__(self):
-        padding = len(str(self.width - 1))
-        numbers = ''.join(map(str, range(self.height)))
-        board_string = ''# f"Mines: {len(self.mines)}\n"#  {numbers :>{padding + 1}}\n"
-        board_string += '\n'.join([f"{char} {' '.join(map(str, cells))}"
-                                   for char, cells in zip(REGIONAL_INDICATORS, self._board)])
-        # print(len(board_string))
-        # board_string += f"\n  {numbers}"
-        return board_string
+        return '\n'.join([f"{char} {' '.join(map(str, cells))}"
+                          for char, cells in zip(REGIONAL_INDICATORS, self._board)])
 
     def _place_mines_from(self, x, y):
         surrounding = set(self._get_neighbours(x, y))

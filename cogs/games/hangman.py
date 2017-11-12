@@ -13,7 +13,6 @@ from discord.ext import commands
 
 from .manager import SessionManager
 
-from ..utils import errors
 from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import ListPaginator

@@ -3,7 +3,6 @@ import asyncqlio
 import contextlib
 import discord
 import emoji
-import heapq
 import itertools
 import random
 import time

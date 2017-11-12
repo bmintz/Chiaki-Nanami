@@ -1,4 +1,3 @@
-import aiohttp
 import collections
 import contextlib
 import datetime
@@ -10,21 +9,18 @@ import os
 import platform
 import psutil
 import re
-import sys
 
-from contextlib import redirect_stdout
 from discord.ext import commands
-from io import StringIO
-from itertools import chain, islice, starmap
+from itertools import chain, starmap
 from math import log10
 from more_itertools import sliced
-from operator import attrgetter, methodcaller
+from operator import attrgetter
 
 from .utils import cache, disambiguate
 from .utils.colours import url_color, user_color
 from .utils.context_managers import redirect_exception, temp_message
 from .utils.converter import BotCommand, union
-from .utils.errors import InvalidUserArgument, ResultsNotFound
+from .utils.errors import ResultsNotFound
 from .utils.formats import *
 from .utils.misc import group_strings, str_join, nice_time, ordinal
 from .utils.paginator import BaseReactionPaginator, ListPaginator, page
@@ -247,8 +243,6 @@ class ChannelPaginator(ListPaginator):
                 .set_footer(text=f'Page {idx + 1}/{len(self)} | Category ID: {category_id}')
                 )
 
-DISCORD_BOTS_ID = 110373943822540800
-
 
 class Meta(Cog):
     """Info related commands"""
@@ -457,7 +451,6 @@ class Meta(Cog):
     @staticmethod
     def text_channel_embed(channel):
         topic = '\n'.join(group_strings(channel.topic, 70)) if channel.topic else discord.Embed.Empty
-        member_count = len(channel.members)
         empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
         overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
 
@@ -799,18 +792,6 @@ class Meta(Cog):
                    .set_footer(text=f"ID: {user.id}")
                    )
         await ctx.send(embed=av_embed)
-
-    # @commands.command(disabled=True, usage=['pow', 'os.system'], aliases=['pyh'])
-    async def pyhelp(self, ctx, thing):
-        """Gives you the help string for a builtin python function.
-        (or any sort of function, for that matter)
-        """
-        # Someone told me a "lib" already does this. Is that true? If so, what lib is it?
-        # TODO: Only get the docstring
-        with StringIO() as output, redirect_stdout(output):
-            help(thing)
-            help_lines = output.getvalue().splitlines()
-            await iterable_limit_say(help_lines, ctx=ctx)
 
 
 def setup(bot):

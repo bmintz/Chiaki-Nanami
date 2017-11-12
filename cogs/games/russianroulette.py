@@ -85,7 +85,7 @@ class RussianRouletteSession:
                        f'Type `{self._required_message}` to pull the trigger...')
 
             try:
-                message = await wait_for('message', timeout=30, check=check)
+                await wait_for('message', timeout=30, check=check)
             except asyncio.TimeoutError:
                 await send(
                     f"{current} took too long. They must've died a long time ago, "

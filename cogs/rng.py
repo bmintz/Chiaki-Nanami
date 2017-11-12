@@ -1,7 +1,6 @@
 import asyncio
 import collections
 import colorsys
-import contextlib
 import discord
 import functools
 import random
@@ -13,7 +12,6 @@ from discord.ext import commands
 
 from .utils.converter import number
 from .utils.errors import InvalidUserArgument, private_message_only
-from .utils.misc import str_join
 
 from core.cog import Cog
 

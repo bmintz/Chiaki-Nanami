@@ -162,7 +162,7 @@ class ConnectFourSession:
         for turn, self._current in enumerate(cycle, start=1):
             user, tile = self._current
             self._update_display()
-            async with temp_message(self.ctx, embed=self._game_screen) as m:
+            async with temp_message(self.ctx, embed=self._game_screen):
                 while True:
                     try:
                         column = await self.get_input()

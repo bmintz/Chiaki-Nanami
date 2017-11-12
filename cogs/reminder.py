@@ -1,13 +1,9 @@
 import contextlib
 import discord
-import itertools
 import json
-import parsedatetime
 
 from discord.ext import commands
-from datetime import timedelta
 
-from .utils.context_managers import redirect_exception
 from .utils.misc import emoji_url, truncate
 from .utils.paginator import EmbedFieldPages
 from .utils.time import FutureTime, human_timedelta
