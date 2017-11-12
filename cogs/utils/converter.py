@@ -52,11 +52,9 @@ class CheckedMember(commands.MemberConverter):
 
 class BotCogConverter(commands.Converter):
     async def convert(self, ctx, arg):
-        lowered = arg.lower()
-
-        result = ctx.bot.get_cog(lowered)
+        result = ctx.bot.get_cog(arg)
         if result is None:
-            raise commands.BadArgument(f"Module {lowered} not found")
+            raise commands.BadArgument(f"Module {arg} not found")
 
         return result
 

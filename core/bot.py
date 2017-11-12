@@ -28,6 +28,7 @@ from cogs.utils.jsonf import JSONFile
 from cogs.utils.misc import file_handler
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
+from cogs.utils.transformdict import CIDict
 
 # The bot's config file
 import config
@@ -112,6 +113,10 @@ class Chiaki(commands.Bot):
                          description=config.description,
                          pm_help=None)
 
+        self.cog_aliases = CIDict()
+        # override self.cogs so we don't have to override get_cog later.
+        self.cogs = collections.ChainMap(CIDict(), self.cog_aliases)
+
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
         self.table_base = None
@@ -125,7 +130,6 @@ class Chiaki(commands.Bot):
         self.message_counter = 0
         self.command_counter = collections.Counter()
         self.custom_prefixes = JSONFile('customprefixes.json')
-        self.cog_aliases = {}
 
         self.reset_requested = False
 
@@ -192,34 +196,23 @@ class Chiaki(commands.Bot):
     def add_cog(self, cog):
         if not isinstance(cog, Cog):
             raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
-
-        # cog aliases
-        for alias in cog.__aliases__:
-            if alias in self.cog_aliases:
-                raise discord.ClientException(f'"{alias}" already has a cog registered')
-            self.cog_aliases[alias.lower()] = cog
-
         super().add_cog(cog)
-        cog_name = cog.__class__.__name__
-        self.cog_aliases[cog.__class__.name.lower()] = self.cogs[cog_name.lower()] = self.cogs.pop(cog_name)
+
+        self.cog_aliases.update(dict.fromkeys(cog.__aliases__, cog))
+        self.cog_aliases[cog.__class__.name.lower()] = cog
 
     def remove_cog(self, name):
-        lowered = name.lower()
-        cog = self.cogs.get(lowered)
-        if cog is None:
+        real_cog = self.cogs.get(name)
+        if real_cog is None:
             return
-        super().remove_cog(lowered)
+
+        super().remove_cog(name)
 
         # remove cog aliases
-        self.cog_aliases = {alias: real for alias, real in self.cog_aliases.items() if real is not cog}
-
-    def get_cog(self, name):
-        return self.all_cogs.get(name.lower())
-
-    # This must be implemented because Bot.get_all_commands doesn't call
-    # Bot.get_cog, so it will throw KeyError, and thus return an empty set.
-    def get_cog_commands(self, name):
-        return super().get_cog_commands(name.lower())
+        aliases = self.cog_aliases
+        for alias, cog in list(aliases.items()):
+            if cog is real_cog:
+                del aliases[alias]
 
     def load_extension(self, name):
         super().load_extension(name)
