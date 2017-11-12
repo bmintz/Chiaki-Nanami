@@ -38,8 +38,9 @@ class Board:
         return f'{self.__class__.__name__}(size={self.size})'
 
     def __str__(self):
-        return f'\n'.join((' ' + self._divider.join(map(str, row)))
-                                     for row in self.rows())
+        return f'\n'.join(
+            (' ' + self._divider.join(map(str, row))) for row in self.rows()
+        )
 
     def place(self, x, y, tile):
         if self._board[y][x] != Tile.BLANK:
@@ -139,11 +140,11 @@ class TicTacToeSession:
                      'Or `quit` to stop the game (you will lose though).')
         player_field = '\n'.join(itertools.starmap('{1} = **{0}**'.format, self.players))
         self._game_screen = (discord.Embed(colour=0x00FF00)
-                            .set_author(name=f'Tic-Tac-toe - {size} x {size}')
-                            .add_field(name='Players', value=player_field)
-                            .add_field(name='Current Player', value=None, inline=False)
-                            .add_field(name='Instructions', value=help_text)
-                            )
+                             .set_author(name=f'Tic-Tac-toe - {size} x {size}')
+                             .add_field(name='Players', value=player_field)
+                             .add_field(name='Current Player', value=None, inline=False)
+                             .add_field(name='Instructions', value=help_text)
+                             )
 
     def get_coords(self,string):
         lowered = string.lower()
@@ -192,8 +193,8 @@ class TicTacToeSession:
         confirm_options = ['\N{WHITE HEAVY CHECK MARK}', '\N{CROSS MARK}']
         desc = 'Press {0} to accept the draw.\nPress {1} to decline.'.format(*confirm_options)
         embed = (discord.Embed(description=desc)
-                .set_author(name=f'{self._current.user} has requested a draw.')
-                )
+                 .set_author(name=f'{self._current.user} has requested a draw.')
+                 )
 
         message = await self.ctx.send(embed=embed)
         for emoji in confirm_options:
@@ -260,8 +261,8 @@ class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession,
     @staticmethod
     async def get_board_size(ctx):
         embed = (discord.Embed(colour=0x00FF00, description='Click one of the reactions below!')
-                .set_author(name=f'Please enter the size of the board {ctx.author}')
-                )
+                 .set_author(name=f'Please enter the size of the board {ctx.author}')
+                 )
 
         async def add_reactions(message):
             for emoji in BOARD_SIZE_EMOJIS:
@@ -288,7 +289,8 @@ class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession,
     def _create_invite(self, ctx, member):
         size = ctx._ttt_size
         return (super()._create_invite(ctx, member)
-               .set_footer(text=f'Board size: {size} x {size}'))
+                .set_footer(text=f'Board size: {size} x {size}')
+                )
 
     async def _invite_member(self, ctx, member):
         ctx._ttt_size = await self.get_board_size(ctx)

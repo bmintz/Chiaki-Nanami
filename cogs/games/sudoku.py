@@ -147,13 +147,20 @@ _letters = 'abcdefghi'
 
 class UnicodeBoard(Board):
     def __str__(self):
-        return '\n'.join("{0}  {1} {2} {3}  {4} {5} {6}  {7} {8} {9}"
-                         .format(_markers[i], *(f'{cell}\u20e3' if cell else
-                                   '\N{BLACK LARGE SQUARE}' if cell is None else
-                                   '\N{INPUT SYMBOL FOR NUMBERS}' for cell in line),
-                                '\N{WHITE SMALL SQUARE}')
-                         + '\n' * (((i + 1) % 3 == 0))
-                         for i, line in enumerate(self._board))
+        fmt = "{0}  {1} {2} {3}  {4} {5} {6}  {7} {8} {9}"
+
+        def draw_cell(cell):
+            return (
+                f'{cell}\u20e3' if cell else
+                '\N{BLACK LARGE SQUARE}' if cell is None else
+                '\N{INPUT SYMBOL FOR NUMBERS}'
+            )
+
+        return '\n'.join(
+            fmt.format(_markers[i], *map(draw_cell, line), '\N{WHITE SMALL SQUARE}')
+            + '\n' * (((i + 1) % 3 == 0))
+            for i, line in enumerate(self._board)
+        )
 
 
 class Level(enum.Enum):
@@ -188,10 +195,10 @@ class SudokuSession(BaseReactionPaginator):
         self._completed = False
         self._runner = None
         self._screen = (discord.Embed()
-                       .set_author(name=self._header)
-                       .add_field(name='Player', value=str(ctx.author))
-                       .add_field(name='\u200b', value='Stuck? Click the \N{INFORMATION SOURCE} for help', inline=False)
-                       )
+                        .set_author(name=self._header)
+                        .add_field(name='Player', value=str(ctx.author))
+                        .add_field(name='\u200b', value='Stuck? Click the \N{INFORMATION SOURCE} for help', inline=False)
+                        )
 
     def check_message(self, message):
         return (self._state == State.default
@@ -316,7 +323,7 @@ class SudokuSession(BaseReactionPaginator):
         \u200b
         ''')
 
-        embed =  (discord.Embed(colour=self.ctx.bot.colour, description=help_text)
+        embed = (discord.Embed(colour=self.ctx.bot.colour, description=help_text)
                  .set_author(name='Welcome to Sudoku!')
                  .add_field(name='How to play', value=input_field)
                  .add_field(name='Reaction Button Reference', value=self.reaction_help)

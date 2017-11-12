@@ -37,9 +37,9 @@ class AFK(Cog):
         title = f"{member.display_name} is AFK"
 
         embed = (discord.Embed(description=message, colour=colour)
-                .set_author(name=title, icon_url=avatar)
-                .set_footer(text=f"ID: {member.id}")
-                )
+                 .set_author(name=title, icon_url=avatar)
+                 .set_footer(text=f"ID: {member.id}")
+                 )
 
         with contextlib.suppress(IndexError):
             embed.timestamp = self.user_message_queues[member.id][-1]
@@ -104,9 +104,11 @@ class AFK(Cog):
         self.user_message_queues[author.id].append(message.created_at)
         if self._has_messaged_too_much(author):
             await self._remove_afk(author)
-            await message.channel.send(f"{author.mention}, you are no longer AFK as you have messaged "
-                                       f"{AFKConfig.MAX_MESSAGES} times in less than "
-                                       f"{time.duration_units(AFKConfig.MAX_INTERVAL)}.")
+            await message.channel.send(
+                f"{author.mention}, you are no longer AFK as you have messaged "
+                f"{AFKConfig.MAX_MESSAGES} times in less than "
+                f"{time.duration_units(AFKConfig.MAX_INTERVAL)}."
+            )
 
     async def check_user_mention(self, message):
         if not self._afk_messages_enabled(message.guild):

@@ -578,9 +578,9 @@ class Minesweeper(Cog):
             description = f'{text}\n{extra_text}'
 
             win_embed = (discord.Embed(colour=0x00FF00, timestamp=datetime.utcnow(), description=description)
-                        .set_author(name='A winner is you!')
-                        .set_thumbnail(url=ctx.author.avatar_url)
-                        )
+                         .set_author(name='A winner is you!')
+                         .set_thumbnail(url=ctx.author.avatar_url)
+                         )
 
             await ctx.send(embed=win_embed)
 
@@ -637,7 +637,7 @@ class Minesweeper(Cog):
                                    & (MinesweeperGame.level == level.value))
                             .order_by(MinesweeperGame.time)
                             .limit(25)
-                )
+                 )
 
         entries = []
         add_entry = entries.append

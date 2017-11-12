@@ -172,23 +172,30 @@ class Moderator(Cog):
             member = ctx.channel
             pronoun = 'Everyone'
         elif self._is_slowmode_immune(member):
-            message = (f"{member} is immune from slowmode due to having the "
-                       f"Manage Server permission. Consider using `{ctx.prefix}slowmode "
-                        "no-immune` or giving them a harsher punishment.")
+            message = (
+                f'{member} is immune from slowmode due to having the '
+                f'Manage Server permission. Consider using `{ctx.prefix}slowmode '
+                'no-immune` or giving them a harsher punishment.'
+            )
+
             return await ctx.send(message)
 
         config = self.slowmodes.get(ctx.guild.id, {})
         slowmode = config.setdefault(str(member.id), {'no_immune': False})
         if slowmode['no_immune']:
-            return await ctx.send(f'{member.mention} is already in **no-immune** slowmode. '
-                                   'You need to turn it off first.')
+            return await ctx.send(
+                f'{member.mention} is already in **no-immune** slowmode. '
+                'You need to turn it off first.'
+            )
 
         slowmode['duration'] = duration.duration
         await self.slowmodes.put(ctx.guild.id, config)
 
-        await ctx.send(f'{member.mention} is now in slowmode! '
-                       f'{pronoun} must wait {duration} '
-                        'between each message they send.')
+        await ctx.send(
+            f'{member.mention} is now in slowmode! '
+            f'{pronoun} must wait {duration} '
+            'between each message they send.'
+        )
 
     @slowmode.command(name='noimmune', aliases=['n-i'], usage=['10', '1000000000 @b1nzy#1337'])
     @commands.has_permissions(manage_messages=True)
@@ -327,8 +334,8 @@ class Moderator(Cog):
         spammer_stats = joined or discord.Embed.Empty
 
         embed = (discord.Embed(colour=0x00FF00, description=spammer_stats, timestamp=ctx.message.created_at)
-                .set_author(name=title)
-                )
+                 .set_author(name=title)
+                 )
         await ctx.send(embed=embed, delete_after=20)
         await asyncio.sleep(20)
         with contextlib.suppress(discord.HTTPException):
@@ -343,8 +350,10 @@ class Moderator(Cog):
         if isinstance(cause, discord.Forbidden):
             await ctx.send("I need the Manage Messages perm to clear messages.")
         elif isinstance(cause, discord.HTTPException):
-            await ctx.send("Couldn't delete the messages for some reason... Here's the error:\n"
-                          f"```py\n{type(cause).__name__}: {cause}```")
+            await ctx.send(
+                "Couldn't delete the messages for some reason... Here's the error:\n"
+                f"```py\n{type(cause).__name__}: {cause}```"
+            )
 
     async def _get_warn_timeout(self, session, guild_id):
         query = session.select(WarnTimeout).where(WarnTimeout.guild_id == guild_id)
@@ -415,9 +424,11 @@ class Moderator(Cog):
         with temp_attr(ctx, 'send', lambda *a, **kw: asyncio.sleep(0)):
             await ctx.invoke(punishment_command, *args, reason=punishment_reason)
 
-        message = (f"{member.mention} has {current_warn_number} warnings! "
-                   f"**It's punishment time!** Today I'll {punish} you{punished_for}! "
-                    "\N{SMILING FACE WITH HORNS}")
+        message = (
+            f"{member.mention} has {current_warn_number} warnings! "
+            f"**It's punishment time!** Today I'll {punish} you{punished_for}! "
+            "\N{SMILING FACE WITH HORNS}"
+        )
         await ctx.send(message)
 
         # Dynamically patch the attributes because case logging requires them.
@@ -509,8 +520,10 @@ class Moderator(Cog):
         await (ctx.session.insert.add_row(row).on_conflict(WarnTimeout.guild_id)
                           .update(WarnTimeout.timeout))
 
-        await ctx.send(f'Alright, if a user was warned within **{duration}** '
-                        'after their oldest warn, bad things will happen.')
+        await ctx.send(
+            f'Alright, if a user was warned within **{duration}** '
+            'after their oldest warn, bad things will happen.'
+        )
 
     @staticmethod
     def _check_user(ctx, member):
@@ -651,7 +664,7 @@ class Moderator(Cog):
         await member.remove_roles(role)
         await self._remove_time_entry(member.guild, member, ctx.session)
         await ctx.send(f'{member.mention} can now speak again... '
-                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
+                       '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
     @commands.command(name='regenmutedperms', aliases=['rmp'])
     @commands.is_owner()
@@ -770,8 +783,10 @@ class Moderator(Cog):
         command = ctx.command
 
         if isinstance(cause, discord.Forbidden):
-            await ctx.send(f'I need the {command._required_perms} permissions to {command}, I think... '
-                            "Or maybe they're just too powerful for me.")
+            await ctx.send(
+                f'I need the {command._required_perms} permissions to {command}, I think... '
+                "Or maybe they're just too powerful for me."
+            )
         elif isinstance(cause, discord.HTTPException):
             await ctx.send(f"Couldn't {command} the member for some reason")
 

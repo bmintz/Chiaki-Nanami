@@ -271,11 +271,11 @@ class RNG(Cog):
         h, s, v = colorsys.rgb_to_hsv(*(v / 255 for v in rgb))
         hsv = h * 360, s * 100, v * 100
 
-
         colour_embed = (discord.Embed(title=as_str, colour=colour)
-                       .set_thumbnail(url=f'http://colorhexa.com/{as_str[1:]}.png')
-                       .add_field(name="RGB", value='%d, %d, %d' % rgb)
-                       .add_field(name="HSV", value='%.03f, %.03f, %.03f' % hsv))
+                        .set_thumbnail(url=f'http://colorhexa.com/{as_str[1:]}.png')
+                        .add_field(name="RGB", value='%d, %d, %d' % rgb)
+                        .add_field(name="HSV", value='%.03f, %.03f, %.03f' % hsv)
+                        )
         if webcolors:
             colour_embed.description = get_colour_name(rgb)
         await ctx.send(embed=colour_embed)

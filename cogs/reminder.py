@@ -38,11 +38,11 @@ class Reminder(Cog):
         # attempt to break up the lines myself.
 
         return (discord.Embed(colour=0x00FF00, description=message, timestamp=when)
-               .set_author(name='Reminder set!', icon_url=CLOCK_URL)
-               .set_thumbnail(url=ctx.author.avatar_url)
-               .add_field(name='For', value=f'#{ctx.channel} in {ctx.guild}', inline=False)
-               .set_footer(text=f'In {human_timedelta(when)} at')
-               )
+                .set_author(name='Reminder set!', icon_url=CLOCK_URL)
+                .set_thumbnail(url=ctx.author.avatar_url)
+                .add_field(name='For', value=f'#{ctx.channel} in {ctx.guild}', inline=False)
+                .set_footer(text=f'In {human_timedelta(when)} at')
+                )
 
     async def _add_reminder(self, ctx, when, message):
         channel_id = ctx.channel.id if ctx.guild else None
@@ -89,10 +89,10 @@ class Reminder(Cog):
         server = getattr(channel, 'guild', None)
 
         embed = (discord.Embed(colour=0xFF0000, description=message, timestamp=entry['expires'])
-                .set_author(name=f'Reminder #{index} cancelled!', icon_url=CANCELED_URL)
-                .add_field(name='Was for', value=f'{channel} in {server}')
-                .set_footer(text='Was set to go off at')
-                )
+                 .set_author(name=f'Reminder #{index} cancelled!', icon_url=CANCELED_URL)
+                 .add_field(name='Was for', value=f'{channel} in {server}')
+                 .set_footer(text='Was set to go off at')
+                 )
 
         await ctx.send(embed=embed)
 
@@ -152,9 +152,9 @@ class Reminder(Cog):
         destination_format = ('Direct Message' if is_private else f'#{channel} in {channel.guild}!')
 
         embed = (discord.Embed(description=message, colour=0x00ff00, timestamp=timer.utc)
-                .set_author(name=f'Reminder for {destination_format}', icon_url=ALARM_CLOCK_URL)
-                .set_footer(text=f'From {human_delta}.')
-                )
+                 .set_author(name=f'Reminder for {destination_format}', icon_url=ALARM_CLOCK_URL)
+                 .set_footer(text=f'From {human_delta}.')
+                 )
 
         try:
             await channel.send(f"<@{user_id}>", embed=embed)

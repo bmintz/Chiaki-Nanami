@@ -312,10 +312,10 @@ class OtherStuffs(Cog):
             msg2 = f"I wonder what {target} did to deserve such violence..."
 
         slap_embed = (discord.Embed(colour=self.bot.colour)
-                     .set_author(name=msg1)
-                     .set_image(url=random.choice(slaps))
-                     .set_footer(text=msg2)
-                     )
+                      .set_author(name=msg1)
+                      .set_image(url=random.choice(slaps))
+                      .set_footer(text=msg2)
+                      )
         await ctx.send(embed=slap_embed)
 
     @commands.command(name='10s')
@@ -324,8 +324,8 @@ class OtherStuffs(Cog):
 
         description = f'Click the {TEN_SEC_REACTION} when you think 10 second have passed'
         embed = (discord.Embed(colour=0xFFFF00, description=description)
-                .set_author(name=f'10 Seconds Test - {ctx.author}', icon_url=emoji_url('\N{ALARM CLOCK}'))
-                )
+                 .set_author(name=f'10 Seconds Test - {ctx.author}', icon_url=emoji_url('\N{ALARM CLOCK}'))
+                 )
 
         message = await ctx.send(embed=embed)
         await message.add_reaction(TEN_SEC_REACTION)
@@ -334,7 +334,7 @@ class OtherStuffs(Cog):
             return (reaction.message.id == message.id
                     and user.id == ctx.author.id
                     and reaction.emoji == TEN_SEC_REACTION
-                   )
+                    )
 
         start = time.perf_counter()
         reaction, user = await ctx.bot.wait_for('reaction_add', check=check)

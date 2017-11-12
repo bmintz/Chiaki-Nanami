@@ -57,11 +57,11 @@ class RockPaperScissors(Cog):
         name, thumbnail = self._winner(self._cmp(elem, choice, counters), ctx)
 
         embed = (discord.Embed(colour=0x00FF00, description='\u200b')
-                .set_author(name=title)
-                .add_field(name=f'{ctx.author} chose...', value=f'**{elem}**', inline=False)
-                .add_field(name='I chose...', value=f'**{choice.title()}**', inline=False)
-                .add_field(name='Result', value=f'**{name}** wins!!', inline=False)
-                )
+                 .set_author(name=title)
+                 .add_field(name=f'{ctx.author} chose...', value=f'**{elem}**', inline=False)
+                 .add_field(name='I chose...', value=f'**{choice.title()}**', inline=False)
+                 .add_field(name='Result', value=f'**{name}** wins!!', inline=False)
+                 )
 
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)

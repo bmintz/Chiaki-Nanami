@@ -133,7 +133,7 @@ class ServerPages(BaseReactionPaginator):
         counts = (f'{len(getattr(server, thing))} {thing.title()}' 
                   for thing in ('roles', 'emojis'))
         channels = (f'{len(getattr(server, thing))} {thing.replace("_channels", " ").title()}' 
-                   for thing in ('categories', 'text_channels', 'voice_channels'))
+                    for thing in ('categories', 'text_channels', 'voice_channels'))
 
         statuses = collections.OrderedDict.fromkeys(['Online', 'Idle', 'Dnd', 'Offline'], 0)
         statuses.update(collections.Counter(m.status.name.title() for m in server.members if not m.bot))
@@ -180,7 +180,8 @@ class ServerPages(BaseReactionPaginator):
         """Shows the server's icon"""
         server = self.guild
         icon = (discord.Embed(title=f"{server}'s icon")
-               .set_footer(text=f"ID: {server.id}"))
+                .set_footer(text=f"ID: {server.id}")
+                )
 
         icon_url = server.icon_url_as(format='png')
         if icon_url:
@@ -199,16 +200,16 @@ class ServerPages(BaseReactionPaginator):
         description = '\n'.join(group_strings(map(str, guild.emojis), 10)) if emojis else 'There are no emojis :('
 
         return (discord.Embed(colour=await self.server_color(), description=description)
-               .set_author(name=f"{guild}'s custom emojis")
-               .set_footer(text=f'{len(emojis)} emojis')
-               )
+                .set_author(name=f"{guild}'s custom emojis")
+                .set_footer(text=f'{len(emojis)} emojis')
+                )
 
     @page('\N{WHITE QUESTION MARK ORNAMENT}')
     def help_page(self):
         """Shows this page"""
         return (discord.Embed(description=self.reaction_help)
-               .set_author(name='Welcome to the help thing!')
-               )
+                .set_author(name='Welcome to the help thing!')
+                )
 
 def _parse_channel(channel, prefix, predicate):
     formatted = f'{prefix}{escape_markdown(str(channel))}'
@@ -306,7 +307,7 @@ class Meta(Cog):
 
         roles = sorted(member.roles, reverse=True)[:-1]  # last role is @everyone
 
-        return  (discord.Embed(colour=colour, description=playing)
+        return (discord.Embed(colour=colour, description=playing)
                 .set_thumbnail(url=avatar_url)
                 .set_author(name=str(member), icon_url=icon.url)
                 .add_field(name="Display Name", value=member.display_name)
@@ -394,14 +395,14 @@ class Meta(Cog):
         colour = await user_color(member)
 
         mee6_embed = (discord.Embed(colour=colour, description=description)
-                     .set_author(name=member.display_name, icon_url=avatar_url)
-                     .set_thumbnail(url=avatar_url)
-                     .add_field(name="Level", value=stats['lvl'])
-                     .add_field(name="Total XP", value=stats['total_xp'])
-                     .add_field(name="Level XP",  value=xp_progress)
-                     .add_field(name="XP Remaining to next level",  value=xp_remaining)
-                     .set_footer(text=f"ID: {member.id}")
-                     )
+                      .set_author(name=member.display_name, icon_url=avatar_url)
+                      .set_thumbnail(url=avatar_url)
+                      .add_field(name="Level", value=stats['lvl'])
+                      .add_field(name="Total XP", value=stats['total_xp'])
+                      .add_field(name="Level XP",  value=xp_progress)
+                      .add_field(name="XP Remaining to next level",  value=xp_remaining)
+                      .set_footer(text=f"ID: {member.id}")
+                      )
 
         await ctx.send(embed=mee6_embed)
 
@@ -436,15 +437,15 @@ class Meta(Cog):
 
         # I think there's a way to make a solid color thumbnail, idk though
         role_embed = (discord.Embed(title=role.name, colour=role.colour, description=description)
-                     .add_field(name='Created by', value=creator)
-                     .add_field(name="Colour", value=hex_role_color)
-                     .add_field(name="Permissions", value=permissions)
-                     .add_field(name="Mentionable?", value=bool_as_answer(role.mentionable))
-                     .add_field(name="Displayed separately?", value=bool_as_answer(role.hoist))
-                     .add_field(name="Integration role?", value=bool_as_answer(role.managed))
-                     .add_field(name=members_name, value=members_value, inline=False)
-                     .set_footer(text=footer)
-                     )
+                      .add_field(name='Created by', value=creator)
+                      .add_field(name="Colour", value=hex_role_color)
+                      .add_field(name="Permissions", value=permissions)
+                      .add_field(name="Mentionable?", value=bool_as_answer(role.mentionable))
+                      .add_field(name="Displayed separately?", value=bool_as_answer(role.hoist))
+                      .add_field(name="Integration role?", value=bool_as_answer(role.managed))
+                      .add_field(name=members_name, value=members_value, inline=False)
+                      .set_footer(text=footer)
+                      )
 
         await ctx.send(embed=role_embed)
 
@@ -455,13 +456,13 @@ class Meta(Cog):
         overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
 
         return (discord.Embed(description=topic, timestamp=channel.created_at)
-               .set_author(name=f'#{channel.name}')
-               .add_field(name='ID', value=channel.id)
-               .add_field(name='Position', value=channel.position)
-               .add_field(name='Members', value=len(channel.members))
-               .add_field(name='Permission Overwrites', value=overwrite_message)
-               .set_footer(text='Created')
-               )
+                .set_author(name=f'#{channel.name}')
+                .add_field(name='ID', value=channel.id)
+                .add_field(name='Position', value=channel.position)
+                .add_field(name='Members', value=len(channel.members))
+                .add_field(name='Permission Overwrites', value=overwrite_message)
+                .set_footer(text='Created')
+                )
 
     @staticmethod
     def voice_channel_embed(channel):
@@ -469,14 +470,14 @@ class Meta(Cog):
         overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
 
         return (discord.Embed(timestamp=channel.created_at)
-               .set_author(name=channel.name)
-               .add_field(name='ID', value=channel.id)
-               .add_field(name='Position', value=channel.position)
-               .add_field(name='Bitrate', value=channel.bitrate)
-               .add_field(name='Max Members', value=channel.user_limit or '\N{INFINITY}')
-               .add_field(name='Permission Overwrites', value=overwrite_message)
-               .set_footer(text='Created')
-               )
+                .set_author(name=channel.name)
+                .add_field(name='ID', value=channel.id)
+                .add_field(name='Position', value=channel.position)
+                .add_field(name='Bitrate', value=channel.bitrate)
+                .add_field(name='Max Members', value=channel.user_limit or '\N{INFINITY}')
+                .add_field(name='Permission Overwrites', value=overwrite_message)
+                .set_footer(text='Created')
+                )
 
     @info.command(name='channel')
     async def info_channel(self, ctx, channel: union(discord.TextChannel, discord.VoiceChannel)=None):
@@ -737,9 +738,9 @@ class Meta(Cog):
 
         value = permissions.value
         perm_embed = (discord.Embed(colour=thing.colour, description=str_perms)
-                     .set_author(name=f'Permissions for {thing} {extra}')
-                     .set_footer(text=f'Value: {value} | Binary: {bin(value)[2:]}')
-                     )
+                      .set_author(name=f'Permissions for {thing} {extra}')
+                      .set_footer(text=f'Value: {value} | Binary: {bin(value)[2:]}')
+                      )
         await ctx.send(embed=perm_embed)
 
     @commands.command(aliases=['perms'])
@@ -786,11 +787,11 @@ class Meta(Cog):
         description = f"*(Also known as \"{nick}\")*" * bool(nick)
 
         av_embed = (discord.Embed(colour=colour, description=description)
-                   .set_author(name=f"{user}'s Avatar", icon_url=avatar_url, url=avatar_url)
-                   #.add_field(name="Link", value=f"[Click me for avatar!]({avatar_url})")
-                   .set_image(url=avatar_url)
-                   .set_footer(text=f"ID: {user.id}")
-                   )
+                    .set_author(name=f"{user}'s Avatar", icon_url=avatar_url, url=avatar_url)
+                    #.add_field(name="Link", value=f"[Click me for avatar!]({avatar_url})")
+                    .set_image(url=avatar_url)
+                    .set_footer(text=f"ID: {user.id}")
+                    )
         await ctx.send(embed=av_embed)
 
 

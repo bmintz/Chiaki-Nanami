@@ -405,8 +405,10 @@ class ListPaginator(BaseReactionPaginator):
                             # Because subclasses *can* override the check we need to check
                             # that the check given is valid, ie that the check will return
                             # True if and only if the emoji is in the reaction map.
-                            raise RuntimeError(f"{react.emoji} has no method attached to it, check "
-                                               f"the {self._check_reaction.__qualname__} method")
+                            raise RuntimeError(
+                                f"{react.emoji} has no method attached to it, check "
+                                f"the {self._check_reaction.__qualname__} method"
+                            )
 
                         try:
                             return await maybe_awaitable(getattr(self, attr))
@@ -431,8 +433,8 @@ class ListPaginator(BaseReactionPaginator):
         joined = '\n'.join(itertools.chain(initial_message, funcs, remarks))
 
         return (discord.Embed(title=self.title, colour=self.colour, description=joined)
-               .set_footer(text=f"From page {self._index + 1}")
-               )
+                .set_footer(text=f"From page {self._index + 1}")
+                )
 
     async def add_buttons(self):
         fast_forwards = {'\U000023ed', '\U000023ee'}
@@ -465,7 +467,7 @@ class TitleBasedPages(ListPaginator):
 
     def _create_embed(self, idx, page):
         entry_title = self.entries[idx]
-        return  (discord.Embed(title=entry_title, colour=self.colour, description='\n'.join(page))
+        return (discord.Embed(title=entry_title, colour=self.colour, description='\n'.join(page))
                 .set_author(name=self.title)
                 .set_footer(text=f'Page: {idx + 1} / {len(self)} ({len(self.entries)} entries)')
                 )
@@ -495,8 +497,8 @@ class EmbedFieldPages(ListPaginator):
 
     def _create_embed(self, idx, page):
         embed = (discord.Embed(title=self.title, colour=self.colour, description=self.description)
-                .set_footer(text=f'Page: {idx + 1} / {len(self)} ({len(self.entries)} entries)')
-                )
+                 .set_footer(text=f'Page: {idx + 1} / {len(self)} ({len(self.entries)} entries)')
+                 )
 
         add_field = functools.partial(embed.add_field, inline=self.inline)
         for name, value in page:

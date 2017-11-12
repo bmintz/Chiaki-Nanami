@@ -24,8 +24,8 @@ class Blacklisted(commands.CheckFailure):
 
     def as_embed(self):
         embed = (discord.Embed(colour=0xFF0000, vdescription=self.reason)
-                .set_author(name=self.message, icon_url=_blocked_icon)
-                )
+                 .set_author(name=self.message, icon_url=_blocked_icon)
+                 )
 
         if self.reason:
             embed.description = self.reason
