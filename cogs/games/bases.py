@@ -39,7 +39,7 @@ class _TwoPlayerWaiter:
 
         self._event.set()
 
-    def cancel(self, member):
+    def decline(self, member):
         if self._recipient != member:
             return False
 
@@ -238,7 +238,7 @@ class TwoPlayerGameCog(Cog):
         if waiter is None:
             return await ctx.send(f"There's no {self.__class__.name} for you to decline...")
 
-        if isinstance(waiter, _TwoPlayerWaiter) and waiter.cancel(ctx.author):
+        if isinstance(waiter, _TwoPlayerWaiter) and waiter.decline(ctx.author):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.message.add_reaction('\U00002705')
 
