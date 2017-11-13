@@ -4,8 +4,6 @@ import discord
 
 from collections import OrderedDict
 from discord.ext import commands
-from functools import partial
-from more_itertools import grouper
 
 
 def _unique(iterable):

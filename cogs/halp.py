@@ -129,7 +129,10 @@ class Help(Cog):
             for name, cog in self.bot.cogs.items() if name and not cog.__hidden__
         )
 
-        formatted_cogs = [f'`{name}` => {truncate(doc.splitlines()[0], 20, "...")}' for name, doc in visible_cogs]
+        formatted_cogs = [
+            f'`{name}` => {truncate(doc.splitlines()[0], 20, "...")}'
+            for name, doc in visible_cogs
+        ]
 
         modules_embed = (discord.Embed(title="List of my modules",
                                        description='\n'.join(formatted_cogs),
@@ -190,7 +193,7 @@ class Help(Cog):
     async def feedback(self, ctx, *, message):
         """Gives feedback about the bot.
 
-        This is a quick and easy way to either request features 
+        This is a quick and easy way to either request features
         or bug fixes without being in the support server.
 
         You can only send feedback once every minute.

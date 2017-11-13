@@ -37,11 +37,13 @@ class WarnTimeout(TableBase, table_name='warn_timeouts'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     timeout = asyncqlio.Column(dbtypes.Interval)
 
+
 class WarnPunishment(TableBase, table_name='warn_punishments'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     warns = asyncqlio.Column(asyncqlio.SmallInt, primary_key=True)
     type = asyncqlio.Column(asyncqlio.String(32))
     duration = asyncqlio.Column(asyncqlio.Integer, default=0)
+
 
 class MuteRole(TableBase, table_name='muted_roles'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
@@ -55,6 +57,7 @@ class _ConflictColumns(namedtuple('_ConflictColumns', 'columns')):
     @property
     def quoted_name(self):
         return ', '.join(c.quoted_name for c in self.columns)
+
 
 WarnPunishmentCC = _ConflictColumns((WarnPunishment.guild_id, WarnPunishment.warns))
 del _ConflictColumns
@@ -95,7 +98,7 @@ class BannedMember(commands.Converter):
         return thing
 
 
-_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban',]
+_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
 _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
 
@@ -288,9 +291,8 @@ class Moderator(Cog):
         else:
             deleted = await ctx.channel.purge(check=lambda m: m.author.id == ctx.bot.user.id)
 
-        deleted_count = len(deleted) - 1
-        is_plural = 's'*(deleted_count != 1)
-        await ctx.send(f"Deleted {deleted_count} message{is_plural} successfully!", delete_after=1.5)
+        messages = formats.pluralize(message=len(deleted) - 1)
+        await ctx.send(f"Deleted {messages} successfully!", delete_after=1.5)
 
     @commands.command(aliases=['clean'], usage=['', '10'])
     @commands.guild_only()
@@ -327,15 +329,19 @@ class Moderator(Cog):
             deleted = await purge(check=lambda m: m.author.id == bot_id, bulk=False)
 
         spammers = Counter(str(m.author) for m in deleted)
+
         total_deleted = sum(spammers.values())
         second_part = 's was' if total_deleted == 1 else ' were'
         title = f'{total_deleted} messages{second_part} removed.'
+
         joined = '\n'.join(itertools.starmap('**{0}**: {1}'.format, spammers.most_common()))
         spammer_stats = joined or discord.Embed.Empty
 
-        embed = (discord.Embed(colour=0x00FF00, description=spammer_stats, timestamp=ctx.message.created_at)
+        embed = (discord.Embed(colour=0x00FF00, description=spammer_stats)
                  .set_author(name=title)
                  )
+        embed.timestamp = ctx.message.created_at
+
         await ctx.send(embed=embed, delete_after=20)
         await asyncio.sleep(20)
         with contextlib.suppress(discord.HTTPException):
@@ -504,8 +510,11 @@ class Moderator(Cog):
             punishments += (_default_punishment,)
         punishments.sort()
 
-        entries = (f'{warns} strikes => **{type}** {f"for {time.duration_units(duration)}" if duration else ""}'
-                   for warns, type, duration in punishments)
+        entries = (
+            f'{warns} strikes => **{type}** {f"for {time.duration_units(duration)}" if duration else ""}'
+            for warns, type, duration in punishments
+        )
+
         pages = ListPaginator(ctx, entries, title=f'Punishments for {ctx.guild}')
         await pages.interact()
 
@@ -578,9 +587,9 @@ class Moderator(Cog):
     async def mute(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
         """Mutes a user (obviously)
 
-        This command might take a while when this is used for the 
-        first time, as, I have to create a role, and update the 
-        channel permissions accordingly. 
+        This command might take a while when this is used for the
+        first time, as, I have to create a role, and update the
+        channel permissions accordingly.
 
         If you want to speed up this process, create a muted
         role yourself and use `{prefix}setmuterole`. However,

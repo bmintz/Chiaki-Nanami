@@ -117,6 +117,7 @@ async def _get_message(channel, message_id):
 
     return msg
 
+
 @cache.cache(maxsize=None, make_key=lambda a, kw: a[-1])
 async def _get_number_of_cases(session, guild_id):
     query = "SELECT COUNT(*) FROM modlog WHERE guild_id={guild_id};"
@@ -193,7 +194,9 @@ class ModLog(Cog):
         try:
             message = await channel.send(embed=embed)
         except discord.Forbidden:
-            raise ModLogError(f"I can't send messages to {channel.mention}. Check my privileges pls...")
+            raise ModLogError(
+                f"I can't send messages to {channel.mention}. Check my privileges pls..."
+            )
 
         # Add the case to the DB, because mod-logging was successful!
         row = await session.add(Case(
@@ -243,7 +246,7 @@ class ModLog(Cog):
             conn = session.transaction.acquired_connection
             await conn.copy_records_to_table('modlog_targets', columns=columns, records=to_insert)
 
-    async def _notify_user(self, config, action, server, user, targets, reason, 
+    async def _notify_user(self, config, action, server, user, targets, reason,
                            extra=None, auto=False):
         if action == 'massban':
             # XXX: Should I DM users who were massbanned?
@@ -566,15 +569,21 @@ class ModLog(Cog):
         """Sets the channel that will be used for logging moderation actions"""
         permissions = ctx.me.permissions_in(channel)
         if not permissions.read_messages:
-            return await ctx.send(f'I need to be able to read messages in {channel.mention} you baka!')
+            return await ctx.send(
+                f'I need to be able to read messages in {channel.mention} you baka!'
+            )
 
         if not permissions.send_messages:
-            return await ctx.send(f'I need to be able to send messages in {channel.mention}. '
-                                  'How else will I be able to log?!')
+            return await ctx.send(
+                f'I need to be able to send messages in {channel.mention}. '
+                'How else will I be able to log?!'
+            )
 
         if not permissions.embed_links:
-            return await ctx.send('I need the Embed Links permissions in order to make '
-                                  f'{channel.mention} the mod-log channel...')
+            return await ctx.send(
+                'I need the Embed Links permissions in order to make '
+                f'{channel.mention} the mod-log channel...'
+            )
 
         config = await self._get_case_config(ctx.session, ctx.guild.id)
         config = config or ModLogConfig(guild_id=ctx.guild.id)

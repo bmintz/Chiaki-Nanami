@@ -111,8 +111,11 @@ _8default = _8BallAnswer('...\N{THINKING FACE}', 0x009688)
 
 
 _default_letters = string.ascii_letters + string.digits
+
+
 def _password(length, alphabet=_default_letters):
     return ''.join(secrets.choice(alphabet) for i in range(length))
+
 
 def _make_maze(w=16, h=8):
     randrange, shuffle = random.randrange, random.shuffle
@@ -126,13 +129,18 @@ def _make_maze(w=16, h=8):
         d = [(x - 1, y), (x, y + 1), (x + 1, y), (x, y - 1)]
         shuffle(d)
         for (xx, yy) in d:
-            if vis[yy][xx]: continue
-            if xx == x: hor[max(y, yy)][x] = "+  "
-            if yy == y: ver[y][max(x, xx)] = "   "
+            if vis[yy][xx]:
+                continue
+            if xx == x:
+                hor[max(y, yy)][x] = "+  "
+            if yy == y:
+                ver[y][max(x, xx)] = "   "
+
             walk(xx, yy)
 
     walk(randrange(w), randrange(h))
     return(''.join(a + ['\n'] + b) for (a, b) in zip(hor, ver))
+
 
 _available_distributions = {
     'uniform': random.uniform,
@@ -140,6 +148,7 @@ _available_distributions = {
     'range': random.randrange,
     'triangular': random.triangular,
     }
+
 
 class RNG(Cog):
     __aliases__ = "Random",
@@ -225,21 +234,21 @@ class RNG(Cog):
                 points -= 1
         return stats
 
-    def _build_str(self, points : int=33, smasher : bool=False):
+    def _build_str(self, points: int=33, smasher: bool=False):
         stats = (4, 10) if smasher else (8, 7)
         if points <= 33:
             return '/'.join(map(str, self._build(points, *stats)))
         raise InvalidUserArgument(f"You have too many points ({points})")
 
     @random.command()
-    async def build(self, ctx, points : int=33):
+    async def build(self, ctx, points: int=33):
         """Gives you a random build to try out
 
         If points is not provided, it defaults to a max-level build (33)"""
         await ctx.send(self._build_str(points))
 
     @random.command()
-    async def smasher(self, ctx, points : int=33):
+    async def smasher(self, ctx, points: int=33):
         """Gives you a random build for the Smasher branch to try out
 
         If points is not provided, it defaults to a max-level build (33)"""
@@ -254,7 +263,7 @@ class RNG(Cog):
         await ctx.send(self._class())
 
     @random.command()
-    async def tank(self, ctx, points : int=33):
+    async def tank(self, ctx, points: int=33):
         """Gives you a random build AND class to play
 
         If points is not provided, it defaults to a max-level build (33)"""
@@ -318,6 +327,7 @@ class RNG(Cog):
             await ctx.send(f"```\n{maze}```")
         except discord.HTTPException:
             await ctx.send(f"The maze you've generated (**{w}** by **{h}**) is too large")
+
 
 def setup(bot):
     bot.add_cog(RNG(bot))

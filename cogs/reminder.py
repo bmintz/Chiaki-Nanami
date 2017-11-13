@@ -126,7 +126,11 @@ class Reminder(Cog):
                 value = truncate(f'{channel}: {message}', 1024, '...')
                 yield name, value
 
-        pages = EmbedFieldPages(ctx, entries(), lines_per_page=5, title=f'Reminders for {ctx.author}', inline=False)
+        pages = EmbedFieldPages(
+            ctx, entries(),
+            lines_per_page=5, title=f'Reminders for {ctx.author}', inline=False
+        )
+
         await pages.interact()
 
     async def on_reminder_complete(self, timer):
@@ -159,7 +163,9 @@ class Reminder(Cog):
         try:
             await channel.send(f"<@{user_id}>", embed=embed)
         except discord.HTTPException:  # can't embed
-            await channel.send(f'<@{user_id}> {human_delta} ago you wanted to be reminded of {message}')
+            await channel.send(
+                f'<@{user_id}> {human_delta} ago you wanted to be reminded of {message}'
+            )
 
 
 def setup(bot):

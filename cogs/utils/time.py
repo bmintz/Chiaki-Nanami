@@ -5,11 +5,8 @@ import parsedatetime as pdt
 
 from dateutil.relativedelta import relativedelta
 from discord.ext import commands
-from functools import partial
-from more_itertools import grouper
 
 from .formats import human_join, pluralize
-from .converter import union
 
 
 _short_time_pattern = re.compile("""
@@ -46,7 +43,7 @@ class Delta(collections.namedtuple('Delta', 'delta')):
 
     def __new__(cls, argument):
         match = _get_short_time_match(argument)
-        data = { k: int(v) for k, v in match.groupdict(default=0).items() }
+        data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         return super().__new__(cls, relativedelta(**data))
 
     def __str__(self):
@@ -56,6 +53,7 @@ class Delta(collections.namedtuple('Delta', 'delta')):
     def duration(self):
         attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
         return sum(getattr(self.delta, attr, 0) * DURATION_MULTIPLIERS[attr] for attr in attrs)
+
 
 # ----------------------- Time --------------------
 
@@ -76,7 +74,12 @@ class HumanTime(_TimeBase):
 
         if not status.hasTime:
             # replace it with the current time
-            dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+            dt = dt.replace(
+                hour=now.hour,
+                minute=now.minute,
+                second=now.second,
+                microsecond=now.microsecond
+            )
 
         return super().__new__(cls, dt)
 
@@ -106,11 +109,13 @@ class FutureTime(Time):
 
         return self
 
+
 # TODO: User-friendly Time?
 
 # ------------------------- Parsing -------------------------
 
 TIME_UNITS = ('week', 'day', 'hour', 'minute')
+
 
 def duration_units(secs):
     m, s = divmod(secs, 60)

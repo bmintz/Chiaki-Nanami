@@ -67,14 +67,14 @@ class Botlists(Cog, hidden=True):
             'Content-Type': 'application/json'
         }
 
-        data = {
+        data = json.dumps({
             'server_count': self.bot.guild_count,
             'shard_count': len(self.bot.shards)
-        }
+        })
 
-        url =  f'{DISCORD_BOT_LIST_URL}/bots/{self.bot.user.id}/stats'
-        async with self.bot.session.post(url, headers=header, data=json.dumps(data)) as req:
-            log.info(f'Discord Bot List statistics returned %s for %s', req.status, payload)
+        url = f'{DISCORD_BOT_LIST_URL}/bots/{self.bot.user.id}/stats'
+        async with self.bot.session.post(url, headers=headers, data=data) as req:
+            log.info(f'Discord Bot List statistics returned %s for %s', req.status, data)
 
     async def update(self):
         await asyncio.gather(*(handler() for handler in self._handlers))

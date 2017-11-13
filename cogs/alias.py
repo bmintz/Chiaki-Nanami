@@ -22,6 +22,7 @@ class Alias(TableBase, table_name='command_aliases'):
 def _first_word(string):
     return string.split(' ', 1)[0]
 
+
 def _first_word_is_command(group, string):
     return _first_word(string) in group.all_commands
 
@@ -126,7 +127,8 @@ class Aliases(Cog):
             return
 
         new_message = copy.copy(message)
-        new_message.content = f"{prefix}{alias['command']}{message.content[len_prefix + len(alias['alias']):]}"
+        args = message.content[len_prefix + len(alias['alias']):]
+        new_message.content = f"{prefix}{alias['command']}{args}"
         await self.bot.process_commands(new_message)
 
 

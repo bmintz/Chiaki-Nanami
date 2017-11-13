@@ -49,7 +49,7 @@ class DisambiguateMember(DisambiguateConverter, commands.MemberConverter):
     async def convert(self, ctx, argument):
         guild = ctx.guild
         bot = ctx.bot
-        match = self._get_id_match(argument) or re.match(r'<@!?([0-9]+)>$', argument)   
+        match = self._get_id_match(argument) or re.match(r'<@!?([0-9]+)>$', argument)
 
         # IDs must be unique, we won't allow conflicts here.
         if match is not None:
@@ -83,7 +83,11 @@ class DisambiguateMember(DisambiguateConverter, commands.MemberConverter):
         else:
             # We can't use the "fuzzy" match here, due to potential conflicts
             # and duplicate results.
-            result = _get_from_guilds(bot, 'get_member_named', argument), # See comment in "if guild:"
+            #
+            # The trailing comma is because the result expects a sequence
+            # This will transform result into a tuple, which is important.
+            # Because len(discord.Member) will error.
+            result = _get_from_guilds(bot, 'get_member_named', argument),
 
         return await ctx.disambiguate(result)
 

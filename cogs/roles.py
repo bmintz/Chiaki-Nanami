@@ -20,6 +20,7 @@ class SelfRoles(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt)
     role_id = asyncqlio.Column(asyncqlio.BigInt, unique=True)
 
+
 class AutoRoles(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     role_id = asyncqlio.Column(asyncqlio.BigInt)

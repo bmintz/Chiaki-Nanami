@@ -9,7 +9,6 @@ import random
 from collections import OrderedDict
 from discord.ext import commands
 
-from .context_managers import temp_message
 from .misc import maybe_awaitable
 
 
@@ -48,7 +47,7 @@ class DelimPaginator(commands.Paginator):
         prefix, *rest, suffix = self._current_page
         self._pages.append(f"{prefix}{self.join_delim.join(rest)}{suffix}")
         self._current_page = [self.prefix]
-        self._count = len(self.prefix) + 1 # prefix + newline
+        self._count = len(self.prefix) + 1  # prefix + newline
 
     @classmethod
     def from_iterable(cls, iterable, **kwargs):
@@ -62,7 +61,7 @@ class DelimPaginator(commands.Paginator):
         return sum(map(len, self))
 
 
-#--------------------- Embed-related things ---------------------
+# --------------------- Embed-related things ---------------------
 
 def page(emoji):
     def decorator(func):
@@ -98,7 +97,7 @@ class BaseReactionPaginator:
         def think(self):
             return discord.Embed(description='\N{THINKING FACE}')
 
-    A page should either return a discord.Embed, or None if to indicate the 
+    A page should either return a discord.Embed, or None if to indicate the
     page was invalid somehow. e.g. The page number given was out of bounds,
     or there were side effects associated with it.
     """
@@ -254,7 +253,10 @@ class BaseReactionPaginator:
 
     @property
     def reaction_help(self):
-        return '\n'.join(f'{em} => {getattr(self, f).__doc__}' for em, f in self._reaction_map.items())
+        return '\n'.join(
+            f'{em} => {getattr(self, f).__doc__}'
+            for em, f in self._reaction_map.items()
+        )
 
 
 class ListPaginator(BaseReactionPaginator):
@@ -342,7 +344,6 @@ class ListPaginator(BaseReactionPaginator):
                     and user.id == self.context.author.id
                     and reaction.emoji == '\N{INPUT SYMBOL FOR NUMBERS}')
 
-
         description = (
             f'Please enter a number from 1 to {len(self)}.\n\n'
             'You can also click the \N{INPUT SYMBOL FOR NUMBERS} to go back to where\n'
@@ -361,7 +362,7 @@ class ListPaginator(BaseReactionPaginator):
                 # The three futures are such that so the user doesn't get "stuck" in the
                 # number page. If they click on the number page by accident, then they
                 # should have an easy way out.
-                #  
+                #
                 # Thus we have to wait for three events:
                 # 1. the reaction if the user really wants to go to a different page,
                 # 2. the removal of the numbered reaction if the user wants to go back,m

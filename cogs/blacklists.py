@@ -51,7 +51,8 @@ class Blacklists(Cog, hidden=True):
 
     async def __global_check_once(self, ctx):
         async def get_blacklist(id):
-            return await ctx.session.select.from_(Blacklist).where(Blacklist.snowflake == id).first()
+            query = ctx.session.select.from_(Blacklist).where(Blacklist.snowflake == id).first()
+            return await query.first()
 
         row = await get_blacklist(ctx.author.id)
         if row:
