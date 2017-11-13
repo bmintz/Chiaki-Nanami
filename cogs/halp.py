@@ -1,5 +1,4 @@
 import discord
-import functools
 import json
 import random
 
@@ -9,7 +8,7 @@ from datetime import datetime
 from .utils.converter import BotCogConverter, BotCommand
 from .utils.formats import multi_replace
 from .utils.misc import emoji_url, truncate
-from .utils.paginator import BaseReactionPaginator, ListPaginator
+from .utils.paginator import ListPaginator
 
 from core.cog import Cog
 
@@ -46,7 +45,8 @@ class TipPaginator(ListPaginator):
         # page returns a tuple (because it returns a slice of entries)
         p = page[0]
         return (discord.Embed(colour=self.colour, description=p['description'])
-               .set_author(name=f"#{idx + 1}: {p['title']}", icon_url=TIP_EMOJI))
+                .set_author(name=f"#{idx + 1}: {p['title']}", icon_url=TIP_EMOJI)
+                )
 
 
 class HelpCommand(BotCommand):
@@ -109,30 +109,36 @@ class Help(Cog):
     async def invite(self, ctx):
         """...it's an invite"""
         invite = (discord.Embed(description=self.bot.description, title=str(self.bot.user), colour=self.bot.colour)
-                 .set_thumbnail(url=self.bot.user.avatar_url_as(format=None))
-                 .add_field(name="Want me in your server?",
-                            value=f'[Invite me here!]({self.bot.invite_url})', inline=False)
-                 .add_field(name="If you just to be simple...",
-                            value=f'[Invite me with minimal permissions!]({self.bot.minimal_invite_url})', inline=False)
-                 .add_field(name="Need help with using me?",
-                            value=f"[Here's the official server!]({self.bot.support_invite})", inline=False)
-                 .add_field(name="If you're curious about how I work...",
-                            value="[Check out the source code!](https://github.com/Ikusaba-san/Chiaki-Nanami/tree/rewrite)", inline=False)
-                 )
+                  .set_thumbnail(url=self.bot.user.avatar_url_as(format=None))
+                  .add_field(name="Want me in your server?",
+                             value=f'[Invite me here!]({self.bot.invite_url})', inline=False)
+                  .add_field(name="If you just to be simple...",
+                             value=f'[Invite me with minimal permissions!]({self.bot.minimal_invite_url})', inline=False)
+                  .add_field(name="Need help with using me?",
+                             value=f"[Here's the official server!]({self.bot.support_invite})", inline=False)
+                  .add_field(name="If you're curious about how I work...",
+                             value="[Check out the source code!](https://github.com/Ikusaba-san/Chiaki-Nanami/tree/rewrite)", inline=False)
+                  )
         await ctx.send(embed=invite)
 
     @commands.command(aliases=['cogs', 'mdls'])
     async def modules(self, ctx):
         """Shows all the *visible* modules that I have loaded"""
-        visible_cogs =  ((name, cog.__doc__ or '\n') for name, cog in self.bot.cogs.items()
-                         if name and not cog.__hidden__)
-        formatted_cogs = [f'`{name}` => {truncate(doc.splitlines()[0], 20, "...")}' for name, doc in visible_cogs]
+        visible_cogs = (
+            (name, cog.__doc__ or '\n')
+            for name, cog in self.bot.cogs.items() if name and not cog.__hidden__
+        )
+
+        formatted_cogs = [
+            f'`{name}` => {truncate(doc.splitlines()[0], 20, "...")}'
+            for name, doc in visible_cogs
+        ]
 
         modules_embed = (discord.Embed(title="List of my modules",
                                        description='\n'.join(formatted_cogs),
                                        colour=self.bot.colour)
-                        .set_footer(text=f'Type `{ctx.prefix}help` for help.')
-                        )
+                         .set_footer(text=f'Type `{ctx.prefix}help` for help.')
+                         )
         await ctx.send(embed=modules_embed)
 
     @commands.command(name='commands', aliases=['cmds'])
@@ -187,7 +193,7 @@ class Help(Cog):
     async def feedback(self, ctx, *, message):
         """Gives feedback about the bot.
 
-        This is a quick and easy way to either request features 
+        This is a quick and easy way to either request features
         or bug fixes without being in the support server.
 
         You can only send feedback once every minute.

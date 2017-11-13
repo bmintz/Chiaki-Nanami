@@ -7,16 +7,16 @@ import functools
 import heapq
 import itertools
 
-from collections import Counter, deque, namedtuple
+from collections import Counter, namedtuple
 from discord.ext import commands
-from operator import attrgetter, contains, itemgetter
+from operator import attrgetter
 
 from .tables.base import TableBase
 from .utils import dbtypes, errors, formats, time
-from .utils.context_managers import redirect_exception, temp_attr
-from .utils.converter import in_, union
+from .utils.context_managers import temp_attr
+from .utils.converter import union
 from .utils.jsonf import JSONFile
-from .utils.misc import emoji_url, ordinal
+from .utils.misc import ordinal
 from .utils.paginator import ListPaginator, EmbedFieldPages
 
 from core.cog import Cog
@@ -37,11 +37,13 @@ class WarnTimeout(TableBase, table_name='warn_timeouts'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     timeout = asyncqlio.Column(dbtypes.Interval)
 
+
 class WarnPunishment(TableBase, table_name='warn_punishments'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     warns = asyncqlio.Column(asyncqlio.SmallInt, primary_key=True)
     type = asyncqlio.Column(asyncqlio.String(32))
     duration = asyncqlio.Column(asyncqlio.Integer, default=0)
+
 
 class MuteRole(TableBase, table_name='muted_roles'):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
@@ -55,6 +57,7 @@ class _ConflictColumns(namedtuple('_ConflictColumns', 'columns')):
     @property
     def quoted_name(self):
         return ', '.join(c.quoted_name for c in self.columns)
+
 
 WarnPunishmentCC = _ConflictColumns((WarnPunishment.guild_id, WarnPunishment.warns))
 del _ConflictColumns
@@ -95,7 +98,7 @@ class BannedMember(commands.Converter):
         return thing
 
 
-_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban',]
+_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
 _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
 
@@ -172,23 +175,30 @@ class Moderator(Cog):
             member = ctx.channel
             pronoun = 'Everyone'
         elif self._is_slowmode_immune(member):
-            message = (f"{member} is immune from slowmode due to having the "
-                       f"Manage Server permission. Consider using `{ctx.prefix}slowmode "
-                        "no-immune` or giving them a harsher punishment.")
+            message = (
+                f'{member} is immune from slowmode due to having the '
+                f'Manage Server permission. Consider using `{ctx.prefix}slowmode '
+                'no-immune` or giving them a harsher punishment.'
+            )
+
             return await ctx.send(message)
 
         config = self.slowmodes.get(ctx.guild.id, {})
         slowmode = config.setdefault(str(member.id), {'no_immune': False})
         if slowmode['no_immune']:
-            return await ctx.send(f'{member.mention} is already in **no-immune** slowmode. '
-                                   'You need to turn it off first.')
+            return await ctx.send(
+                f'{member.mention} is already in **no-immune** slowmode. '
+                'You need to turn it off first.'
+            )
 
         slowmode['duration'] = duration.duration
         await self.slowmodes.put(ctx.guild.id, config)
 
-        await ctx.send(f'{member.mention} is now in slowmode! '
-                       f'{pronoun} must wait {duration} '
-                        'between each message they send.')
+        await ctx.send(
+            f'{member.mention} is now in slowmode! '
+            f'{pronoun} must wait {duration} '
+            'between each message they send.'
+        )
 
     @slowmode.command(name='noimmune', aliases=['n-i'], usage=['10', '1000000000 @b1nzy#1337'])
     @commands.has_permissions(manage_messages=True)
@@ -281,9 +291,8 @@ class Moderator(Cog):
         else:
             deleted = await ctx.channel.purge(check=lambda m: m.author.id == ctx.bot.user.id)
 
-        deleted_count = len(deleted) - 1
-        is_plural = 's'*(deleted_count != 1)
-        await ctx.send(f"Deleted {deleted_count} message{is_plural} successfully!", delete_after=1.5)
+        messages = formats.pluralize(message=len(deleted) - 1)
+        await ctx.send(f"Deleted {messages} successfully!", delete_after=1.5)
 
     @commands.command(aliases=['clean'], usage=['', '10'])
     @commands.guild_only()
@@ -320,15 +329,19 @@ class Moderator(Cog):
             deleted = await purge(check=lambda m: m.author.id == bot_id, bulk=False)
 
         spammers = Counter(str(m.author) for m in deleted)
+
         total_deleted = sum(spammers.values())
         second_part = 's was' if total_deleted == 1 else ' were'
         title = f'{total_deleted} messages{second_part} removed.'
+
         joined = '\n'.join(itertools.starmap('**{0}**: {1}'.format, spammers.most_common()))
         spammer_stats = joined or discord.Embed.Empty
 
-        embed = (discord.Embed(colour=0x00FF00, description=spammer_stats, timestamp=ctx.message.created_at)
-                .set_author(name=title)
-                )
+        embed = (discord.Embed(colour=0x00FF00, description=spammer_stats)
+                 .set_author(name=title)
+                 )
+        embed.timestamp = ctx.message.created_at
+
         await ctx.send(embed=embed, delete_after=20)
         await asyncio.sleep(20)
         with contextlib.suppress(discord.HTTPException):
@@ -343,8 +356,10 @@ class Moderator(Cog):
         if isinstance(cause, discord.Forbidden):
             await ctx.send("I need the Manage Messages perm to clear messages.")
         elif isinstance(cause, discord.HTTPException):
-            await ctx.send("Couldn't delete the messages for some reason... Here's the error:\n"
-                          f"```py\n{type(cause).__name__}: {cause}```")
+            await ctx.send(
+                "Couldn't delete the messages for some reason... Here's the error:\n"
+                f"```py\n{type(cause).__name__}: {cause}```"
+            )
 
     async def _get_warn_timeout(self, session, guild_id):
         query = session.select(WarnTimeout).where(WarnTimeout.guild_id == guild_id)
@@ -415,9 +430,11 @@ class Moderator(Cog):
         with temp_attr(ctx, 'send', lambda *a, **kw: asyncio.sleep(0)):
             await ctx.invoke(punishment_command, *args, reason=punishment_reason)
 
-        message = (f"{member.mention} has {current_warn_number} warnings! "
-                   f"**It's punishment time!** Today I'll {punish} you{punished_for}! "
-                    "\N{SMILING FACE WITH HORNS}")
+        message = (
+            f"{member.mention} has {current_warn_number} warnings! "
+            f"**It's punishment time!** Today I'll {punish} you{punished_for}! "
+            "\N{SMILING FACE WITH HORNS}"
+        )
         await ctx.send(message)
 
         # Dynamically patch the attributes because case logging requires them.
@@ -493,8 +510,11 @@ class Moderator(Cog):
             punishments += (_default_punishment,)
         punishments.sort()
 
-        entries = (f'{warns} strikes => **{type}** {f"for {time.duration_units(duration)}" if duration else ""}'
-                   for warns, type, duration in punishments)
+        entries = (
+            f'{warns} strikes => **{type}** {f"for {time.duration_units(duration)}" if duration else ""}'
+            for warns, type, duration in punishments
+        )
+
         pages = ListPaginator(ctx, entries, title=f'Punishments for {ctx.guild}')
         await pages.interact()
 
@@ -509,8 +529,10 @@ class Moderator(Cog):
         await (ctx.session.insert.add_row(row).on_conflict(WarnTimeout.guild_id)
                           .update(WarnTimeout.timeout))
 
-        await ctx.send(f'Alright, if a user was warned within **{duration}** '
-                        'after their oldest warn, bad things will happen.')
+        await ctx.send(
+            f'Alright, if a user was warned within **{duration}** '
+            'after their oldest warn, bad things will happen.'
+        )
 
     @staticmethod
     def _check_user(ctx, member):
@@ -565,9 +587,9 @@ class Moderator(Cog):
     async def mute(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
         """Mutes a user (obviously)
 
-        This command might take a while when this is used for the 
-        first time, as, I have to create a role, and update the 
-        channel permissions accordingly. 
+        This command might take a while when this is used for the
+        first time, as, I have to create a role, and update the
+        channel permissions accordingly.
 
         If you want to speed up this process, create a muted
         role yourself and use `{prefix}setmuterole`. However,
@@ -651,7 +673,7 @@ class Moderator(Cog):
         await member.remove_roles(role)
         await self._remove_time_entry(member.guild, member, ctx.session)
         await ctx.send(f'{member.mention} can now speak again... '
-                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
+                       '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
     @commands.command(name='regenmutedperms', aliases=['rmp'])
     @commands.is_owner()
@@ -770,8 +792,10 @@ class Moderator(Cog):
         command = ctx.command
 
         if isinstance(cause, discord.Forbidden):
-            await ctx.send(f'I need the {command._required_perms} permissions to {command}, I think... '
-                            "Or maybe they're just too powerful for me.")
+            await ctx.send(
+                f'I need the {command._required_perms} permissions to {command}, I think... '
+                "Or maybe they're just too powerful for me."
+            )
         elif isinstance(cause, discord.HTTPException):
             await ctx.send(f"Couldn't {command} the member for some reason")
 

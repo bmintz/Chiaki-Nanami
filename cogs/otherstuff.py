@@ -19,6 +19,7 @@ from .utils.misc import emoji_url, load_async
 
 from core.cog import Cog
 
+
 # ---------------- Ship-related utilities -------------------
 
 def _lerp_color(c1, c2, interp):
@@ -66,8 +67,10 @@ _default_rating_comments = (
     'What are you waiting for?!',
 )
 
+
 def _scale(old_min, old_max, new_min, new_max, number):
     return ((number - old_min) / (old_max - old_min)) * (new_max - new_min) + new_min
+
 
 _value_to_index = functools.partial(_scale, 0, 100, 0, len(_default_rating_comments) - 1)
 
@@ -122,7 +125,8 @@ def _calculate_rating(user1, user2):
     score = ((_user_score(user1) + _user_score(user2)) * _OFFSET + _seed) % 100
     return _ShipRating(score)
 
-#--------------- End ship stuffs ---------------------
+
+# --------------- End ship stuffs ---------------------
 
 PRE_PING_REMARKS = [
     # 'Pinging b1nzy',
@@ -159,7 +163,11 @@ class OtherStuffs(Cog):
         """Returns a copypasta from an index and name"""
         copy_pasta = self.copypastas[index]
         category, copypastas = copy_pasta['category'], copy_pasta['copypastas']
-        pasta = random.choice(list(copypastas.values())) if name is None else copypastas[name.title()]
+
+        pasta = (
+            random.choice(list(copypastas.values())) if name is None else
+            copypastas[name.title()]
+        )
 
         embed = discord.Embed(title=f"{category} {name}", description=pasta, colour=0x00FF00)
         await ctx.send(embed=embed)
@@ -167,7 +175,10 @@ class OtherStuffs(Cog):
     @copypasta.command(name="groups")
     async def copypasta_groups(self, ctx):
         """Shows all the copypasta catergoies"""
-        pastas = itertools.starmap('`{0}.` {1}'.format, enumerate(c['category'] for c in self.copypastas))
+        pastas = itertools.starmap(
+            '`{0}.` {1}'.format, enumerate(c['category'] for c in self.copypastas)
+        )
+
         embed = discord.Embed(title="All the categories (and their indices)", description='\n'.join(pastas))
         await ctx.send(embed=embed)
 
@@ -312,20 +323,21 @@ class OtherStuffs(Cog):
             msg2 = f"I wonder what {target} did to deserve such violence..."
 
         slap_embed = (discord.Embed(colour=self.bot.colour)
-                     .set_author(name=msg1)
-                     .set_image(url=random.choice(slaps))
-                     .set_footer(text=msg2)
-                     )
+                      .set_author(name=msg1)
+                      .set_image(url=random.choice(slaps))
+                      .set_footer(text=msg2)
+                      )
         await ctx.send(embed=slap_embed)
 
     @commands.command(name='10s')
     async def ten_seconds(self, ctx):
         """Starts a 10s test. How well can you judge 10 seconds?"""
-
+        title = f'10 Seconds Test - {ctx.author}'
         description = f'Click the {TEN_SEC_REACTION} when you think 10 second have passed'
+
         embed = (discord.Embed(colour=0xFFFF00, description=description)
-                .set_author(name=f'10 Seconds Test - {ctx.author}', icon_url=emoji_url('\N{ALARM CLOCK}'))
-                )
+                 .set_author(name=title, icon_url=emoji_url('\N{ALARM CLOCK}'))
+                 )
 
         message = await ctx.send(embed=embed)
         await message.add_reaction(TEN_SEC_REACTION)
@@ -334,7 +346,7 @@ class OtherStuffs(Cog):
             return (reaction.message.id == message.id
                     and user.id == ctx.author.id
                     and reaction.emoji == TEN_SEC_REACTION
-                   )
+                    )
 
         start = time.perf_counter()
         reaction, user = await ctx.bot.wait_for('reaction_add', check=check)
@@ -353,7 +365,6 @@ class OtherStuffs(Cog):
     async def hello(self, ctx):
         """Makes me say hello."""
         await ctx.send("Hey hey, I'm Chiaki. Say hi to MIkusaba for me <3")
-
 
 
 def setup(bot):

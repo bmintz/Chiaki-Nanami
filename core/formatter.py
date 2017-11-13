@@ -1,32 +1,18 @@
 import asyncio
 import discord
-import functools
 import inspect
 import itertools
 import operator
-import platform
 import random
 import textwrap
 import time
 
-from collections import Counter, defaultdict, OrderedDict
-from collections.abc import Sequence
+from collections import Counter, OrderedDict
 from discord.ext import commands
-from more_itertools import always_iterable, sliced
+from more_itertools import sliced
 
 from cogs.utils.context_managers import temp_attr
-from cogs.utils.misc import emoji_url
-from cogs.utils.paginator import BaseReactionPaginator, DelimPaginator, ListPaginator, page
-
-
-try:
-    import pkg_resources
-except ImportError:
-    # TODO: Get the version AND commit number without pkg_resources
-    DISCORD_PY_LIB = 'discord.py {discord.__version__}'
-else:
-    DISCORD_PY_LIB = str(pkg_resources.get_distribution('discord.py'))
-    del pkg_resources
+from cogs.utils.paginator import BaseReactionPaginator, ListPaginator, page
 
 
 def _unique(iterable):
@@ -110,7 +96,6 @@ class HelpCommandPage(BaseReactionPaginator):
 
     def _command_info(self):
         command, ctx, func = self.command, self.context, self.func
-        bot = ctx.bot
         clean_prefix = ctx.clean_prefix
         # usages = self.command_usage
 
@@ -437,11 +422,6 @@ del rmap
 class ChiakiFormatter(commands.HelpFormatter):
     def get_ending_note(self):
         return f"Type {self.clean_prefix}help command for more info on a command."
-
-    async def bot_help(self):
-        bot, func = self.context.bot, self.apply_function
-        result = _default_help.format(bot, bot=bot)
-        return func(result)
 
     async def format_help_for(self, ctx, command, func=lambda s: s):
         self.apply_function = func

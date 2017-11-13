@@ -114,11 +114,11 @@ class ConnectFourSession:
         instructions = ('Type the number of the column to play!\n'
                         'Or `quit` to stop the game (you will lose though).')
         self._game_screen = (discord.Embed(colour=0x00FF00)
-                            .set_author(name=f'Connect 4 - {self.ctx.author} vs {self.opponent}')
-                            .add_field(name='Players', value=player_field)
-                            .add_field(name='Current Player', value=None, inline=False)
-                            .add_field(name='Instructions', value=instructions)
-                            )
+                             .set_author(name=f'Connect 4 - {self.ctx.author} vs {self.opponent}')
+                             .add_field(name='Players', value=player_field)
+                             .add_field(name='Current Player', value=None, inline=False)
+                             .add_field(name='Instructions', value=instructions)
+                             )
 
     @staticmethod
     def get_column(string):
@@ -162,7 +162,7 @@ class ConnectFourSession:
         for turn, self._current in enumerate(cycle, start=1):
             user, tile = self._current
             self._update_display()
-            async with temp_message(self.ctx, embed=self._game_screen) as m:
+            async with temp_message(self.ctx, embed=self._game_screen):
                 while True:
                     try:
                         column = await self.get_input()
@@ -201,7 +201,8 @@ class ConnectFourSession:
 class Connect4(TwoPlayerGameCog, name='Connect 4', game_cls=ConnectFourSession, aliases=['con4']):
     def _make_invite_embed(self, ctx, member):
         return (super()._make_invite_embed(ctx, member)
-               .set_footer(text='Board size: 7 x 6'))
+                .set_footer(text='Board size: 7 x 6')
+                )
 
 
 def setup(bot):

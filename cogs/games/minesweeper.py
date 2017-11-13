@@ -132,14 +132,8 @@ class Board:
         return f'{type(self).__name__}({self.width}, {self.height}, {len(self.mines)})'
 
     def __str__(self):
-        padding = len(str(self.width - 1))
-        numbers = ''.join(map(str, range(self.height)))
-        board_string = ''# f"Mines: {len(self.mines)}\n"#  {numbers :>{padding + 1}}\n"
-        board_string += '\n'.join([f"{char} {' '.join(map(str, cells))}"
-                                   for char, cells in zip(REGIONAL_INDICATORS, self._board)])
-        # print(len(board_string))
-        # board_string += f"\n  {numbers}"
-        return board_string
+        return '\n'.join([f"{char} {' '.join(map(str, cells))}"
+                          for char, cells in zip(REGIONAL_INDICATORS, self._board)])
 
     def _place_mines_from(self, x, y):
         surrounding = set(self._get_neighbours(x, y))
@@ -584,9 +578,9 @@ class Minesweeper(Cog):
             description = f'{text}\n{extra_text}'
 
             win_embed = (discord.Embed(colour=0x00FF00, timestamp=datetime.utcnow(), description=description)
-                        .set_author(name='A winner is you!')
-                        .set_thumbnail(url=ctx.author.avatar_url)
-                        )
+                         .set_author(name='A winner is you!')
+                         .set_thumbnail(url=ctx.author.avatar_url)
+                         )
 
             await ctx.send(embed=win_embed)
 
@@ -643,7 +637,7 @@ class Minesweeper(Cog):
                                    & (MinesweeperGame.level == level.value))
                             .order_by(MinesweeperGame.time)
                             .limit(25)
-                )
+                 )
 
         entries = []
         add_entry = entries.append

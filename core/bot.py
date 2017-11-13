@@ -5,9 +5,7 @@ import collections
 import contextlib
 import discord
 import emoji
-import functools
 import inspect
-import json
 import logging
 import random
 import re

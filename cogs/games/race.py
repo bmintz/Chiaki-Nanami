@@ -3,7 +3,6 @@ import asyncqlio
 import contextlib
 import discord
 import emoji
-import heapq
 import itertools
 import random
 import time
@@ -168,9 +167,9 @@ class RacingSession:
         self.pot = pot
         self._winners = set()
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
-                      .set_author(name='Race has started!')
-                      .set_footer(text='Current Leader: None')
-                      )
+                       .set_author(name='Race has started!')
+                       .set_footer(text='Current Leader: None')
+                       )
         if self.pot:
             self._track.description = f'Pot: **{self.pot}**{self.ctx.bot.emoji_config.money}'
 
@@ -221,8 +220,8 @@ class RacingSession:
         racers = sorted(self.players, key=attrgetter('time_taken'))
         duration = racers[-1].time_taken
         embed = (discord.Embed(title='Results', colour=0x00FF00)
-                .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
-                )
+                 .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
+                 )
 
         others, winners = partition(self._winners.__contains__, racers)
         winners, others = list(winners), itertools.islice(others, 2)

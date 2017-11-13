@@ -134,9 +134,9 @@ class TwoPlayerGameCog(Cog):
         )
 
         return (discord.Embed(colour=0x00FF00, description=description)
-               .set_author(name=title)
-               .set_thumbnail(url=ctx.author.avatar_url)
-               )
+                .set_author(name=title)
+                .set_thumbnail(url=ctx.author.avatar_url)
+                )
 
     async def _invite_member(self, ctx, member):
         invite_embed = self._create_invite(ctx, member)
@@ -154,7 +154,7 @@ class TwoPlayerGameCog(Cog):
         winner_embed = (discord.Embed(colour=0x00FF00, description=f'Game took {result.turns} turns to complete.')
                         .set_thumbnail(url=user.avatar_url)
                         .set_author(name=f'{user} is the winner!')
-                       )
+                        )
 
         await ctx.send(embed=winner_embed)
 

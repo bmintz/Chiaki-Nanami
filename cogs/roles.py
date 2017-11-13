@@ -20,6 +20,7 @@ class SelfRoles(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt)
     role_id = asyncqlio.Column(asyncqlio.BigInt, unique=True)
 
+
 class AutoRoles(TableBase):
     guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
     role_id = asyncqlio.Column(asyncqlio.BigInt)
@@ -310,9 +311,11 @@ class Roles(Cog):
             if verb.endswith('e'):
                 verb = verb[:-1]
 
-            message = (f'{verb.title()}ing {role} failed for some reason... '
-                        'Send this error to the dev if you can:\n'
-                       f'{type(error).__name__}: {error}')
+            message = (
+                f'{verb.title()}ing {role} failed for some reason... '
+                'Send this error to the dev if you can:\n'
+                f'{type(error).__name__}: {error}'
+            )
 
             await ctx.send(message)
 

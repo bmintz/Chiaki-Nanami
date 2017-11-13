@@ -15,6 +15,7 @@ from core.cog import Cog
 
 tag_logger = logging.getLogger(__name__)
 
+
 class TagError(commands.UserInputError):
     pass
 
@@ -41,8 +42,9 @@ class MemberTagPaginator(ListPaginator):
         self.member = member
 
     def _create_embed(self, idx, page):
+        header = f'Tags made by {self.member.display_name}'
         return (super()._create_embed(idx, page)
-                       .set_author(name=f'Tags made by {self.member.display_name}', icon_url=self.member.avatar_url)
+                       .set_author(name=header, icon_url=self.member.avatar_url)
                 )
 
 
@@ -99,7 +101,11 @@ class Tags(Cog):
         except asyncpg.SyntaxOrAccessError:
             # % and similarity aren't supported, which means the owner didn't do
             # CREATE EXTENSION pg_trgm in their database
-            tag_logger.error('pg_trgm extension not created, contact %s to create it for the tags', self.bot.owner)
+            tag_logger.error(
+                f'pg_trgm extension not created, contact {self.bot.owner} '
+                'to create it for the tags'
+            )
+
         else:
             if results:
                 # f-strings can't have backslashes in {}
@@ -271,7 +277,10 @@ class Tags(Cog):
                 """
         params = {'guild_id': ctx.guild.id, 'name': name}
         tags = [tag['name'] async for tag in await ctx.session.cursor(query, params)]
-        entries = itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else ['No results found... :(']
+        entries = (
+            itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else
+            ['No results found... :(']
+        )
 
         pages = ListPaginator(ctx, entries, title=f'Tags relating to {name}')
         await pages.interact()

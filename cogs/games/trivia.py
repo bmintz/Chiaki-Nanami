@@ -1,5 +1,4 @@
 import asyncio
-import asyncpg
 import asyncqlio
 import collections
 import contextlib
@@ -515,8 +514,8 @@ class Trivia(Cog):
     async def trivia_category_remove(self, ctx, name):
         """Removes a custom trivia category."""
         await (ctx.session.delete.table(Category)
-                         .where((Category.guild_id == ctx.guild.id)
-                                & (Category.name == name))
+               .where((Category.guild_id == ctx.guild.id)
+                      & (Category.name == name))
                )
         await ctx.send('\N{OK HAND SIGN}')
 

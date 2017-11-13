@@ -13,7 +13,6 @@ from discord.ext import commands
 
 from .manager import SessionManager
 
-from ..utils import errors
 from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import ListPaginator
@@ -66,11 +65,11 @@ class HangmanSession:
         self._runner = None
 
         self._game_screen = (discord.Embed(colour=0x00FF00)
-                            .set_author(name='Hangman Game Started!')
-                            .add_field(name='Guesses', value='\u200b')
-                            .add_field(name='Average', value=0)
-                            .add_field(name='Instructions', value=INSTRUCTIONS, inline=False)
-                            )
+                             .set_author(name='Hangman Game Started!')
+                             .add_field(name='Guesses', value='\u200b')
+                             .add_field(name='Average', value=0)
+                             .add_field(name='Instructions', value=INSTRUCTIONS, inline=False)
+                             )
 
     def _verify_guess(self, guess):
         lowered = guess.lower()
@@ -212,7 +211,7 @@ class Hangman(Cog):
         type `{prefix}hangman categories`
         """
         if self.manager.session_exists(ctx.channel):
-             return await ctx.send("A hangman game is already running in this channel...")
+            return await ctx.send("A hangman game is already running in this channel...")
 
         words = await self._get_category(ctx, category)
         word = random.choice(words)

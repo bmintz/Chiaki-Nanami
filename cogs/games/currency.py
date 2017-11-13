@@ -4,7 +4,6 @@ import datetime
 import discord
 import enum
 import io
-import itertools
 import math
 import random
 

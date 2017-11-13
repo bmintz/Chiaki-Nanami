@@ -56,6 +56,7 @@ class _Entry(collections.namedtuple('_Entry', 'time event args kwargs created id
         """
         return self.seconds <= 30
 
+
 class BaseScheduler:
     """Manages timing related things.
 
@@ -290,7 +291,7 @@ class DatabaseScheduler(BaseScheduler):
         # asyncio.Event is here to keep it synchronized.
         if getattr(entry, 'short', False):
             # The entry was short, so there's no entry to remove in the database.
-            return 
+            return
         self._db_lock.clear()
         self._loop.create_task(self._remove(entry))
 
