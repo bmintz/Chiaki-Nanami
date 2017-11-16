@@ -421,6 +421,11 @@ class Trivia(Cog):
         print('everything is ok now')
 
     async def _run_trivia(self, ctx, category, cls):
+        if self.manager.session_exists(ctx.channel):
+            return await ctx.send(
+                "There's a Trivia game running in the channel right now. "
+                "Try again when it's done."
+            )
         with self.manager.temp_session(ctx.channel, cls(ctx, category)) as inst:
             await inst.run()
             await asyncio.sleep(1.5)
