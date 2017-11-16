@@ -452,9 +452,8 @@ class MinesweeperSession:
             try:
                 message = await self.ctx.bot.wait_for('message', timeout=120, check=self.check_message)
             except asyncio.TimeoutError:
-                await self.ctx.send(f'{self.ctx.author.mention} You took too long!')
                 await self.edit_board(0, header='Took too long...')
-                return None
+                raise
 
             parsed = self.parse_message(message.content)
             if parsed is None:      # garbage input, ignore.
@@ -567,6 +566,8 @@ class Minesweeper(Cog):
                 x, y = error.point
                 await ctx.send(f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;')
                 time = 0
+            except asyncio.TimeoutError:
+                return await ctx.send(f'{ctx.author.mention} You took too long!')
             except asyncio.CancelledError:
                 return await ctx.send(f'Ok, cya later...')
             else:
