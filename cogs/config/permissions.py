@@ -1,5 +1,4 @@
 import asyncpg
-import asyncqlio
 import discord
 import functools
 import itertools
@@ -7,11 +6,10 @@ import operator
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
-from more_itertools import iterate, one, partition
+from more_itertools import iterate, partition
 
 from ._initroot import InitRoot
 
-from ..tables.base import TableBase
 from ..utils import cache, formats, disambiguate
 from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
@@ -77,25 +75,8 @@ def _walk_parents(command):
     """Walks up a command's parent chain."""
     return iter(iterate(operator.attrgetter('parent'), command).__next__, None)
 
-
-class CommandPermissions(TableBase, table_name='permissions'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True)
-    permissions_guild_id_idx = asyncqlio.Index(guild_id)
-    snowflake = asyncqlio.Column(asyncqlio.BigInt, nullable=True)
-
-    name = asyncqlio.Column(asyncqlio.String)
-    whitelist = asyncqlio.Column(asyncqlio.Boolean)
-
-class Plonks(TableBase):
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True, primary_key=True)
-
-    # this can either be a channel_id or an author_id
-    entity_id = asyncqlio.Column(asyncqlio.BigInt, index=True, primary_key=True)
-
-
 # Some converter utilities I guess
+
 
 class CommandName(BotCommand):
     async def convert(self, ctx, arg):
@@ -200,11 +181,8 @@ class Permissions(InitRoot):
         if await ctx.bot.is_owner(ctx.author):
             return True
 
-        query = (ctx.session.select.from_(Plonks)
-                            .where((Plonks.guild_id == ctx.guild.id)
-                                   & Plonks.entity_id.in_(ctx.channel.id, ctx.author.id))
-                )
-        row = await query.first()
+        query = 'SELECT 1 FROM plonks WHERE guild_id = $1 AND entity_id IN ($2, $3) LIMIT 1;'
+        row = await ctx.db.fetchrow(query, ctx.guild.id, ctx.author.id, ctx.channel.id)
         return row is None
 
     async def on_command_error(self, ctx, error):
@@ -224,38 +202,27 @@ class Permissions(InitRoot):
             # TODO: put this in an embed.
             await ctx.send(message)
 
-    async def _set_one_permission(self, session, guild_id, name, entity, whitelist):
+    async def _set_one_permission(self, connection, guild_id, name, entity, whitelist):
         id = entity.id
-        query = (session.select.from_(CommandPermissions)
-                               .where((CommandPermissions.guild_id == guild_id)
-                                      & (CommandPermissions.name == name)
-                                      & (CommandPermissions.snowflake == id))
-                 )
-
-        row = await query.first()
-
-        if row is None:
-            if whitelist is None:
-                raise InvalidPermission(f'{name} was neither disabled nor enabled...',
-                                        name, whitelist)
-
-            row = CommandPermissions(
-                guild_id=guild_id,
-                snowflake=id,
-                name=name,
-            )
-        elif row.whitelist == whitelist:
-            raise InvalidPermission(f"Already {whitelist}", name, whitelist)
-
         if whitelist is None:
-            await session.remove(row)  # just delete it and move on
-            return
+            query = 'DELETE FROM permissions WHERE guild_id = $1 AND name = $2 AND snowflake = $3;'
+            status = await connection.execute(query, guild_id, name, id, whitelist)
+            count = status.partition(' ')[-2]
 
-        row.whitelist = whitelist
-        await session.add(row)
+            if count == '0':
+                raise InvalidPermission(
+                    f'{name} was neither disabled nor enabled...', name, whitelist
+                )
+        else:
+            query = """INSERT INTO permissions (guild_id, snowflake, name, whitelist)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (guild_id, snowflake, name)
+                     DO UPDATE SET whitelist = $4
+                    """
+            await connection.execute(query, guild_id, name, entity, whitelist)
 
-    async def _bulk_set_permissions(self, session, guild_id, name, *entities, whitelist):
-        ids = unique(e.id for e in entities)
+    async def _bulk_set_permissions(self, connection, guild_id, name, *entities, whitelist):
+        ids = tuple(unique(e.id for e in entities))
         # This was actually extremely hard to do.
         #
         # What we actually need to do was to bulk-insert a bunch of records.
@@ -267,13 +234,13 @@ class Permissions(InitRoot):
         # doesn't return the rows that were modified. The only real way to do
         # this is to delete all the rows, then re-insert them through COPY.
         # This wreaks havoc on the indexes of the table, causing a major
-        # performance penalty, but most of time you don't be constantly
+        # performance penalty, but most of time you don't   be constantly
         # changing the permissions of a certain entity anyway.
-        await (session.delete.table(CommandPermissions)
-                             .where((CommandPermissions.guild_id == guild_id)
-                                    & (CommandPermissions.name == name)
-                                    & (CommandPermissions.snowflake.in_(*ids)))
-               )
+        query = """DELETE FROM permissions
+                   WHERE guild_id = $1 AND name = $2 AND snowflake = ANY($3::bigint[]);
+                """
+        status = await connection.execute(query, guild_id, name, ids)
+        print(status)
 
         if whitelist is None:
             # We don't want it to recreate the permissions during a reset.
@@ -281,26 +248,24 @@ class Permissions(InitRoot):
 
         columns = ('guild_id', 'snowflake', 'name', 'whitelist')
         to_insert = [(guild_id, id, name, whitelist) for id in ids]
-        conn = session.transaction.acquired_connection
 
-        await conn.copy_records_to_table('permissions', columns=columns, records=to_insert)
+        await connection.copy_records_to_table('permissions', columns=columns, records=to_insert)
 
-    async def _set_permissions(self, session, guild_id, name, *entities, whitelist):
+    async def _set_permissions(self, connection, guild_id, name, *entities, whitelist):
         # Because of the bulk-updating method above, we can't exactly run a
         # check to see if any of the rows already exist on the table, as that
         # would just be another wasted query.
         method = self._set_one_permission if len(entities) == 1 else self._bulk_set_permissions
-        await method(session, guild_id, name, *entities, whitelist=whitelist)
+        await method(connection, guild_id, name, *entities, whitelist=whitelist)
 
     @cache.cache(maxsize=None, make_key=lambda a, kw: a[-1])
-    async def _get_permissions(self, session, guild_id):
-        query = (session.select.from_(CommandPermissions)
-                        .where(CommandPermissions.guild_id == guild_id)
-                 )
+    async def _get_permissions(self, connection, guild_id):
+        query = 'SELECT name, snowflake, whitelist FROM permissions WHERE guild_id=$1'
+        records = await connection.fetch(query, guild_id)
 
         lookup = defaultdict(lambda: (set(), set()))
-        async for row in await query.all():
-            lookup[row.snowflake][row.whitelist].add(row.name)
+        for name, snowflake, whitelist in records:
+            lookup[snowflake][whitelist].add(name)
 
         # Converting this to a dict so future retrievals of this via cache
         # don't accidentally modify this.
@@ -310,17 +275,11 @@ class Permissions(InitRoot):
         if not ctx.guild:  # Custom permissions don't really apply in DMs
             return True
 
-        # This check has to be here. Because if we used ctx.reinvoke
-        # in the global on_command_error, the command will fail because
-        # of a race. Since on_command_error is dispatched rather than
-        # awaited, there's a chance that the session will attempt to
-        # do two operations at once, which is wrong.
-
         if await ctx.bot.is_owner(ctx.author):
             return True
 
         # XXX: Should I have a check for if the table/relation actually exists?
-        lookup = await self._get_permissions(ctx.session, ctx.guild.id)
+        lookup = await self._get_permissions(ctx.db, ctx.guild.id)
         if not lookup:
             # "Fast" path
             return True
@@ -401,7 +360,7 @@ class Permissions(InitRoot):
     async def _set_permissions_command(self, ctx, name, *entities, whitelist, type_):
         entities = entities or (Server(ctx.guild), )
 
-        await self._set_permissions(ctx.session, ctx.guild.id, name, *entities, whitelist=whitelist)
+        await self._set_permissions(ctx.db, ctx.guild.id, name, *entities, whitelist=whitelist)
         self._get_permissions.invalidate(None, None, ctx.guild.id)
 
         await self._display_embed(ctx, name, *entities, whitelist=whitelist, type_=type_)
@@ -459,7 +418,7 @@ class Permissions(InitRoot):
                            f'Use `{ctx.command} cog {arg} ` if '
                            f"you're planning to {ctx.command} it...?"
                            )
-                return await ctx.send(message)
+                return await ctx.send(message) 
 
             subs = '\n'.join(map(f'`{ctx.prefix}{{0}}` - {{0.short_doc}}'.format,
                                  ctx.command.commands))
@@ -513,12 +472,9 @@ class Permissions(InitRoot):
         `{prefix}undo` instead.
 
         """
-        # See the block comment in _set_permissions_command to see why
-        # I'm making a new session for this one.
-        await (ctx.session.delete.table(CommandPermissions)
-                                 .where(CommandPermissions.guild_id == ctx.guild.id)
-               )
-
+        query = 'DELETE FROM permissions WHERE guild_id = $1;'
+        status = await ctx.deb.execute(query, ctx.guild.id)
+        print(status)
         self._get_permissions.invalidate(None, None, ctx.guild.id)
 
         await self._display_embed(ctx, None, Server(ctx.guild),
@@ -526,13 +482,16 @@ class Permissions(InitRoot):
 
     async def _bulk_ignore_entries(self, ctx, entries):
         guild_id = ctx.guild.id
-        query = ctx.session.select.from_(Plonks).where(Plonks.guild_id == guild_id)
+        query = 'SELECT entity_id FROM plonks WHERE guild_id = $1;'
 
-        current_plonks = {r.entity_id async for r in await query.all()}
-        to_insert = [(guild_id, e.id) for e in entries if e.id not in current_plonks]
+        ignored = {r[0] for r in await ctx.db.fetch(query, guild_id)}
+        to_insert = [(guild_id, e.id) for e in entries if e.id not in ignored]
 
-        conn = ctx.session.transaction.acquired_connection
-        await conn.copy_records_to_table('plonks', columns=('guild_id', 'entity_id'), records=to_insert)
+        await ctx.db.copy_records_to_table(
+            'plonks',
+            columns=('guild_id', 'entity_id'),
+            records=to_insert
+        )
 
     async def _display_plonked(self, ctx, entries, plonk):
         # things = channels, members
@@ -562,13 +521,13 @@ class Permissions(InitRoot):
         channels_or_members = channels_or_members or [ctx.channel]
 
         if len(channels_or_members) == 1:
-            thing = one(channels_or_members)
-            try:
-                await ctx.session.add(Plonks(guild_id=ctx.guild.id, entity_id=thing.id))
-            except asyncpg.UniqueViolationError:
-                await ctx.send(f"I'm already ignoring {thing}...")
-                raise commands.UserInputError
+            thing = channels_or_members[0]
+            query = 'INSERT INTO plonks (guild_id, entity_id) VALUES ($1, $2);'
 
+            try:
+                await ctx.db.execute(query, ctx.guild.id, thing.id)
+            except asyncpg.UniqueViolationError:
+                return await ctx.send(f"I'm already ignoring {thing}...")
         else:
             await self._bulk_ignore_entries(ctx, channels_or_members)
 
@@ -581,25 +540,27 @@ class Permissions(InitRoot):
 
         If no channel or member is specified, it unignores the current channel.
         """
-        entities = channels_or_members or [ctx.channel]
-        condition = (Plonks.entity_id.in_(*(e.id for e in entities))
-                     if len(entities) == 1 else
-                     Plonks.entity_id == entities[0].id)
+        entities = channels_or_members or (ctx.channel, )
+        if len(entities) == 1:
+            query = 'DELETE FROM plonks WHERE guild_id = $1 AND entity_id = $2;'
+            await ctx.db.execute(query, ctx.guild.id, entities[0].id)
+        else:
+            query = 'DELETE FROM plonks WHERE guild_id = $1 AND entity_id = ANY($2::bigint[]);'
+            await ctx.db.execute(query, ctx.guild.id, [e.id for e in entities])
 
-        await ctx.session.delete.table(Plonks).where((Plonks.guild_id == ctx.guild.id) & condition)
         await self._display_plonked(ctx, entities, plonk=False)
 
     @commands.command(aliases=['plonks'])
     @commands.has_permissions(manage_guild=True)
     async def ignores(self, ctx):
         """Tells you what channels or members are currently ignored in this server."""
-        query = ctx.session.select.from_(Plonks).where(Plonks.guild_id == ctx.guild.id)
+        query = 'SELECT entity_id FROM plonks WHERE guild_id = $1;'
+
         get_ch, get_m = ctx.guild.get_channel, ctx.guild.get_member
         entries = [
-            (get_ch(e.entity_id) or get_m(e.entity_id) or _DummyEntry(e.entity_id)).mention
-            async for e in await query.all()
+            (get_ch(e_id) or get_m(e_id) or _DummyEntry(e_id)).mention
+            for e_id, in await ctx.db.fetch(query, ctx.guild.id)
         ]
-        entries.sort()
 
         if not entries:
             return await ctx.send("I'm not ignoring anything here...")

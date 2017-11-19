@@ -1,6 +1,4 @@
-import asyncqlio
 import collections
-import datetime
 import discord
 import enum
 import io
@@ -10,8 +8,6 @@ import random
 from discord.ext import commands
 from PIL import Image
 
-from ..tables.base import TableBase
-from ..tables.currency import Currency, add_money, get_money
 from ..utils.converter import union
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
@@ -21,32 +17,6 @@ from core.cog import Cog
 
 # Cooldown for ->daily$
 DAILY_CASH_COOLDOWN_TIME = 60 * 60 * 24
-
-
-class GiveEntry(TableBase, table_name='givelog'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    giver = asyncqlio.Column(asyncqlio.BigInt)
-    recipient = asyncqlio.Column(asyncqlio.BigInt)
-    amount = asyncqlio.Column(asyncqlio.Integer)
-    time = asyncqlio.Column(asyncqlio.Timestamp)
-
-
-# Used for the cooldown period.
-# We can't use the ext.command's cooldown handler because that's
-# entirely in memory. Meaning that a bot reboot would reset the cooldown
-# causing infinite dailies.
-class DailyCooldown(TableBase, table_name='daily_cash_cooldowns'):
-    user_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    latest_time = asyncqlio.Column(asyncqlio.Timestamp)
-
-
-class DailyLog(TableBase):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    user_id = asyncqlio.Column(asyncqlio.BigInt)
-    time = asyncqlio.Column(asyncqlio.Timestamp)
-    # time_idx = asyncqlio.Index(time)
-
-    amount = asyncqlio.Column(asyncqlio.BigInt)
 
 
 class Side(enum.Enum):
@@ -139,35 +109,51 @@ class Money(Cog):
     def money_emoji(self):
         return self.bot.emoji_config.money
 
+    async def get_money(self, user_id, *, connection=None):
+        connection = connection or self.bot.pool
+        query = 'SELECT amount FROM currency WHERE user_id = $1;'
+        row = await connection.fetchrow(query, user_id)
+        return row['amount'] if row else 0
+
+    async def add_money(self, user_id, amount, *, connection=None):
+        connection = connection or self.bot.pool
+
+        query = """INSERT INTO currency (user_id, amount) VALUES ($1, $2)
+                   ON CONFLICT (user_id)
+                   DO UPDATE SET amount = currency.amount + $2
+                """
+        await connection.execute(query, user_id, amount)
+
     @commands.command(aliases=['$'])
     async def cash(self, ctx, user: discord.Member = None):
         """Shows how much money you have."""
         user = user or ctx.author
-        money = await get_money(ctx.session, user.id)
-        if not (money and money.amount):
+        amount = await self.get_money(user.id, connection=ctx.db)
+
+        if not amount:
             return await ctx.send(f'{user} has nothing :frowning:')
-        await ctx.send(f'{user} has **{money.amount}** {self.money_emoji}!')
+
+        await ctx.send(f'{user} has **{amount}** {self.money_emoji}!')
 
     @commands.command(aliases=['lb'])
     async def leaderboard(self, ctx):
         """Shows the 10 richest people"""
-        query = (ctx.session.select.from_(Currency)
-                 .where(Currency.amount > 0)
-                 .order_by(Currency.amount, sort_order='desc')
-                 .limit(10)
-                 )
+        query = """SELECT user_id, amount FROM currency
+                   WHERE amount > 0
+                   ORDER BY amount DESC
+                   LIMIT 10;
+                """
 
         get_user = ctx.bot.get_user
-        records = (
-            ((get_user(row.user_id) or _DummyUser(row.user_id)).mention, row.amount)
-            async for row in await query.all()
+        fields = (
+            f'{(get_user(user_id) or _DummyUser(user_id)).mention} with {amount}'
+            for user_id, amount in await ctx.db.fetch(query)
         )
 
         # TODO: Paginate this, this might be a bad idea when the bot gets 
         #       extremely big due to memory issues as all the entries would 
         #       be stored in memory, but it should make things a little 
         #       smoother. Maybe I could chunk it?
-        fields = [f'{user} with {amount}' async for user, amount in records if amount]
         embed = discord.Embed(colour=ctx.bot.colour, description='\n'.join(fields))
         await ctx.send(embed=embed)
 
@@ -180,43 +166,39 @@ class Money(Cog):
         if ctx.author == user:
             return await ctx.send('Yeah... how would that work?')
 
-        m = await get_money(ctx.session, ctx.author.id)
-        if not m or m.amount < amount:
+        money = await self.get_money(ctx.author.id, connection=ctx.db)
+        if money < amount:
             return await ctx.send("You don't have enough...")
 
-        m.amount -= amount
-        await ctx.session.add(m)
-        await add_money(ctx.session, user.id, amount)
+        query = 'UPDATE currency SET amount = amount - $2 WHERE user_id = $1;'
+        await ctx.db.execute(query, ctx.author.id, amount)
+
+        await self.add_money(user.id, amount, connection=ctx.db)
 
         # Also add it to the give log. This is so we can detect someone using
         # alts to give a main account more money.
-        await ctx.session.add(GiveEntry(
-            giver=ctx.author.id,
-            recipient=user.id,
-            amount=amount,
-            time=datetime.datetime.utcnow(),
-        ))
-
+        query = 'INSERT INTO givelog (giver, recipient, amount) VALUES ($1, $2, $3)'
+        await ctx.db.execute(query, ctx.author.id, user.id, amount)
         await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()
     @commands.is_owner()
     async def award(self, ctx, amount: int, *, user: discord.User):
         """Awards some money to a user"""
-        await add_money(ctx.session, user.id, amount)
+        await self.add_money(user.id, amount, connection=ctx.db)
         await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()
     @commands.is_owner()
     async def take(self, ctx, amount: int, *, user: discord.User):
         """Takes some money away from a user"""
-        m = await get_money(ctx.session, user.id)
-        if m is None:
+        money = await self.get_money(user.id, connection=ctx.db)
+        if not money:
             return await ctx.send(f"{user.mention} has no money left. "
                                   "You might be cruel, but I'm not...")
 
-        m.amount = max(m.amount - amount, 0)
-        await ctx.session.add(m)
+        amount = min(money, amount)
+        await self.add_money(user.id, -amount, connection=ctx.db)
         await ctx.send('\N{OK HAND SIGN}')
 
     # =============== Generic gambling commands go here ================
@@ -299,15 +281,13 @@ class Money(Cog):
             return await self._numbered_flip(ctx, side_or_number)
 
         side = side_or_number
+        is_betting = amount is not None
 
-        if amount is not None:
-            row = await get_money(ctx.session, ctx.author.id)
-            if not row or amount > row.amount:
+        if is_betting:
+            money = await self.get_money(ctx.author.id, connection=ctx.db)
+            if money < amount:
                 return await ctx.send("You don't have enough...")
-
-            row.amount -= amount
-        else:
-            row = None
+            new_amount = -amount
 
         # The actual coin flipping. Someone help me make this more elegant.
         actual = random.choices(SIDES, WEIGHTS)[0]
@@ -316,19 +296,19 @@ class Money(Cog):
         if won:
             message = 'Yay, you got it!'
             colour = 0x4CAF50
-            if row:
-                amount_won = amount * 2 #2 + 5 * (actual == Side.edge))
-                row.amount += amount_won
-                message += f'\nYou won **{amount_won}**{self.money_emoji}'
+            if is_betting:
+                new_amount = amount * 2  # 2 + 5 * (actual == Side.edge))
+                message += f'\nYou won **{new_amount}**{self.money_emoji}'
         else:
             message = "Noooooooo, you didn't get it. :("
             colour = 0xf44336
-            if row:
-                lost = f'**{amount}**{self.money_emoji}' if row.amount else '**everything**'
+            if is_betting:
+                lost = '**everything**' if amount == money else f'**{amount}**{self.money_emoji}'
                 message += f'\nYou lost {lost}.'
-        
-        if row: 
-            await ctx.session.add(row)
+
+        if is_betting:
+            query = 'UPDATE currency SET amount = amount + $2 WHERE user_id = $1'
+            await ctx.db.execute(query, ctx.author.id, new_amount)
 
         file = discord.File(f'data/images/coins/{actual}.png', 'coin.png')
 
@@ -343,18 +323,18 @@ class Money(Cog):
     async def daily_cash(self, ctx):
         """Command to give you daily cash (between 50 and 200).
 
-        As the name suggests, you can only use this 
+        As the name suggests, you can only use this
         command every 24 hours.
         """
         author_id = ctx.author.id
         now = ctx.message.created_at
 
         # Check if the person used the command within 24 hours
-        query = ctx.session.select.from_(DailyCooldown).where(DailyCooldown.user_id == author_id)
-        latest = await query.first()
+        query = 'SELECT latest_time FROM daily_cash_cooldowns WHERE user_id = $1;'
+        row = await ctx.db.fetchrow(query, author_id)
 
-        if latest:
-            delta = (now - latest.latest_time).total_seconds()
+        if row:
+            delta = (now - row['latest_time']).total_seconds()
             retry_after = DAILY_CASH_COOLDOWN_TIME - delta
 
             if retry_after > 0:
@@ -364,20 +344,18 @@ class Money(Cog):
                 )
 
         # Update the cooldown
-        await (ctx.session.insert.add_row(DailyCooldown(user_id=author_id, latest_time=now))
-                          .on_conflict(DailyCooldown.user_id)
-                          .update(DailyCooldown.latest_time)
-               )
+        query = """INSERT INTO daily_cash_cooldowns (user_id, latest_time) VALUES ($1, $2)
+                   ON CONFLICT (user_id)
+                   DO UPDATE SET latest_time = $2;
+                """
+        await ctx.db.execute(query, author_id, now)
 
         amount = random.randint(100, 200)
-        await add_money(ctx.session, author_id, amount)
+        await self.add_money(author_id, amount, connection=ctx.db)
 
-        # Add it to the log so we can use this later.
-        await ctx.session.add(DailyLog(
-            user_id=ctx.author.id,
-            time=now,
-            amount=amount,
-        ))
+        # Add it to the daily log so we can use this later
+        query = 'INSERT INTO dailylog (user_id, time, amount) VALUES ($1, $2, $3);'
+        await ctx.db.execute(query, author_id, now, amount)
 
         await ctx.send(
             f'{ctx.author.mention}, for your daily hope you will receive '

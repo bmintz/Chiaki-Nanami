@@ -1,4 +1,3 @@
-import asyncqlio
 import discord
 import datetime
 import itertools
@@ -9,7 +8,6 @@ import traceback
 from discord.ext import commands
 from more_itertools import ilen, partition
 
-from .tables.base import TableBase
 from .utils import errors
 from .utils.disambiguate import DisambiguateGuild
 from .utils.formats import pluralize
@@ -30,21 +28,6 @@ _ignored_exceptions = (
 )
 
 ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
-
-
-class Command(TableBase, table_name='commands'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True, nullable=True)
-    commands_guild_id_idx = asyncqlio.Index(guild_id)
-
-    channel_id = asyncqlio.Column(asyncqlio.BigInt)
-    author_id = asyncqlio.Column(asyncqlio.BigInt, index=True)
-    commands_author_id_idx = asyncqlio.Index(author_id)
-
-    used = asyncqlio.Column(asyncqlio.Timestamp)
-    prefix = asyncqlio.Column(asyncqlio.String)
-    command = asyncqlio.Column(asyncqlio.String, index=True)
-    commands_command_idx = asyncqlio.Index(command)
 
 
 # These functions are usually used for doing ratings
@@ -97,17 +80,20 @@ class Stats(Cog):
         self.bot.command_leaderboard[command] += 1
 
         guild_id = None if ctx.guild is None else ctx.guild.id
-        row = Command(
-            guild_id=guild_id,
-            channel_id=ctx.channel.id,
-            author_id=ctx.author.id,
-            used=ctx.message.created_at,
-            prefix=ctx.prefix,
-            command=command,
-        )
 
-        async with ctx.db.get_session() as s:
-            await s.add(row)
+        query = """INSERT INTO commands (guild_id, channel_id, author_id, used, prefix, command)
+                   VALUES ($1, $2, $3, $4, $5, $6)
+                """
+
+        await ctx.pool.execute(
+            query,
+            guild_id,
+            ctx.channel.id,
+            ctx.author.id,
+            ctx.message.created_at,
+            ctx.prefix,
+            command,
+        )
 
     async def _show_top_commands(self, ctx, n, entries):
         padding = int(math.log10(n)) + 1
@@ -131,10 +117,10 @@ class Stats(Cog):
                    FROM commands
                    GROUP BY command
                    ORDER BY "uses" DESC
-                   LIMIT {n};
+                   LIMIT $1;
                 """
-        results = await (await ctx.session.cursor(query, {'n': n})).flatten()
-        await self._show_top_commands(ctx, n, (r.values() for r in results))
+        results = await ctx.db.fetch(query, n)
+        await self._show_top_commands(ctx, n, results)
 
     @top_commands.group(name='alltimeserver', aliases=['allserver'])
     async def top_commands_alltimeserver(self, ctx, n=10):
@@ -142,15 +128,13 @@ class Stats(Cog):
         query = """SELECT command,
                           COUNT(*) as "uses"
                    FROM commands
-                   WHERE guild_id = {guild_id}
+                   WHERE guild_id = $1
                    GROUP BY command
                    ORDER BY "uses" DESC
-                   LIMIT {n};
+                   LIMIT $2;
                 """
-        params = {'n': n, 'guild_id': ctx.guild.id}
-        results = await (await ctx.session.cursor(query, params)).flatten()
-        print(results)
-        await self._show_top_commands(ctx, n, (tuple(r.values()) for r in results))
+        results = await ctx.db.fetch(query, ctx.guild.id, n)
+        await self._show_top_commands(ctx, n, results)
 
     @commands.command(name='stats')
     async def stats(self, ctx):
@@ -194,15 +178,17 @@ class Stats(Cog):
         """Shows the last n commands you've used."""
         n = min(n, 50)
 
-        query = (ctx.session.select.from_(Command)
-                            .where(Command.author_id == ctx.author.id)
-                            .order_by(Command.used, sort_order='desc')
-                            .offset(1)  # Skip this command.
-                            .limit(n)
-                 )
+        query = """SELECT prefix, command, used FROM commands
+                   WHERE author_id = $1
+                   ORDER BY id DESC
+                   OFFSET 1 -- skip this command
+                   LIMIT $2;
+                """
+        lines = [
+            (f'`{prefix}{command}`', f'Executed {human_timedelta(used)}')
+            for prefix, command, used in await ctx.db.fetch(query, ctx.author.id, n)
+        ]
 
-        lines = [(f'`{row.prefix}{row.command}`', f'Executed {human_timedelta(row.used)}')
-                 async for row in await query.all()]
         title = pluralize(command=n)
         pages = EmbedFieldPages(ctx, lines, title=f"{ctx.author}'s last {title}",
                                 inline=False, lines_per_page=5)

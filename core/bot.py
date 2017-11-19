@@ -1,11 +1,12 @@
 import aiohttp
 import asyncio
-import asyncqlio
+import asyncpg
 import collections
 import contextlib
 import discord
 import emoji
 import inspect
+import json
 import logging
 import random
 import re
@@ -20,7 +21,6 @@ from . import context
 from .cog import Cog
 from .formatter import ChiakiFormatter
 
-from cogs.tables.base import TableBase
 from cogs.utils import errors
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.misc import file_handler
@@ -50,6 +50,29 @@ class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
     def url(self):
         hexes = '-'.join(hex(ord(c))[2:] for c in self.emoji)
         return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
+
+
+async def _set_codec(conn):
+    await conn.set_type_codec(
+            'jsonb',
+            schema='pg_catalog',
+            encoder=json.dumps,
+            decoder=json.loads,
+            format='text'
+    )
+
+
+async def _create_pool(dsn, *, init=None, **kwargs):
+    # credits to danny
+    if init is None:
+        async def new_init(conn):
+            await _set_codec(conn)
+    else:
+        async def new_init(conn):
+            await _set_codec(conn)
+            await init(conn)
+
+    return await asyncpg.create_pool(dsn, init=new_init, **kwargs)
 
 
 _MINIMAL_PERMISSIONS = [
@@ -132,10 +155,9 @@ class Chiaki(commands.Bot):
         self.reset_requested = False
 
         psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
-        self.db = asyncqlio.DatabaseInterface(psql)
-        self.loop.run_until_complete(self._connect_to_db())
+        self.pool = self.loop.run_until_complete(_create_pool(psql, command_timeout=60))
 
-        self.db_scheduler = DatabaseScheduler(self.db, timefunc=datetime.utcnow)
+        self.db_scheduler = DatabaseScheduler(self.pool, timefunc=datetime.utcnow)
         self.db_scheduler.add_callback(self._dispatch_from_scheduler)
 
         for ext in config.extensions:
@@ -174,20 +196,8 @@ class Chiaki(commands.Bot):
     def _dispatch_from_scheduler(self, entry):
         self.dispatch(entry.event, entry)
 
-    async def _connect_to_db(self):
-        # Unfortunately, while DatabaseInterface.connect takes in **kwargs, and
-        # passes them to the underlying connector, the AsyncpgConnector doesn't
-        # take them AT ALL. This is a big problem for my case, because I use JSONB
-        # types, which requires the type_codec to be set first (they need to be str).
-        #
-        # As a result I have to explicitly use json.dumps when storing them,
-        # which is rather annoying, but doable, since I only use JSONs in two
-        # places (reminders and welcome/leave messages).
-        await self.db.connect()
-
     async def close(self):
         await self.session.close()
-        await self.db.close()
         self._game_task.cancel()
         await super().close()
 
@@ -211,41 +221,6 @@ class Chiaki(commands.Bot):
         for alias, cog in list(aliases.items()):
             if cog is real_cog:
                 del aliases[alias]
-
-    def load_extension(self, name):
-        super().load_extension(name)
-
-        # Bind all the tables to set up tables that were added here.
-        self.table_base = self.db.bind_tables(TableBase)
-
-    def unload_extension(self, name):
-        super().unload_extension(name)
-
-        # Delete the tables so that we don't have old table references
-        for k, v in list(self.table_base.tables.items()):
-            if _is_submodule(name, v.__module__):
-                del self.table_base.tables[k]
-
-        self.table_base.setup_tables()
-
-    async def create_tables(self):
-        # This hack is here because asyncqlio doesn't make a query that checks
-        # if an existing index is ok. Maybe I should make an issue this but
-        # MySQL doesn't support CREATE INDEX IF NOT EXISTS which might make
-        # the issue even harder.
-
-        old_idx_ddl_sql = asyncqlio.Index.get_ddl_sql
-
-        def new_ddl_sql(index):
-            return old_idx_ddl_sql(index).replace('INDEX', 'INDEX IF NOT EXISTS', 1)
-
-        asyncqlio.Index.get_ddl_sql = new_ddl_sql
-        try:
-            for table in self.table_base.tables.values():
-                await table.create()
-        finally:
-            asyncqlio.Index.get_ddl_sql = old_idx_ddl_sql
-
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
@@ -336,7 +311,7 @@ class Chiaki(commands.Bot):
             #
             # This solution is dirty but since I'm only doing it once here
             # it's fine. Besides it works anyway.
-            while ctx.session:
+            while ctx.db:
                 await asyncio.sleep(0)
 
             try:

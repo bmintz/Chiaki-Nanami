@@ -1,4 +1,4 @@
-Some terms in diep.io that (hopefully!) everyone should know!
+# Some terms in diep.io that (hopefully!) everyone should know!
 Annihilator
 Arena Closer
 Assassin

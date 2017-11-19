@@ -8,8 +8,6 @@ from more_itertools import one
 
 from .manager import SessionManager
 
-from ..tables.currency import Currency, add_money
-
 from core.cog import Cog
 
 
@@ -29,7 +27,25 @@ class RussianRouletteSession:
         self._full = asyncio.Event()
         self._required_message = f'{ctx.prefix}click'
 
-    async def add_member(self, member, amount):
+    async def _update_pot(self, member, amount, *, connection):
+        if amount is None:
+            return
+
+        if amount <= 0:
+            raise InvalidGameState(f"How can you bet {amount} anyway?")
+
+        currency = self.context.bot.get_cog('Money')
+        if currency is None:
+            raise InvalidGameState("Betting isn't available right now. Please try again later.")
+
+        money = await currency.get_money(member.id, connection=connection)
+        if money < amount:
+            raise InvalidGameState(f"{member.mention}, you don't have enough...")
+
+        await currency.add_money(member.id, -amount)
+        self.pot += amount
+
+    async def add_member(self, member, amount, *, connection):
         if self._full.is_set():
             raise InvalidGameState("Sorry... you were late...")
 
@@ -40,15 +56,7 @@ class RussianRouletteSession:
             if amount <= 0:
                 raise InvalidGameState("Yeah... no. Bet something for once!")
 
-            async with self.context.db.get_session() as session:
-                query = session.select.from_(Currency).where(Currency.user_id == member.id)
-                row = await query.first()
-                if not row or row.amount < amount:
-                    raise InvalidGameState(f"{member.mention}, you don't have enough...")
-
-                row.amount -= amount
-                await session.add(row)
-                self.pot += amount
+            await self._update_pot(member, amount, connection=connection)
 
         self.players.appendleft(member)
 
@@ -104,19 +112,27 @@ class RussianRouletteSession:
             self.players.append(current)
 
     async def run(self):
-        with contextlib.suppress(asyncio.TimeoutError):
-            await self.wait_until_full()
+        await self.context.release()
+        try:
+            with contextlib.suppress(asyncio.TimeoutError):
+                await self.wait_until_full()
 
-        self._check_number_players()
-        await self._loop()
+            self._check_number_players()
+            await self._loop()
 
-        await asyncio.sleep(random.uniform(1, 2))
-        return self.players.popleft()
+            await asyncio.sleep(random.uniform(1, 2))
+            return self.players.popleft()
+        finally:
+            # Regardless of whether or not we had enough players
+            # we must re-acquire the connection so we can update the
+            # players' amounts accordingly.
+            await self.context.acquire()
 
 
 class RussianRoulette(Cog):
     """The ultimate test of luck."""
-    def __init__(self):
+    def __init__(self, bot):
+        super().__init__(bot)
         self.manager = SessionManager()
 
     @commands.command(name='russianroulette', aliases=['rusr'])
@@ -131,7 +147,7 @@ class RussianRoulette(Cog):
         if session is None:
             with self.manager.temp_session(ctx.channel, RussianRouletteSession(ctx)) as inst:
                 try:
-                    await inst.add_member(ctx.author, amount)
+                    await inst.add_member(ctx.author, amount, connection=ctx.db)
                 except InvalidGameState as e:
                     return await ctx.send(e)
 
@@ -144,18 +160,18 @@ class RussianRoulette(Cog):
                     winner = await inst.run()
                 except InvalidGameState as e:
                     if amount is not None:
-                        # We can assert that there will only be one racer because there
-                        # must be at least two players.
-                        user = one(inst.players)
-                        await add_money(ctx.session, user.id, amount)
+                        currency = self.bot.get_cog('Money')
+                        if currency:
+                            # We can assert that there will only be one racer because there
+                            # must be at least two players.
+                            user = one(inst.players)
+                            await currency.add_money(user.id, amount, connection=ctx.db)
 
                     return await ctx.send(e)
 
             if inst.pot:
-                await (ctx.session.update.table(Currency)
-                                  .set(Currency.amount + inst.pot)
-                                  .where(Currency.user_id == winner.id)
-                       )
+                query = 'UPDATE currency SET amount = currency.amount + $1 WHERE user_id = $2'
+                await ctx.db.execute(query, inst.pot, winner.id)
                 extra = f'You win **{inst.pot}**{ctx.bot.emoji_config.money}. Hope that was worth it...'
             else:
                 extra = ''
@@ -164,7 +180,7 @@ class RussianRoulette(Cog):
 
         else:
             try:
-                await session.add_member(ctx.author, amount)
+                await session.add_member(ctx.author, amount, connection=ctx.db)
             except InvalidGameState as e:
                 return await ctx.send(e)
 
@@ -172,4 +188,4 @@ class RussianRoulette(Cog):
 
 
 def setup(bot):
-    bot.add_cog(RussianRoulette())
+    bot.add_cog(RussianRoulette(bot))

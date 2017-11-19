@@ -1,5 +1,4 @@
 import asyncio
-import asyncqlio
 import contextlib
 import datetime
 import discord
@@ -11,8 +10,7 @@ from collections import Counter, namedtuple
 from discord.ext import commands
 from operator import attrgetter
 
-from .tables.base import TableBase
-from .utils import dbtypes, errors, formats, time
+from .utils import errors, formats, time
 from .utils.context_managers import temp_attr
 from .utils.converter import union
 from .utils.jsonf import JSONFile
@@ -20,47 +18,6 @@ from .utils.misc import ordinal
 from .utils.paginator import ListPaginator, EmbedFieldPages
 
 from core.cog import Cog
-
-
-class Warn(TableBase, table_name='warn_entries'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-
-    guild_id = asyncqlio.Column(asyncqlio.BigInt)
-    user_id = asyncqlio.Column(asyncqlio.BigInt)
-    mod_id = asyncqlio.Column(asyncqlio.BigInt)
-    reason = asyncqlio.Column(asyncqlio.String(2000))
-    warned_at = asyncqlio.Column(asyncqlio.Timestamp)
-
-
-# XXX: Should I have the timeout and punishments as one table?
-class WarnTimeout(TableBase, table_name='warn_timeouts'):
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    timeout = asyncqlio.Column(dbtypes.Interval)
-
-
-class WarnPunishment(TableBase, table_name='warn_punishments'):
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    warns = asyncqlio.Column(asyncqlio.SmallInt, primary_key=True)
-    type = asyncqlio.Column(asyncqlio.String(32))
-    duration = asyncqlio.Column(asyncqlio.Integer, default=0)
-
-
-class MuteRole(TableBase, table_name='muted_roles'):
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    role_id = asyncqlio.Column(asyncqlio.BigInt)
-
-
-class _ConflictColumns(namedtuple('_ConflictColumns', 'columns')):
-    """Hack to support multiple columns for on_conflict"""
-    __slots__ = ()
-
-    @property
-    def quoted_name(self):
-        return ', '.join(c.quoted_name for c in self.columns)
-
-
-WarnPunishmentCC = _ConflictColumns((WarnPunishment.guild_id, WarnPunishment.warns))
-del _ConflictColumns
 
 
 # Dummy punishment class for default warn punishment
@@ -361,10 +318,10 @@ class Moderator(Cog):
                 f"```py\n{type(cause).__name__}: {cause}```"
             )
 
-    async def _get_warn_timeout(self, session, guild_id):
-        query = session.select(WarnTimeout).where(WarnTimeout.guild_id == guild_id)
-        timeout = await query.first()
-        return timeout.timeout if timeout else datetime.timedelta(minutes=15)
+    async def _get_warn_timeout(self, connection, guild_id):
+        query = 'SELECT timeout FROM warn_timeouts WHERE guild_id = $1;'
+        row = await connection.fetchrow(query, guild_id)
+        return row['timeout'] if row else datetime.timedelta(minutes=15)
 
     @commands.command(usage=['@XenaWolf#8379 NSFW'])
     @commands.has_permissions(manage_messages=True)
@@ -372,58 +329,57 @@ class Moderator(Cog):
         """Warns a user (obviously)"""
         self._check_user(ctx, member)
         author, current_time, guild_id = ctx.author, ctx.message.created_at, ctx.guild.id
-        timeout = await self._get_warn_timeout(ctx.session, guild_id)
-        query = (ctx.session.select.from_(Warn)
-                                   .where((Warn.guild_id == guild_id)
-                                          & (Warn.user_id == member.id)
-                                          & (Warn.warned_at > current_time - timeout)))
-        warn_queue = [r async for r in await query.all()]
+        timeout = await self._get_warn_timeout(ctx.db, guild_id)
+
+        query = """SELECT warned_at FROM warn_entries
+                   WHERE guild_id = $1 AND user_id = $2 AND warned_at + $3 > $4
+                   ORDER BY id
+                """
+        records = await ctx.db.fetch(query, guild_id, member.id, timeout, current_time)
+        warn_queue = [r[0] for r in records]
 
         try:
             last_warn = warn_queue[-1]
         except IndexError:
             pass
         else:
-            retry_after = (current_time - last_warn.warned_at).total_seconds()
+            retry_after = (current_time - last_warn).total_seconds()
             if retry_after <= 60:
                 # Must throw an error because return await triggers on_command_completion
                 # Which would end up logging a case even though it doesn't work.
                 raise RuntimeError(f"{member} has been warned already, try again in "
                                    f"{60 - retry_after :.2f} seconds...")
 
-        entry = Warn(
-            guild_id=guild_id,
-            user_id=member.id,
-            mod_id=author.id,
-            reason=reason,
-            warned_at=current_time,
-        )
+        # Add the warn
+        query = """INSERT INTO warn_entries (guild_id, user_id, mod_id, reason, warned_at)
+                   VALUES ($1, $2, $3, $4, $5)
+                """
+        await ctx.db.execute(query, guild_id, member.id, author.id, reason, current_time)
 
-        await ctx.session.add(entry)
+        # See if there's a punishment
         current_warn_number = len(warn_queue) + 1
-        query = (ctx.session.select(WarnPunishment)
-                            .where((WarnPunishment.guild_id == guild_id)
-                                   & (WarnPunishment.warns == current_warn_number)))
+        query = 'SELECT type, duration FROM warn_punishments WHERE guild_id = $1 AND warns = $2'
+        row = await ctx.db.fetchrow(query, guild_id, current_warn_number)
 
-        punishment = await query.first()
-        if punishment is None:
+        if row is None:
             if current_warn_number == 3:
-                punishment = _default_punishment
+                row = _default_punishment
             else:
                 return await ctx.send(f"\N{WARNING SIGN} Warned {member.mention} successfully!")
 
         # Auto-punish the user
         args = member,
-        duration = punishment.duration
+        duration = row['duration']
         if duration > 0:
             args += duration,
             punished_for = f' for {time.duration_units(duration)}'
         else:
             punished_for = f''
 
-        punish = punishment.type
-        punishment_command = getattr(self, punish)
+        punishment = row['type']
+        punishment_command = getattr(self, punishment)
         punishment_reason = f'{reason}\n({ordinal(current_warn_number)} warning)'
+
         # Patch out the context's send method because we don't want it to be
         # sending the command's message.
         # XXX: Should I suppress the error?
@@ -432,7 +388,7 @@ class Moderator(Cog):
 
         message = (
             f"{member.mention} has {current_warn_number} warnings! "
-            f"**It's punishment time!** Today I'll {punish} you{punished_for}! "
+            f"**It's punishment time!** Today I'll {punishment} you{punished_for}! "
             "\N{SMILING FACE WITH HORNS}"
         )
         await ctx.send(message)
@@ -456,8 +412,8 @@ class Moderator(Cog):
     @commands.has_permissions(manage_messages=True)
     async def clear_warns(self, ctx, member: discord.Member):
         """Clears a member's warns."""
-        await ctx.session.delete.table(Warn).where((Warn.guild_id == ctx.guild.id)
-                                                   & (Warn.user_id == member.id))
+        query = 'DELETE FROM warn_entries WHERE guild_id = $1 AND user_id = $2'
+        await ctx.db.execute(query, ctx.guild.id, member.id)
         await ctx.send(f"{member}'s warns have been reset!")
 
     @commands.command(name='warnpunish', usage=['4 softban', '5 ban'])
@@ -485,30 +441,25 @@ class Moderator(Cog):
         else:
             true_duration = 0
 
+        query = """INSERT INTO warn_punishments (guild_id, warns, type, duration)
+                   VALUES ($1, $2, $3, $4)
+                   ON CONFLICT (guild_id, warns)
+                   DO UPDATE SET type = $3, duration = $4;
+                """
+        await ctx.db.execute(query, ctx.guild.id, num, lowered, true_duration)
+
         extra = f'for {duration}' if duration else ''
-
-        row = WarnPunishment(
-            guild_id=ctx.guild.id,
-            warns=num,
-            type=lowered,
-            duration=true_duration,
-        )
-
-        await (ctx.session.insert.add_row(row)
-                          .on_conflict(WarnPunishmentCC)
-                          .update(WarnPunishment.type, WarnPunishment.duration))
-
         await ctx.send(f'\N{OK HAND SIGN} if a user has been warned {num} times, '
                        f'I will **{lowered}** them {extra}.')
 
     @commands.command(name='warnpunishments', aliases=['warnpl'])
     async def warn_punishments(self, ctx):
         """Shows this list of warn punishments"""
-        query = ctx.session.select(WarnPunishment).where((WarnPunishment.guild_id == ctx.guild.id))
-        punishments = [(p.warns, p.type.title(), p.duration) async for p in await query.all()]
-        if not punishments:
-            punishments += (_default_punishment,)
-        punishments.sort()
+        query = """SELECT warns, initcap(type), duration FROM warn_punishments
+                   WHERE guild_id = $1
+                   ORDER BY warns;
+                """
+        punishments = await ctx.db.fetch(query, ctx.guild.id) or (_default_punishment, )
 
         entries = (
             f'{warns} strikes => **{type}** {f"for {time.duration_units(duration)}" if duration else ""}'
@@ -524,10 +475,11 @@ class Moderator(Cog):
         """Sets the maximum time between the oldest warn and the most recent warn.
         If a user hits a warn limit within this timeframe, they will be punished.
         """
-        timeout = datetime.timedelta(seconds=duration.duration)
-        row = WarnTimeout(guild_id=ctx.guild.id, timeout=timeout)
-        await (ctx.session.insert.add_row(row).on_conflict(WarnTimeout.guild_id)
-                          .update(WarnTimeout.timeout))
+        query = """INSERT INTO warn_timeouts (guild_id, timeout) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET timeout = $2
+                """
+        await ctx.db.execute(query, ctx.guild.id, datetime.timedelta(seconds=duration.duration))
 
         await ctx.send(
             f'Alright, if a user was warned within **{duration}** '
@@ -541,30 +493,38 @@ class Moderator(Cog):
         if member.id == ctx.bot.user.id:
             raise errors.InvalidUserArgument("Hey, what did I do??")
 
-    async def _get_muted_role(self, guild):
-        async with self.bot.db.get_session() as session:
-            row = await session.select.from_(MuteRole).where(MuteRole.guild_id == guild.id).first()
+    async def _get_muted_role(self, guild, connection=None):
+        connection = connection or self.bot.pool
+
+        query = 'SELECT role_id FROM muted_roles WHERE guild_id = $1'
+        row = await connection.fetchrow(query, guild.id)
         if row is None:
             return None
 
-        return discord.utils.get(guild.roles, id=row.role_id)
+        return discord.utils.get(guild.roles, id=row['role_id'])
 
-    async def _update_muted_role(self, guild, new_role):
+    async def _update_muted_role(self, guild, new_role, connection=None):
+        connection = connection or self.bot.pool
         await self._regen_muted_role_perms(new_role, *guild.channels)
-        async with self.bot.db.get_session() as session:
-            await (session.insert.add_row(MuteRole(guild_id=guild.id, role_id=new_role.id))
-                                 .on_conflict(MuteRole.guild_id)
-                                 .update(MuteRole.role_id))
 
-    async def _create_muted_role(self, guild):
+        query = """INSERT INTO muted_roles (guild_id, role_id) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET role_id = $2
+                """
+        await connection.execute(query, guild.id, new_role.id)
+
+    async def _create_muted_role(self, guild, connection=None):
         role = await guild.create_role(name='Chiaki-Muted', colour=discord.Colour.red())
-        await self._update_muted_role(guild, role)
+        await self._update_muted_role(guild, role, connection)
         return role
 
-    async def _setdefault_muted_role(self, server):
+    async def _setdefault_muted_role(self, server, connection=None):
         # Role could've been deleted, which means it will be None.
         # So we have to account for that.
-        return await self._get_muted_role(server) or await self._create_muted_role(server)
+        return (
+            await self._get_muted_role(server, connection)
+            or await self._create_muted_role(server, connection)
+        )
 
     @staticmethod
     async def _regen_muted_role_perms(role, *channels):
@@ -573,8 +533,8 @@ class Moderator(Cog):
         for channel in channels:
             await channel.set_permissions(role, **muted_permissions)
 
-    async def _do_mute(self, member, when):
-        mute_role = await self._setdefault_muted_role(member.guild)
+    async def _do_mute(self, member, when, connection=None):
+        mute_role = await self._setdefault_muted_role(member.guild, connection=None)
         if mute_role in member.roles:
             raise errors.InvalidUserArgument(f'{member.mention} is already been muted... ;-;')
 
@@ -598,7 +558,7 @@ class Moderator(Cog):
         """
         self._check_user(ctx, member)
         when = ctx.message.created_at + duration.delta
-        await self._do_mute(member, when)
+        await self._do_mute(member, when, ctx.db)
         await ctx.send(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
@@ -610,29 +570,25 @@ class Moderator(Cog):
 
         # early out for the case of premature role removal,
         # either by ->unmute or manually removing the role
-        role = await self._get_muted_role(ctx.guild)
+        role = await self._get_muted_role(ctx.guild, ctx.db)
         if role not in member.roles:
             return await ctx.send(f'{member} is not muted...')
 
-        # This fourth condition is in case we have this scenario:
-        # - Member was muted
-        # - Mute role was changed while the user was muted
-        # - Member was muted again with the new role.
         query = """SELECT expires
                    FROM schedule
                    WHERE event = 'mute_complete'
                    AND args_kwargs #>> '{args,0}' = $1
                    AND args_kwargs #>> '{args,1}' = $2
+
+                   -- The below condition is in case we have this scenario:
+                   -- - Member was muted
+                   -- - Mute role was changed while the user was muted
+                   -- - Member was muted again with the new role.
                    AND args_kwargs #>> '{args,2}' = $3
                    LIMIT 1;
                 """
 
-        # We have to go to the lowest level possible, because simply using
-        # ctx.session.cursor WILL NOT work, as it uses str.format to format
-        # the parameters, which will throw a KeyError due to the {} in the
-        # JSON operators.
-        session = ctx.session.transaction.acquired_connection
-        entry = await session.fetchrow(query, str(ctx.guild.id), str(member.id), str(role.id))
+        entry = await ctx.db.fetchrow(query, str(ctx.guild.id), str(member.id), str(role.id))
         if entry is None:
             return await ctx.send(f"{member} has been perm-muted, you must've "
                                   "added the role manually or something...")
@@ -641,8 +597,9 @@ class Moderator(Cog):
         await ctx.send(f'{member} has {time.human_timedelta(when)} remaining. '
                        f'They will be unmuted on {when: %c}.')
 
-    async def _remove_time_entry(self, guild, member, session, *, event='mute_complete'):
-        query = """SELECT *
+    async def _remove_time_entry(self, guild, member, connection=None, *, event='mute_complete'):
+        connection = connection or self.bot.pool
+        query = """SELECT id, expires
                    FROM schedule
                    WHERE event = $3
                    AND args_kwargs #>> '{args,0}' = $1
@@ -650,28 +607,23 @@ class Moderator(Cog):
                    ORDER BY expires
                    LIMIT 1;
                 """
-        # We have to go to the lowest level possible, because simply using
-        # session.cursor WILL NOT work, as it uses str.format to format
-        # the parameters, which will throw a KeyError due to the {} in the
-        # JSON operators.
-        session = session.transaction.acquired_connection
-        entry = await session.fetchrow(query, str(guild.id), str(member.id), event)
+        entry = await connection.fetchrow(query, str(guild.id), str(member.id), event)
         if entry is None:
             return None
 
         await self.bot.db_scheduler.remove(discord.Object(id=entry['id']))
-        return entry
+        return entry['expires']
 
     @commands.command(usage=['@rjt#2336 sorry bb'])
     @commands.has_permissions(manage_messages=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: str=None):
         """Unmutes a user (obviously)"""
-        role = await self._get_muted_role(member.guild)
+        role = await self._get_muted_role(member.guild, ctx.db)
         if role not in member.roles:
             return await ctx.send(f"{member} hasn't been muted!")
 
         await member.remove_roles(role)
-        await self._remove_time_entry(member.guild, member, ctx.session)
+        await self._remove_time_entry(member.guild, member, ctx.db)
         await ctx.send(f'{member.mention} can now speak again... '
                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
@@ -697,13 +649,13 @@ class Moderator(Cog):
         when I attempt to mute someone. This is just in case you already have a
         muted role and would like to use that one instead.
         """
-        await self._update_muted_role(ctx.guild, role)
+        await self._update_muted_role(ctx.guild, role, ctx.db)
         await ctx.send(f'Set the muted role to **{role}**!')
 
     @commands.command(name='muterole', aliases=['mur'])
     async def muted_role(self, ctx):
         """Gets the current muted role."""
-        role = await self._get_muted_role(ctx.guild)
+        role = await self._get_muted_role(ctx.guild, ctx.db)
         msg = ("There is no muted role, either set one now or let me create one for you."
                if role is None else f"The current muted role is **{role}**")
         await ctx.send(msg)
@@ -758,7 +710,7 @@ class Moderator(Cog):
         """Unbans the user (obviously)"""
 
         await ctx.guild.unban(user.user)
-        await self._remove_time_entry(ctx.guild, user, ctx.session, event='tempban_complete')
+        await self._remove_time_entry(ctx.guild, user, ctx.db, event='tempban_complete')
         await ctx.send(f"Done. What did {user.user} do to get banned in the first place...?")
 
     @commands.command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
@@ -819,11 +771,10 @@ class Moderator(Cog):
 
     async def on_member_join(self, member):
         # Prevent mute-evasion
-        async with self.bot.db.get_session() as session:
-            entry = await self._remove_time_entry(member.guild, member, session)
-            if entry:
-                # mute them for an extra 60 mins
-                await self._do_mute(member, entry['expires'] + datetime.timedelta(seconds=3600))
+        expires = await self._remove_time_entry(member.guild, member)
+        if expires:
+            # mute them for an extra 60 mins
+            await self._do_mute(member, expires + datetime.timedelta(seconds=3600))
 
     async def on_member_update(self, before, after):
         # In the event of a manual unmute, this has to be covered.
@@ -833,12 +784,11 @@ class Moderator(Cog):
 
         role = await self._get_muted_role(before.guild)
         if role in removed_roles:
-            async with self.bot.db.get_session() as session:
-                # We need to remove this guy from the scheduler in the event of
-                # a manual unmute. Because if the guy was muted again, the old
-                # mute would still be in effect. So it would just remove the
-                # muted role.
-                await self._remove_time_entry(before.guild, before, session)
+            # We need to remove this guy from the scheduler in the event of
+            # a manual unmute. Because if the guy was muted again, the old
+            # mute would still be in effect. So it would just remove the
+            # muted role.
+            await self._remove_time_entry(before.guild, before)
 
     # XXX: Should I even bother to remove unbans from the scheduler in the event
     #      of a manual unban?

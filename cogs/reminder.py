@@ -22,10 +22,6 @@ class Reminder(Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def __unload(self):
-        with contextlib.suppress(BaseException):
-            self.manager.close()
-
     @staticmethod
     def _create_reminder_embed(ctx, when, message):
         # Discord attempts to be smart with breaking up long lines. If a line
@@ -47,6 +43,7 @@ class Reminder(Cog):
     async def _add_reminder(self, ctx, when, message):
         channel_id = ctx.channel.id if ctx.guild else None
         args = (ctx.author.id, channel_id, message)
+
         await ctx.bot.db_scheduler.add_abs(when, 'reminder_complete', args)
         await ctx.send(embed=self._create_reminder_embed(ctx, when, message))
 
@@ -63,7 +60,7 @@ class Reminder(Cog):
 
         You can't cancel reminders that you've set to go off in 30 seconds or less.
         """
-        query = """SELECT *
+        query = """SELECT id, expires, args_kwargs
                    FROM schedule
                    WHERE event = 'reminder_complete'
                    AND args_kwargs #>> '{args,0}' = $1
@@ -72,18 +69,13 @@ class Reminder(Cog):
                    LIMIT 1;
                 """
 
-        # We have to go to the lowest level possible, because simply using
-        # ctx.session.cursor WILL NOT work, as it uses str.format to format
-        # the parameters, which will throw a KeyError due to the {} in the
-        # JSON operators.
-        session = ctx.session.transaction.acquired_connection
-        entry = await session.fetchrow(query, str(ctx.author.id), index - 1)
+        entry = await ctx.db.fetchrow(query, str(ctx.author.id), index - 1)
         if entry is None:
             return await ctx.send(f'Reminder #{index} does not exist... baka...')
 
         await ctx.bot.db_scheduler.remove(discord.Object(id=entry['id']))
 
-        _, channel_id, message = json.loads(entry['args_kwargs'])['args']
+        _, channel_id, message = entry['args_kwargs']['args']
         channel = self.bot.get_channel(channel_id) or 'deleted-channel'
         # In case the channel doesn't exist anymore
         server = getattr(channel, 'guild', None)
@@ -108,12 +100,7 @@ class Reminder(Cog):
                    AND args_kwargs #>> '{args,0}' = $1
                    ORDER BY expires;
                 """
-        # We have to go to the lowest level possible, because simply using
-        # ctx.session.cursor WILL NOT work, as it uses str.format to format
-        # the parameters, which will throw a KeyError due to the {} in the
-        # JSON operators.
-        session = ctx.session.transaction.acquired_connection
-        reminders = await session.fetch(query, str(ctx.author.id))
+        reminders = await ctx.db.fetch(query, str(ctx.author.id))
 
         if not reminders:
             return await ctx.send("You have no reminders at the moment.")
