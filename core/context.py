@@ -25,7 +25,11 @@ class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
 class Context(commands.Context):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.session = None
+        self.db = None
+
+    @property
+    def pool(self):
+        return self.bot.pool
 
     @property
     def clean_prefix(self):
@@ -33,15 +37,10 @@ class Context(commands.Context):
         user = self.bot.user
         return self.prefix.replace(user.mention, f'@{user.name}')
 
-    @property
-    def db(self):
-        """The bot's database connection interface, if applicable."""
-        return getattr(self.bot, 'db', None)
-
     async def _acquire(self):
-        if self.session is None:
-            self.session = await self.db.get_session().__aenter__()
-        return self.session
+        if self.db is None:
+            self.db = await self.pool.acquire()
+        return self.db
 
     def acquire(self):
         """Acquires a database session.
@@ -66,10 +65,9 @@ class Context(commands.Context):
         This is the method that is called automatically by the bot,
         NOT Context.release.
         """
-        if self.session is not None:
-            suppress = await self.session.__aexit__(exc_type, exc, tb)
-            self.session = None
-            return suppress
+        if self.db is not None:
+            await self.pool.release(self.db)
+            self.db = None
 
     async def release(self):
         """Closes the current database session.

@@ -134,21 +134,22 @@ class Owner(Cog, hidden=True):
 
         query = self.cleanup_code(query)
 
-        is_multistatement = query.count(';') > 1
-        async with ctx.db.get_session() as session:
-            try:
-                start = time.perf_counter()
-                results = [dict(r) async for r in await session.cursor(query)]
-                dt = (time.perf_counter() - start) * 1000.0
-            except Exception:
-                return await ctx.send(f'```py\n{traceback.format_exc()}\n```')
+        is_multi_statement = query.count(';') > 1
+        method = ctx.db.execute if is_multi_statement else ctx.db.fetch
 
-        if is_multistatement or not results:
+        try:
+            start = time.perf_counter()
+            results = await method(query)
+            dt = (time.perf_counter() - start) * 1000.0
+        except Exception:
+            return await ctx.send(f'```py\n{traceback.format_exc()}\n```')
+
+        if is_multi_statement or not results:
             return await ctx.send(f'`{dt:.2f}ms: {results}`')
 
         print(results)
         num_rows = len(results)
-        headers = list(results[0])
+        headers = list(results[0].keys())
         rendered = _tabulate((list(r.values()) for r in results), headers)
 
         fmt = f'```\n{rendered}\n```\n*Returned {pluralize(row=num_rows)} in {dt:.2f}ms*'
@@ -255,23 +256,6 @@ class Owner(Cog, hidden=True):
                 await self.bot.process_commands(ctx.message)
                 # prevent rate-limiting.
                 await asyncio.sleep(1)
-
-    @commands.command()
-    async def reacquire(self, ctx):
-        """Test command for releasing and reacquiring the database session."""
-        print('releasing session', ctx.session, 'current state:', ctx.session._state)
-        s = ctx.session
-        await ctx.send('Releasing...')
-        await ctx.release()
-
-        print('sleeping...', 'state of sessiom:', s._state)
-        await asyncio.sleep(10)
-
-        print('reacquiring...')
-        await ctx.acquire()
-
-        print('success!', ctx.session, 'state of new session:', ctx.session)
-        await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()
     async def leave(self, ctx, server: DisambiguateGuild):

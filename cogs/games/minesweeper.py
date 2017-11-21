@@ -1,5 +1,4 @@
 import asyncio
-import asyncqlio
 import contextlib
 import discord
 import enum
@@ -14,13 +13,25 @@ from string import ascii_lowercase, ascii_uppercase
 
 from .manager import SessionManager
 
-from ..tables.base import TableBase
 from ..utils.converter import ranged
 from ..utils.misc import emoji_url, nice_time, REGIONAL_INDICATORS
 from ..utils.paginator import BaseReactionPaginator, EmbedFieldPages, page
 from ..utils.time import duration_units
 
 from core.cog import Cog
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS minesweeper_games (
+        id SERIAL PRIMARY KEY,
+        level SMALLINT NOT NULL,
+        won BOOLEAN NOT NULL,
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL
+        played_at TIMESTAMP NOT NULL,
+        time REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS minesweeper_games_time_idx ON TABLE minesweeper_games (time);
+"""
 
 
 class MinesweeperException(Exception):
@@ -31,23 +42,6 @@ class HitMine(MinesweeperException):
     def __init__(self, x, y):
         self.point = x, y
         super().__init__(f'hit a mine on {x + 1} {y + 1}')
-
-
-
-_Table = asyncqlio.table_base()
-
-class MinesweeperGame(TableBase, table_name='minesweeper_games'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-
-    level = asyncqlio.Column(asyncqlio.SmallInt)
-    won = asyncqlio.Column(asyncqlio.Boolean)
-
-    guild_id = asyncqlio.Column(asyncqlio.BigInt)
-    user_id = asyncqlio.Column(asyncqlio.BigInt)
-    played_at = asyncqlio.Column(asyncqlio.Timestamp)
-
-    time = asyncqlio.Column(asyncqlio.Real)
-    minesweeper_time_idx = asyncqlio.Index(time)
 
 
 class MinesweeperLeaderboard(EmbedFieldPages):
@@ -516,27 +510,25 @@ class Minesweeper(Cog):
         self.bot = bot
         self.manager_bucket = {level: SessionManager() for level in Level}
 
-    async def _get_record_text(self, ctx, level, time):
+    async def _get_record_text(self, user_id, level, time, *, connection):
         # Check if it's the world record
         query = """SELECT MIN(time) as "world_record"
                    FROM minesweeper_games
-                   WHERE won AND level = {level};
+                   WHERE won AND level = $1;
                 """
-        world_record = (await ctx.session.fetch(query, {'level': level.value}))['world_record']
-        print(world_record, time)
+        row = await connection.fetchrow(query, level.value)
 
-        if world_record is None or time < world_record:
+        if row is None or time < row['world_record']:
             return "You've broken the world record. Congratulations!!"
 
         # Check if it's a personal best
         query = """SELECT MIN(time) as "pb"
                    FROM minesweeper_games
-                   WHERE won AND level = {level} AND user_id = {user_id};
+                   WHERE won AND level = $1 AND user_id = $2;
                 """
-        params = {'level': level.value, 'user_id': ctx.author.id}
-        personal_best = (await ctx.session.fetch(query, params))['pb']
+        row = await connection.fetchrow(query, level.value, user_id)
 
-        if personal_best is None or time < personal_best:
+        if row is None or time < row['pb']:
             return "This is a new personal best!"
 
         return ''
@@ -556,6 +548,7 @@ class Minesweeper(Cog):
             # more along the lines of flow control.
             won = False
             try:
+                await ctx.release()  # release connection because we won't need the connection for a while.
                 time = await inst.run()
             except HitMine as error:
                 x, y = error.point
@@ -573,7 +566,7 @@ class Minesweeper(Cog):
             extra_text = ''
             # Check if the player broke the world record.
             if record_time:
-                extra_text = await self._get_record_text(ctx, level, time)
+                extra_text = await self._get_record_text(ctx.author.id, level, time, connection=ctx.db)
 
             description = f'{text}\n{extra_text}'
 
@@ -585,15 +578,20 @@ class Minesweeper(Cog):
             await ctx.send(embed=win_embed)
 
         if record_time:
-            await ctx.session.add((MinesweeperGame(
-                level=level.value,
-                won=won,
+            await ctx.acquire()
 
-                guild_id=ctx.guild.id,
-                user_id=ctx.author.id,
-                played_at=ctx.message.created_at,
-                time=time or 0,
-            )))
+            query = """INSERT INTO minesweeper_games (level, won, guild_id, user_id, played_at, time)
+                       VALUES ($1, $2, $3, $4, $5, $6);
+                    """
+            await ctx.db.execute(
+                query,
+                level.value,
+                won,
+                ctx.guild.id,
+                ctx.author.id,
+                ctx.message.created_at,
+                time or 0,
+            )
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     async def minesweeper(self, ctx, level: Level=Level.beginner):
@@ -632,19 +630,19 @@ class Minesweeper(Cog):
     @minesweeper.command(name='leaderboard', aliases=['lb'])
     async def minesweeper_leaderboard(self, ctx, level: Level=Level.beginner):
         """Returns the top 25 fastest times for a difficulty level of minesweeper. Defaults to Beginner."""
-        query = (ctx.session.select.from_(MinesweeperGame)
-                            .where((MinesweeperGame.won == True)
-                                   & (MinesweeperGame.level == level.value))
-                            .order_by(MinesweeperGame.time)
-                            .limit(25)
-                 )
+        query = """SELECT guild_id, user_id, played_at, time FROM minesweeper_games
+                   WHERE won AND level = $1
+                   ORDER BY time
+                   LIMIT 25;
+                """
+        records = await ctx.db.fetch(query, level.value)
 
         entries = []
         add_entry = entries.append
-        async for row in await query.all():
-            name = duration_units(row.time)
-            server = ctx.bot.get_guild(row.guild_id) or f'<Unknown server, ID={row.guild_id}>'
-            value = f'Achieved by: <@{row.user_id}> in {server} on `{nice_time(row.played_at)}`'
+        for guild_id, user_id, played_at, time_ in records:
+            name = duration_units(time_)
+            server = ctx.bot.get_guild(guild_id) or f'<Unknown server, ID={guild_id}>'
+            value = f'Achieved by: <@{user_id}> in {server} on `{nice_time(played_at)}`'
 
             add_entry((name, value))
 

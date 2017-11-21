@@ -1,23 +1,23 @@
-import asyncqlio
 import copy
 
 from discord.ext import commands
+from itertools import starmap
 
-from .tables.base import TableBase
 from .utils.paginator import ListPaginator
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS command_aliases (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        alias TEXT NOT NULL,
+        command TEXT NOT NULL
+    );
 
-class Alias(TableBase, table_name='command_aliases'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, index=True)
-    alias = asyncqlio.Column(asyncqlio.String(2000), index=True)
-    command = asyncqlio.Column(asyncqlio.String(2000))
-
-    alias_idx = asyncqlio.Index(guild_id, alias, unique=True)
-
+    CREATE UNIQUE INDEX IF NOT EXISTS command_aliases_uniq_idx
+    ON command_aliases (guild_id, alias);
+"""
 
 def _first_word(string):
     return string.split(' ', 1)[0]
@@ -66,21 +66,12 @@ class Aliases(Cog):
         if not _first_word_is_command(ctx.bot, command):
             return await ctx.send(f"{command} isn't an actual command...")
 
-        # asyncqlio's upsert is broken. It passes ALL the columns in the query,
-        # including the SERIAL column. This makes it pass None (NULL in SQL) in
-        # the id column, causing it to fail due to a NotNullViolationError.
-        #
-        # I'll submit a PR at some point. This comment is here to remind me
-        # of that.
         query = """INSERT INTO command_aliases (guild_id, alias, command)
-                   VALUES ({guild_id}, {alias}, {command})
+                   VALUES ($1, $2, $3)
                    ON CONFLICT (guild_id, alias)
-                   DO UPDATE SET command = {command};
+                   DO UPDATE SET command = $3;
                 """
-        params = {'guild_id': ctx.guild.id, 'alias': alias, 'command': command}
-        await ctx.session.execute(query, params)
-        # row = Alias(guild_id=ctx.guild.id, alias=alias, command=command)
-        # await ctx.session.insert.add_row(row).on_conflict(AliasCC).update(Alias.command)
+        await ctx.db.execute(query, ctx.guild.id, alias, command)
         await ctx.send(f'Ok, typing "{ctx.prefix}{alias}" will now be '
                        f'the same as "{ctx.prefix}{command}"')
 
@@ -88,29 +79,30 @@ class Aliases(Cog):
     @commands.has_permissions(manage_guild=True)
     async def delalias(self, ctx, *, alias):
         """Deletes an alias."""
-        await ctx.session.delete.table(Alias).where((Alias.guild_id == ctx.guild.id) & (Alias.alias == alias))
+        query = 'DELETE FROM command_aliases WHERE guild_id = $1 AND alias = $2;'
+        await ctx.db.execute(query, ctx.guild.id, alias)
         await ctx.send(f'Ok... bye "{alias}"')
 
     @commands.command()
     async def aliases(self, ctx):
         """Shows all the aliases for the server"""
-        query = ctx.session.select.from_(Alias).where(Alias.guild_id == ctx.guild.id)
-        entries = [f'`{row.alias}` => `{row.command}`' async for row in await query.all()]
+        query = """SELECT alias, command FROM command_aliases
+                   WHERE guild_id = $1
+                   ORDER BY alias;
+                """
+        entries = starmap('`{0}` => `{1}`'.format, await ctx.db.fetch(query, ctx.guild.id))
         pages = ListPaginator(ctx, entries)
         await pages.interact()
 
-    async def _get_alias(self, guild_id, content):
-        async with self.bot.db.get_session() as s:
-            # Must use raw SQL because asyncqlio doesn't support string concatenation,
-            # nor does it support binary ops with columns that aren't setters.
-            query = """SELECT alias, command FROM command_aliases
-                       WHERE guild_id = {guild_id}
-                       AND ({content} ILIKE alias || ' %' OR {content} = alias)
-                       ORDER BY length(alias)
-                       LIMIT 1;
-                    """
-            params = {'guild_id': guild_id, 'content': content}
-            return await s.fetch(query, params)
+    async def _get_alias(self, guild_id, content, *, connection=None):
+        connection = connection or self.bot.pool
+        query = """SELECT alias, command FROM command_aliases
+                   WHERE guild_id = $1
+                   AND ($2 ILIKE alias || ' %' OR $2 = alias)
+                   ORDER BY length(alias)
+                   LIMIT 1;
+                """
+        return await connection.fetchrow(query, guild_id, content)
 
     def _get_prefix(self, message):
         prefixes = self.bot.get_guild_prefixes(message.guild)
@@ -122,13 +114,16 @@ class Aliases(Cog):
             return
         len_prefix = len(prefix)
 
-        alias = await self._get_alias(message.guild.id, message.content[len_prefix:])
-        if not alias:
+        row = await self._get_alias(message.guild.id, message.content[len_prefix:])
+        if row is None:
             return
 
+        alias, command = row
+
         new_message = copy.copy(message)
-        args = message.content[len_prefix + len(alias['alias']):]
-        new_message.content = f"{prefix}{alias['command']}{args}"
+        args = message.content[len_prefix + len(alias):]
+        new_message.content = f"{prefix}{command}{args}"
+
         await self.bot.process_commands(new_message)
 
 

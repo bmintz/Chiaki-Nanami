@@ -21,14 +21,14 @@ class _Entry(collections.namedtuple('_Entry', 'time event args kwargs created id
     @classmethod
     def from_record(cls, record):
         """Returns a database from a record. This is purely internal."""
-        args_kwargs = json.loads(record.args_kwargs)
+        args_kwargs = record['args_kwargs']
         return cls(
-            time=record.expires,
-            event=record.event,
+            time=record['expires'],
+            event=record['event'],
             args=args_kwargs['args'],
             kwargs=args_kwargs['kwargs'],
-            created=record.created,
-            id=record.id,
+            created=record['created'],
+            id=record['id'],
         )
 
     @property
@@ -250,34 +250,29 @@ class QueueScheduler(BaseScheduler):
 
 # Below here is the database form of the scheduler. If you want to just use the
 # scheduler without worrying about using a DB, then ignore everything below here.
-import asyncqlio
-import json
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS schedule (
+        id SERIAL PRIMARY KEY,
+        expires TIMESTAMP NOT NULL,
 
-from . import dbtypes
-
-_Table = asyncqlio.table_base()
-
-
-class _Schedule(_Table, table_name='schedule'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    expires = asyncqlio.Column(asyncqlio.Timestamp)
-    schedule_expires_idx = asyncqlio.Index(expires)
-
-    event = asyncqlio.Column(asyncqlio.String)
-    created = asyncqlio.Column(asyncqlio.Timestamp)
-    args_kwargs = asyncqlio.Column(dbtypes.JSON, default="'{}'::jsonb")
-
+        -- metadata
+        event TEXT NOT NULL,
+        created TIMESTAMP NOT NULL DEFAULT (now() at time zone 'utc'),
+        args_kwargs JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+    CREATE INDEX IF NOT EXISTS schedule_expires_idx ON schedule (expires);
+"""
 
 class DatabaseScheduler(BaseScheduler):
     """An implementation of a Scheduler where a database is used.
 
     Only DBMSs that support JSON types are supported (so basically just PostgresSQL).
     """
+    __schema__ = __schema__
 
-    def __init__(self, db, *, safe_mode=True, **kwargs):
+    def __init__(self, pool, *, safe_mode=True, **kwargs):
         super().__init__(**kwargs)
-        self._db = db
-        self._md = self._db.bind_tables(_Table)
+        self._pool = pool
         self._safe = safe_mode
         self._have_data = asyncio.Event()
         self._db_lock = asyncio.Event()
@@ -300,39 +295,42 @@ class DatabaseScheduler(BaseScheduler):
     def _calculate_delta(time1, time2):
         return (time1 - time2).total_seconds()
 
-    async def _get_entry(self):
+    async def _get_entry(self, connection):
         await self._db_lock.wait()
-        async with self._db.get_session() as session:
-            query = session.select(_Schedule).order_by(_Schedule.expires).limit(1)
-            return await query.first()
+        query = 'SELECT * FROM schedule ORDER BY expires LIMIT 1;'
+        return await connection.fetchrow(query)
 
     async def _get(self):
-        while True:
-            entry = await self._get_entry()  # Get the entry from the database
-            if entry is not None:
-                return _Entry.from_record(entry)
+        async with self._pool.acquire() as connection:
+            while True:
+                entry = await self._get_entry(connection)
+                if entry is not None:
+                    return _Entry.from_record(entry)
 
-            self._have_data.clear()
-            await self._have_data.wait()
+                self._have_data.clear()
+                await self._have_data.wait()
 
     async def _put(self, entry):
         # put the entry in the database
         # We have to use a manual query because of the JSON type.
-        query = """INSERT INTO schedule (created, event, args_kwargs, expires)
-                   VALUES ({t}, {ev}, {ex}::jsonb, {exp})
+        query = """INSERT INTO schedule (created, event, expires, args_kwargs)
+                   VALUES ($1, $2, $3, $4::jsonb)
                 """
-        params = {'t': entry.created, 'ev': entry.event, 'exp': entry.time,
-                  'ex': json.dumps({'args': entry.args, 'kwargs': entry.kwargs})}
 
-        async with self._db.get_session() as session:
-            await session.execute(query, params)
+        await self._pool.execute(
+            query,
+            entry.created,
+            entry.event,
+            entry.time,
+            {'args': entry.args, 'kwargs': entry.kwargs},
+        )
         self._have_data.set()
 
     async def _remove(self, entry):
         # remove entry from the database
         try:
-            async with self._db.get_session() as session:
-                await session.delete.table(_Schedule).where(_Schedule.id == entry.id)
+            query = 'DELETE FROM schedule WHERE id = $1'
+            await self._pool.execute(query, entry.id)
         except Exception as e:
             # Something went terribly wrong with removing, so we gotta stop
             # the scheduler, otherwise we'd run into an infinite loop.

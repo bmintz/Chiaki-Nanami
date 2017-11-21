@@ -1,5 +1,4 @@
 import asyncio
-import asyncqlio
 import collections
 import contextlib
 import discord
@@ -12,14 +11,12 @@ from datetime import datetime, timedelta
 from discord.ext import commands
 from functools import reduce
 
-from .tables.base import TableBase
 from .utils import cache, errors
 from .utils.misc import emoji_url, truncate, unique
 from .utils.paginator import EmbedFieldPages
-from .utils.time import duration_units
+from .utils.time import duration_units, parse_delta
 
 from core.cog import Cog
-
 
 log = logging.getLogger(__name__)
 
@@ -28,28 +25,38 @@ class ModLogError(errors.ChiakiException):
     pass
 
 
-class Case(TableBase, table_name='modlog'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    channel_id = asyncqlio.Column(asyncqlio.BigInt)
-    message_id = asyncqlio.Column(asyncqlio.BigInt)
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS modlog (
+        id SERIAL PRIMARY KEY,
+        channel_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        guild_id BIGINT NOT NULL,
+        action VARCHAR(16) NOT NULL,
+        mod_id BIGINT NOT NULL,
+        reason TEXT NOT NULL,
+        extra TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS modlog_guild_id_idx ON modlog (guild_id);
 
-    guild_id = asyncqlio.Column(asyncqlio.BigInt)
-    modlog_guild_id_idx = asyncqlio.Index(guild_id)
+    CREATE TABLE IF NOT EXISTS modlog_targets (
+        id SERIAL PRIMARY KEY,
+        entry_id INTEGER REFERENCES modlog ON DELETE CASCADE,
+        user_id BIGINT NOT NULL
+    );
 
-    action = asyncqlio.Column(asyncqlio.String(16))
-    mod_id = asyncqlio.Column(asyncqlio.BigInt)
-    reason = asyncqlio.Column(asyncqlio.String(1024))
+    CREATE TABLE IF NOT EXISTS modlog_config (
+        guild_id BIGINT PRIMARY KEY,
+        channel_id BIGINT NOT NULL DEFAULT 0,
 
-    # Can either be the duration, in the case of a mute or tempban,
-    # or the role, in the case of a special role.
-    extra = asyncqlio.Column(asyncqlio.Text, default='{}')
+        -- some booleans
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        log_auto BOOLEAN NOT NULL DEFAULT TRUE,
+        dm_user BOOLEAN NOT NULL DEFAULT TRUE,
+        poll_audit_log BOOLEAN NOT NULL DEFAULT TRUE,
 
-
-class CaseTarget(TableBase, table_name='modlog_targets'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    entry_id = asyncqlio.Column(asyncqlio.Integer, foreign_key=asyncqlio.ForeignKey(Case.id))
-    user_id = asyncqlio.Column(asyncqlio.BigInt)
-
+        events INTEGER NOT NULL DEFAULT {default_flags}
+    );
+"""
 
 ModAction = collections.namedtuple('ModAction', 'repr emoji colour')
 
@@ -81,25 +88,17 @@ class EnumConverter(enum.IntFlag):
 ActionFlag = enum.IntFlag('ActionFlag', list(_mod_actions), type=EnumConverter)
 _default_flags = (2 ** len(_mod_actions) - 1) & ~ActionFlag.hackban
 
-
 for k, v in list(_mod_actions.items()):
     _mod_actions[f'auto-{k}'] = v._replace(repr=f'auto-{v.repr}')
+
+__schema__ = __schema__.format(default_flags=_default_flags.value)
 
 MASSBAN_THUMBNAIL = emoji_url('\N{NO ENTRY}')
 
 
-class ModLogConfig(TableBase, table_name='modlog_config'):
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    channel_id = asyncqlio.Column(asyncqlio.BigInt, default=0)
-
-    # flags
-    # XXX Should I store this as one integer and use bitwise?
-    enabled = asyncqlio.Column(asyncqlio.Boolean, default=True)
-    log_auto = asyncqlio.Column(asyncqlio.Boolean, default=True)
-    dm_user = asyncqlio.Column(asyncqlio.Boolean, default=True)
-    poll_audit_log = asyncqlio.Column(asyncqlio.Boolean, default=True)
-
-    events = asyncqlio.Column(asyncqlio.Integer, default=_default_flags)
+fields = 'channel_id enabled log_auto dm_user poll_audit_log events'
+ModLogConfig = collections.namedtuple('ModLogConfig', fields)
+del fields
 
 
 def _is_mod_action(ctx):
@@ -119,12 +118,9 @@ async def _get_message(channel, message_id):
 
 
 @cache.cache(maxsize=None, make_key=lambda a, kw: a[-1])
-async def _get_number_of_cases(session, guild_id):
-    query = "SELECT COUNT(*) FROM modlog WHERE guild_id={guild_id};"
-    params = {'guild_id': guild_id}
-    result = await session.cursor(query, params)
-    row = await result.fetch_row()
-
+async def _get_number_of_cases(connection, guild_id):
+    query = 'SELECT COUNT(*) FROM modlog WHERE guild_id=$1;'
+    row = await connection.fetchrow(query, guild_id)
     return row['count']
 
 
@@ -136,7 +132,7 @@ class CaseNumber(commands.Converter):
             raise commands.BadArgument("This has to be an actual number... -.-")
 
         if num < 0:
-            num += await _get_number_of_cases(ctx.session, ctx.guild.id) + 1
+            num += await _get_number_of_cases(ctx.db, ctx.guild.id) + 1
             if num < 0:
                 # Consider it out of bounds, because accessing a negative
                 # index is out of bounds anyway.
@@ -161,14 +157,17 @@ class ModLog(Cog):
             await asyncio.sleep(60 * 20)
             _get_message.cache.clear()
 
-    async def _get_case_config(self, session, guild_id):
-        query = (session.select.from_(ModLogConfig)
-                        .where(ModLogConfig.guild_id == guild_id)
-                 )
-        return await query.first()
+    async def _get_case_config(self, guild_id, *, connection=None):
+        connection = connection or self.bot.pool
+        query = """SELECT channel_id, enabled, log_auto, dm_user, poll_audit_log, events
+                   FROM modlog_config
+                   WHERE guild_id = $1
+                """
+        row = await connection.fetchrow(query, guild_id)
+        return ModLogConfig(**row) if row else None
 
-    async def _send_case(self, session, config, action, server, mod, targets, reason,
-                         extra=None, auto=False):
+    async def _send_case(self, config, action, server, mod, targets, reason,
+                         *, extra=None, auto=False, connection=None):
         if not (config and config.enabled and config.channel_id):
             return None
 
@@ -185,8 +184,9 @@ class ModLog(Cog):
         if auto:
             action = f'auto-{action}'
 
+        connection = connection or self.bot.pool
         # Get the case number, this is why the guild_id is indexed.
-        count = await _get_number_of_cases(session, server.id)
+        count = await _get_number_of_cases(connection, server.id)
 
         # Send the case like normal
         embed = self._create_embed(count + 1, action, mod, targets, reason, extra)
@@ -198,20 +198,28 @@ class ModLog(Cog):
                 f"I can't send messages to {channel.mention}. Check my privileges pls..."
             )
 
-        # Add the case to the DB, because mod-logging was successful!
-        row = await session.add(Case(
-            guild_id=server.id,
-            channel_id=channel.id,
-            message_id=message.id,
+        query = """INSERT INTO modlog (guild_id, channel_id, message_id, action, mod_id, reason, extra)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                   RETURNING id
+                """
 
-            action=action,
-            mod_id=mod.id,
-            reason=reason,
-            extra=json.dumps({'args': [extra]})
+        if extra is not None:
+            now = message.created_at
+            delta = ((now + extra.delta) - now).total_seconds()
+        else:
+            delta = None
 
-        ))
+        args = (
+            server.id,
+            channel.id,
+            message.id,
+            action,
+            mod.id,
+            reason,
+            {'args': [delta]},
+        )
 
-        return row.id
+        return query, args
 
     def _create_embed(self, number, action, mod, targets, reason, extra, time=None):
         time = time or datetime.utcnow()
@@ -220,7 +228,13 @@ class ModLog(Cog):
         avatar_url = targets[0].avatar_url if len(targets) == 1 else MASSBAN_THUMBNAIL
         bot_avatar = self.bot.user.avatar_url
 
-        duration_string = f' for {duration_units(extra)}' if extra is not None else ''
+        if extra is None:
+            duration_string = ''
+        elif isinstance(extra, float):
+            duration_string = f' for {duration_units(extra)}'
+        else:
+            duration_string = f' for {parse_delta(extra.delta)}'
+
         action_field = f'{action.repr.title()}{duration_string} by {mod}'
         reason = reason or 'No reason. Please enter one.'
 
@@ -233,18 +247,25 @@ class ModLog(Cog):
                 .set_footer(text=f'ID: {mod.id}', icon_url=bot_avatar)
                 )
 
-    async def _insert_case(self, session, action, server, mod, targets, reason, extra, entry_id):
-        # Because we've successfully added a new case by this point,
-        # the number of cases is no longer accurate.
-        _get_number_of_cases.invalidate(None, server.id)
+    async def _insert_case(self, guild_id, targets, query, args, connection=None):
+        connection = connection or self.bot.pool
 
         if len(targets) == 1:
-            await session.add(CaseTarget(entry_id=entry_id, user_id=targets[0].id))
+            q = f"""WITH modlog_insert as ({query})
+                    INSERT INTO modlog_targets (entry_id, user_id)
+                    VALUES ((SELECT id FROM modlog_insert), ${len(args) + 1})
+                """
+            await connection.execute(q, *args, targets[0].id)
         else:
+            entry_id = await connection.execute(query, *args)
             columns = ('entry_id', 'user_id')
             to_insert = [(entry_id, t.id) for t in targets]
-            conn = session.transaction.acquired_connection
-            await conn.copy_records_to_table('modlog_targets', columns=columns, records=to_insert)
+
+            await connection.copy_records_to_table('modlog_targets', columns=columns, records=to_insert)
+
+        # Because we've successfully added a new case by this point,
+        # the number of cases is no longer accurate.
+        _get_number_of_cases.invalidate(None, guild_id)
 
     async def _notify_user(self, config, action, server, user, targets, reason,
                            extra=None, auto=False):
@@ -328,24 +349,35 @@ class ModLog(Cog):
         reason = ctx.kwargs.get('reason') or ctx.args[2]
 
         # We have get the config outside the two functions because we use it twice.
-        config = await self._get_case_config(ctx.session, ctx.guild.id)
-        args = [ctx.session, config, name, ctx.guild, ctx.author, targets, reason, extra]
+        config = await self._get_case_config(ctx.guild.id, connection=ctx.db)
+        args = [config, name, ctx.guild, ctx.author, targets, reason]
 
         # XXX: I'm not sure if I should DM the user before or *after* the
         #      action has been applied. I currently have it done after, because
         #      the target should only be DMed if the command was executed
         #      successfully, and we can't check if it worked before we do
         #      the thing.
-        await self._notify_user(*args[1:])
+        await self._notify_user(*args, extra=extra, auto=auto)
 
         try:
-            entry_id = await self._send_case(*args, auto=auto)
+            query_args = await self._send_case(
+                *args,
+                extra=extra,
+                auto=auto,
+                connection=ctx.db
+            )
         except ModLogError as e:
             await ctx.send(f'{ctx.author.mention}, {e}')
         else:
-            if entry_id:
-                del args[1]  # remove the config from the args because we don't need it.
-                await self._insert_case(*args, entry_id)
+            if query_args:
+                query, args = query_args
+                await self._insert_case(
+                    connection=ctx.db,
+                    guild_id=ctx.guild.id,
+                    targets=targets,
+                    query=query,
+                    args=args
+                )
 
     async def _poll_audit_log(self, guild, user, *, action):
         if (action, guild.id, user.id) in self._cache:
@@ -357,8 +389,7 @@ class ModLog(Cog):
                 # early out
                 return
 
-        async with self.bot.db.get_session() as session:
-            config = await self._get_case_config(session, guild.id)
+        config = await self._get_case_config(guild.id)
 
         if not (config and config.poll_audit_log):
             return
@@ -400,11 +431,25 @@ class ModLog(Cog):
             return  # should not happen but this is here just in case it happens
 
         with contextlib.suppress(ModLogError):
-            async with self.bot.db.get_session() as session:
-                args = (session, config, action, guild, entry.user, [entry.target], entry.reason)
-                entry_id = await self._send_case(*args)
-                if entry_id:
-                    await self._insert_case(*args, entry_id)
+            targets = [entry.target]
+            query_args = await self._send_case(
+                config,
+                action,
+                guild,
+                entry.user,
+                targets,
+                entry.reason
+            )
+
+            if query_args:
+                query, args = query_args
+                await self._insert_case(
+                    connection=self.bot.pool,
+                    guild_id=guild.id,
+                    targets=targets,
+                    query=query,
+                    args=args
+                )
 
     async def _poll_ban(self, guild, user, *, action):
         if ('softban', guild.id, user.id) in self._cache:
@@ -424,14 +469,9 @@ class ModLog(Cog):
 
     # ------------------- something ------------------
 
-    async def _get_case(self, session, guild_id, num):
-        query = (session.select.from_(Case)
-                        .where(Case.guild_id == guild_id)
-                        .order_by(Case.id)
-                        .offset(num - 1)
-                        .limit(1)
-                 )
-        return await query.first()
+    async def _get_case(self, guild_id, num, *, connection):
+        query = 'SELECT * FROM modlog WHERE guild_id = $1 ORDER BY id OFFSET $2 LIMIT 1;'
+        return await connection.fetchrow(query, guild_id, num - 1)
 
     # ----------------- Now for the commands. ----------------------
 
@@ -446,28 +486,30 @@ class ModLog(Cog):
         the most recent case. e.g. -1 will show the newest case,
         and -10 will show the 10th newest case.
         """
-        num = num or await _get_number_of_cases(ctx.session, ctx.guild.id)
+        num = num or await _get_number_of_cases(ctx.db, ctx.guild.id)
 
-        result = await self._get_case(ctx.session, ctx.guild.id, num)
-        if result is None:
+        case = await self._get_case(ctx.guild.id, num, connection=ctx.db)
+        if case is None:
             return await ctx.send(f'Case #{num} is not a valid case.')
 
-        t_query = ctx.session.select.from_(CaseTarget).where(CaseTarget.entry_id == result.id)
-        targets = [ctx.bot.get_user(row.user_id) or f'<Unknown: {row.user_id}>'
-                   async for row in await t_query.all()]
+        query = 'SELECT user_id FROM modlog_targets WHERE entry_id = $1'
+        targets = [
+            ctx.bot.get_user(r[0]) or f'<Unknown: {r[0]}>'
+            for r in await ctx.db.fetch(query, case['id'])
+        ]
 
-        extra = json.loads(result.extra)
+        extra = json.loads(case['extra'])
         extra = extra['args'][0] if extra else None
 
         # Parse the cases accordingly
         embed = self._create_embed(
             num,
-            result.action,
-            ctx.bot.get_user(result.mod_id),
+            case['action'],
+            ctx.bot.get_user(case['mod_id']),
             targets,
-            result.reason,
+            case['reason'],
             extra,
-            discord.utils.snowflake_time(result.message_id),
+            discord.utils.snowflake_time(case['message_id']),
         )
 
         await ctx.send(embed=embed)
@@ -483,26 +525,25 @@ class ModLog(Cog):
         query = """SELECT message_id, action, mod_id, reason
                    FROM modlog, modlog_targets
                    WHERE modlog.id = modlog_targets.entry_id
-                   AND guild_id = {guild_id}
-                   AND user_id = {user_id}
-                   ORDER BY modlog.id
+                   AND guild_id = $1
+                   AND user_id = $2
+                   ORDER BY modlog.id;
                 """
 
-        params = {'guild_id': ctx.guild.id, 'user_id': member.id}
-        results = await ctx.session.cursor(query, params)
+        results = await ctx.db.fetch(query, ctx.guild.id, member.id)
 
         get_time = discord.utils.snowflake_time
         get_user = ctx.bot.get_user
 
         entries = []
-        async for row in results:
-            action = _mod_actions[row['action']]
+        for message_id, action, mod_id, reason in results:
+            action = _mod_actions[action]
             name = f'{action.emoji} {action.repr.title()}'
             formatted = (
-                f"**On:** {get_time(row['message_id']) :%x %X}\n"
+                f"**On:** {get_time(message_id) :%x %X}\n"
                 # Gotta use triple-quotes to keep the syntax happy.
-                f"""**Moderator:** {get_user(row['mod_id']) or f'<Unknown ID: {row["mod_id"]}'}\n"""
-                f"**Reason:** {truncate(row['reason'], 512, '...')}\n"
+                f"""**Moderator:** {get_user(mod_id) or f'<Unknown ID: {mod_id}'}\n"""
+                f"**Reason:** {truncate(reason, 512, '...')}\n"
                 "-------------------"
             )
 
@@ -522,20 +563,28 @@ class ModLog(Cog):
 
         await pages.interact()
 
-    async def _check_config(self, ctx):
-        config = await self._get_case_config(ctx.session, ctx.guild.id)
-        if not (config and config.channel_id):
-            message = ("You haven't even enabled case-logging. Set a channel "
-                       f"first using `{ctx.clean_prefix}modlog channel`.")
-            raise ModLogError(message)
+    async def _check_modlog_channel(self, ctx, channel_id,  message=None, *, embed=None):
+        if not channel_id:
+            message = (
+                'Mod-logging should have a channel. '
+                f'To set one, use `{ctx.clean_prefix}modlog channel`.\n\n'
+                + (message or '')
+            )
 
-        return config
+        await ctx.send(message, embed=embed)
 
-    async def _show_config(self, ctx, config):
-        count = await _get_number_of_cases(ctx.session, ctx.guild.id)
+    async def _show_config(self, ctx):
+        config = await self._get_case_config(ctx.guild.id, connection=ctx.db)
+        if not config:
+            return await ctx.send(
+                "Mod-logging hasn't been configured yet. "
+                f"To turn on mod-logging, use `{ctx.clean_prefix}{ctx.invoked_with} channel`"
+            )
+
         will, colour = ('will', 0x4CAF50) if config.enabled else ("won't", 0xF44336)
         flags = ', '.join(f.name for f in ActionFlag if config.events & f)
 
+        count = await _get_number_of_cases(ctx.db, ctx.guild.id)
         embed = (discord.Embed(colour=colour, description=f'I have made {count} cases so far!')
                  .set_author(name=f'In {ctx.guild}, I {will} be logging mod actions.')
                  .add_field(name='Logging Channel', value=f'<#{config.channel_id}>')
@@ -551,17 +600,20 @@ class ModLog(Cog):
         If no arguments are given, I'll show the basic configuration info.
         """
 
-        config = await self._check_config(ctx)
         if enable is None:
-            return await self._show_config(ctx, config)
+            return await self._show_config(ctx)
 
-        config.enabled = enable
-        await ctx.session.add(config)
+        query = """INSERT INTO modlog_config (guild_id, enabled) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET enabled = $2
+                   RETURNING channel_id;
+                """
+        channel_id, = await ctx.db.fetchrow(query, ctx.guild.id, enable)
 
         message = ("Yay! What are the mods gonna do today? ^o^"
                    if enable else
                    "Ok... back to the corner I go... :c")
-        await ctx.send(message)
+        await self._check_modlog_channel(ctx, channel_id, message)
 
     @modlog.command(name='channel')
     @commands.has_permissions(manage_guild=True)
@@ -585,11 +637,12 @@ class ModLog(Cog):
                 f'{channel.mention} the mod-log channel...'
             )
 
-        config = await self._get_case_config(ctx.session, ctx.guild.id)
-        config = config or ModLogConfig(guild_id=ctx.guild.id)
-        config.channel_id = channel.id
+        query = """INSERT INTO modlog_config (guild_id, channel_id) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET channel_id = $2
+                """
+        await ctx.db.execute(query, ctx.guild.id, channel.id)
 
-        await ctx.session.add(config)
         await ctx.send('Ok, {channel.mention} it is then!')
 
     @commands.group(name='modactions', aliases=['modacts'], invoke_without_command=True)
@@ -600,7 +653,7 @@ class ModLog(Cog):
         For this command to work, you have to make sure that you've
         set a channel for logging cases first.
         """
-        config = await self._check_config(ctx)
+        config = await self._get_config(ctx)
 
         flags = ', '.join(f.name for f in ActionFlag)
         enabled_flags = ', '.join(f.name for f in ActionFlag if config.events & f)
@@ -609,18 +662,15 @@ class ModLog(Cog):
                  .add_field(name='List of valid Mod Actions', value=flags)
                  .add_field(name='Actions that will be logged', value=enabled_flags)
                  )
-        await ctx.send(embed=embed)
 
-    async def _set_actions(self, ctx, op, flags, *, colour):
+        await self._check_modlog_channel(ctx, config['channel_id'], embed=embed)
+
+    async def _set_actions(self, ctx, query, flags, *, colour):
         flags = unique(flags)
-
-        config = await self._check_config(ctx)
         reduced = reduce(operator.or_, flags)
-        config.events = op(config.events, reduced)
+        channel_id, events = await ctx.db.fetchrow(query, ctx.guild.id, reduced)
 
-        await ctx.session.add(config)
-
-        enabled_flags = ', '.join(f.name for f in ActionFlag if config.events & f)
+        enabled_flags = ', '.join(f.name for f in ActionFlag if events & f)
 
         embed = (discord.Embed(colour=colour, description=', '.join(f.name for f in flags))
                  .set_author(name=f'Successfully {ctx.command.name}d the following actions')
@@ -628,27 +678,35 @@ class ModLog(Cog):
                             value=enabled_flags, inline=False)
                  )
 
-        await ctx.send(embed=embed)
+        await self._check_modlog_channel(ctx, channel_id, embed=embed)
 
     @mod_actions.command(name='enable')
     @commands.has_permissions(manage_guild=True)
     async def macts_enable(self, ctx, *actions: ActionFlag):
-        """Enables case creation for all the given mod-actions.
+        """Enables case creation for all the given mod-actions."""
 
-        For this command to work, you have to make sure that you've
-        set a channel for logging cases first.
-        """
-        await self._set_actions(ctx, operator.or_, actions, colour=0x4CAF50)
+        # The duplicated query is to prevent potential SQL injections.
+        query = """INSERT INTO modlog_config (guild_id, enabled) VALUES ($1, DEFAULT | $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET events = events | $2
+                   RETURNING channel_id, events;
+                """
+
+        await self._set_actions(ctx, query, actions, colour=0x4CAF50)
 
     @mod_actions.command(name='disable')
     @commands.has_permissions(manage_guild=True)
     async def macts_disable(self, ctx, *actions: ActionFlag):
-        """Disables case creation for all the given mod-actions.
+        """Disables case creation for all the given mod-actions."""
 
-        For this command to work, you have to make sure that you've
-        set a channel for logging cases first.
+        # The duplicated query is to prevent potential SQL injections.
+        query = """INSERT INTO modlog_config (guild_id, events) VALUES ($1, DEFAULT & ~$2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET events = events & ~$2
+                   RETURNING channel_id, events;
         """
-        await self._set_actions(ctx, lambda ev, f: ev & ~f, actions, colour=0xF44336)
+
+        await self._set_actions(ctx, query, actions, colour=0xF44336)
 
     @commands.command(name='pollauditlog')
     @commands.has_permissions(manage_guild=True)
@@ -668,12 +726,16 @@ class ModLog(Cog):
         For this command to work, you have to make sure that you've
         set a channel for logging cases first.
         """
-        config = await self._check_config(ctx)
-        config.poll_audit_log = enable
-        await ctx.session.add(config)
+        query = """INSERT INTO modlog_config (guild_id, poll_audit_log) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET poll_audit_log = $2
+                   RETURNING channel_id;
+                """
+
+        channel_id, = await ctx.db.fetchrow(query, ctx.guild.id, enable)
 
         message = '\U0001f440' if enable else '\U0001f626'
-        await ctx.send(message)
+        await self._check_modlog_channel(ctx, channel_id, message)
 
     @commands.command()
     @commands.has_permissions(manage_guild=True)
@@ -683,12 +745,14 @@ class ModLog(Cog):
 
         (e.g. getting warned, kicked, muted, etc.)
         """
-        config = await self._get_case_config(ctx.session, ctx.guild.id)
-        config = config or ModLogConfig(guild_id=ctx.guild.id)
-        config.dm_user = dm_user
+        query = """INSERT INTO modlog_config (guild_id, dm_user) VALUES ($1, $2)
+                   ON CONFLICT (guild_id)
+                   DO UPDATE SET dm_user = $2
+                   RETURNING channel_id;
+                """
 
-        await ctx.session.add(config)
-        await ctx.send('\N{OK HAND SIGN}')
+        channel_id, = await ctx.db.fetchrow(query, ctx.guild.id, dm_user)
+        await self._check_modlog_channel(ctx, channel_id, '\N{OK HAND SIGN}')
 
     # XXX: This command takes *way* too long.
     @commands.command()
@@ -703,18 +767,19 @@ class ModLog(Cog):
         and -10 will show the 10th newest case.
         """
 
-        case = await self._get_case(ctx.session, ctx.guild.id, num)
+        # this reason command will kill me.
+        case = await self._get_case(ctx.guild.id, num, connection=ctx.db)
         if case is None:
             return await ctx.send(f"Case #{num} doesn't exist.")
 
-        if case.mod_id != ctx.author.id:
+        if case['mod_id'] != ctx.author.id:
             return await ctx.send("This case is not yours.")
 
-        channel = ctx.guild.get_channel(case.channel_id)
+        channel = ctx.guild.get_channel(case['channel_id'])
         if not channel:
             return await ctx.send('This channel no longer exists... :frowning:')
 
-        message = await _get_message(channel, case.message_id)
+        message = await _get_message(channel, case['message_id'])
         if not message:
             return await ctx.send('Somehow this message was deleted...')
 
@@ -729,8 +794,8 @@ class ModLog(Cog):
             # While it was still in the cache.
             return await ctx.send('Somehow this message was deleted...')
 
-        case.reason = reason
-        await ctx.session.add(case)
+        query = 'UPDATE modlog SET reason = $1 WHERE id = $2;'
+        await ctx.db.execute(query, reason, case['id'])
         await ctx.send('\N{OK HAND SIGN}')
 
 

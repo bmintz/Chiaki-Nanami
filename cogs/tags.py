@@ -1,39 +1,35 @@
 import asyncpg
-import asyncqlio
-import datetime
 import discord
 import itertools
 import logging
 
 from discord.ext import commands
 
-from .tables.base import TableBase
 from .utils import formats
 from .utils.paginator import ListPaginator
 
 from core.cog import Cog
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS tags (
+        name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        is_alias BOOLEAN NOT NULL,
+        -- metadata
+        owner_id BIGINT NOT NULL,
+        uses INTEGER NOT NULL DEFAULT 0,
+        location_id BIGINT NOT NULL,
+        created_at TIMESTAMP NOT NULL,
+        PRIMARY KEY(name, location_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS tags_uniq_idx ON tags (LOWER(name), location_id);
+"""
 
 tag_logger = logging.getLogger(__name__)
 
 
 class TagError(commands.UserInputError):
     pass
-
-
-class Tag(TableBase, table_name='tags'):
-    name = asyncqlio.Column(asyncqlio.String, index=True, primary_key=True)
-    # If this is an alias, this will be repurposed to point to the original tag.
-    content = asyncqlio.Column(asyncqlio.String, default='')
-
-    is_alias = asyncqlio.Column(asyncqlio.Boolean)
-    # TODO:
-    embed = asyncqlio.Column(asyncqlio.String, default='')
-
-    # Some important metadata.
-    owner_id = asyncqlio.Column(asyncqlio.BigInt)
-    uses = asyncqlio.Column(asyncqlio.Integer, default=0)
-    location_id = asyncqlio.Column(asyncqlio.BigInt, index=True, primary_key=True)
-    created_at = asyncqlio.Column(asyncqlio.Timestamp)
 
 
 class MemberTagPaginator(ListPaginator):
@@ -91,13 +87,12 @@ class Tags(Cog):
 
         query = """SELECT   name
                    FROM     tags
-                   WHERE    location_id={guild_id} AND name % {name}
-                   ORDER BY similarity(name, {name}) DESC
+                   WHERE    location_id=$1 AND name % $2
+                   ORDER BY similarity(name, $2) DESC
                    LIMIT 5;
                 """
-        params = {'guild_id': guild_id, 'name': name}
         try:
-            results = await (await session.cursor(query, params)).flatten()
+            results = await session.fetch(query, guild_id, name)
         except asyncpg.SyntaxOrAccessError:
             # % and similarity aren't supported, which means the owner didn't do
             # CREATE EXTENSION pg_trgm in their database
@@ -113,50 +108,40 @@ class Tags(Cog):
 
         return TagError(message)
 
-    async def _get_tag(self, session, name, guild_id):
-        query = (session.select.from_(Tag)
-                        .where((Tag.name == name)
-                               & (Tag.location_id == guild_id)))
-
-        tag = await query.first()
+    async def _get_tag(self, connection, name, guild_id):
+        query = 'SELECT * FROM tags WHERE location_id = $1 AND lower(name) = $2'
+        tag = await connection.fetchrow(query, guild_id, name)
         if tag is None:
-            raise await self._disambiguate_error(session, name, guild_id)
+            raise await self._disambiguate_error(connection, name, guild_id)
 
         return tag
 
-    async def _get_original_tag(self, session, name, guild_id):
-        tag = await self._get_tag(session, name, guild_id)
-        if tag.is_alias:
-            return await self._get_tag(session, tag.content, guild_id)
+    async def _get_original_tag(self, connection, name, guild_id):
+        tag = await self._get_tag(connection, name, guild_id)
+        if tag['is_alias']:
+            return await self._get_tag(connection, tag['content'], guild_id)
         return tag
 
     @commands.group(invoke_without_command=True)
     async def tag(self, ctx, *, name: TagName):
         """Retrieves a tag, if one exists."""
-        tag = await self._get_original_tag(ctx.session, name, ctx.guild.id)
-        await ctx.send(tag.content)
+        tag = await self._get_original_tag(ctx.db, name, ctx.guild.id)
+        await ctx.send(tag['content'])
 
-        await (ctx.session.update.table(Tag)
-                          .where((Tag.name == name.lower()) & (Tag.location_id == ctx.guild.id))
-                          .set(Tag.uses + 1)
-               )
+        query = 'UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id = $2'
+        await ctx.db.execute(query, tag['name'], ctx.guild.id)
 
     @tag.command(name='create', aliases=['add'])
     async def tag_create(self, ctx, name: TagName, *, content):
         """Creates a new tag."""
-        tag = Tag(
-            name=name,
-            content=content,
-            is_alias=False,
-            owner_id=ctx.author.id,
-            location_id=ctx.guild.id,
-            created_at=datetime.datetime.utcnow()
-        )
+        query = """INSERT INTO tags (is_alias, name, content, owner_id, location_id)
+                   VALUES (FALSE, $1, $2, $3, $4)
+                """
 
         try:
-            await ctx.session.add(tag)
+            await ctx.db.execute(query, name, content, ctx.author.id, ctx.guild.id)
         except asyncpg.UniqueViolationError as e:
-            raise TagError(f'Tag {name} already exists...') from e
+            await ctx.send(f'Tag {name} already exists...')
         else:
             await ctx.send(f'Successfully created tag {name}! ^.^')
 
@@ -166,12 +151,15 @@ class Tags(Cog):
 
         You can only edit actual tags. i.e. you can't edit aliases.
         """
-        tag = await self._get_tag(ctx.session, name, ctx.guild.id)
-        if tag.is_alias:
+        tag = await self._get_tag(ctx.db, name, ctx.guild.id)
+        if tag['is_alias']:
             return await ctx.send("This tag is an alias. I can't edit it.")
 
-        tag.content = new_content
-        await ctx.session.merge(tag)
+        if tag['owner_id'] != ctx.author.id:
+            return await ctx.send('This tag is not yours.')
+
+        query = 'UPDATE tags SET content = $1 WHERE location_id = $2 AND name = $3;'
+        await ctx.db.execute(query, new_content, ctx.guild.id, tag['name'])
         await ctx.send("Successfully edited the tag!")
 
     @tag.command(name='alias')
@@ -184,20 +172,16 @@ class Tags(Cog):
         You also can't edit the alias.
         """
         # Make sure the original tag exists.
-        tag = await self._get_original_tag(ctx.session, original, ctx.guild.id)
-        new_tag = Tag(
-            name=alias.lower(),
-            content=tag.name,
-            is_alias=True,
-            owner_id=ctx.author.id,
-            location_id=ctx.guild.id,
-            created_at=datetime.datetime.utcnow()
-        )
+        tag = await self._get_original_tag(ctx.db, original, ctx.guild.id)
+
+        query = """INSERT INTO tags (is_alias, name, content, owner_id, location_id)
+                   VALUES (TRUE, $1, $2, $3, $4)
+                """
 
         try:
-            await ctx.session.add(new_tag)
+            await ctx.db.execute(query, alias, tag['name'], ctx.author.id, ctx.guild.id)
         except asyncpg.UniqueViolationError as e:
-            raise TagError(f'Alias {alias} already exists...') from e
+            return await ctx.send(f'Alias {alias} already exists...')
         else:
             await ctx.send(f'Successfully created alias {alias} that points to {original}! ^.^')
 
@@ -214,31 +198,29 @@ class Tags(Cog):
         is_mod = ctx.author.permissions_in(ctx.channel).manage_guild
 
         # idk how wasteful this is. Probably very.
-        tag = await self._get_tag(ctx.session, name, ctx.guild.id)
-        if tag.owner_id != ctx.author.id and not is_mod:
+        tag = await self._get_tag(ctx.db, name, ctx.guild.id)
+        if tag['owner_id'] != ctx.author.id and not is_mod:
             return await ctx.send("This tag is not yours.")
 
-        await ctx.session.remove(tag)
-        if not tag.is_alias:
-            # Slow path, we gotta delete all aliases.
-            await ctx.session.delete(Tag).where((Tag.location_id == ctx.guild.id)
-                                                & (Tag.is_alias == True)
-                                                & (Tag.content == name.lower()))
+        query = """DELETE FROM tags
+                   WHERE location_id = $1
+                   AND ((is_alias AND LOWER(content) = $2) OR (LOWER(name) = $2))
+                """
 
+        await ctx.db.execute(query, ctx.guild.id, name)
+        if not tag['is_alias']:
             await ctx.send(f"Tag {name} and all of its aliases have been deleted.")
         else:
             await ctx.send("Alias successfully deleted.")
 
-    async def _get_tag_rank(self, session, tag):
+    async def _get_tag_rank(self, connection, tag):
         query = """SELECT COUNT(*) FROM tags
-                   WHERE location_id = {guild_id}
-                   AND (uses, created_at) >= ({uses}, {created})
+                   WHERE location_id = $1
+                   AND (uses, created_at) >= ($2, $3)
                 """
-        # XXX: Not sure if asyncqlio covers tuple comparisons.
-        params = {'guild_id': tag.location_id, 'uses': tag.uses, 'created': tag.created_at}
 
-        result = await session.cursor(query, params)
-        return await result.fetch_row()
+        row = await connection.fetchrow(query, tag['location_id'], tag['uses'], tag['created_at'])
+        return row[0]
 
     @tag.command(name='info')
     async def tag_info(self, ctx, *, tag: TagName):
@@ -246,23 +228,23 @@ class Tags(Cog):
         # XXX: This takes roughly 8-16 ms. Not good, but to make my life
         #      simpler I'll ignore it for now until the bot gets really big
         #      and querying the tags starts becoming expensive.
-        tag = await self._get_tag(ctx.session, tag, ctx.guild.id)
-        rank = await self._get_tag_rank(ctx.session, tag)
+        tag = await self._get_tag(ctx.db, tag, ctx.guild.id)
+        rank = await self._get_tag_rank(ctx.db, tag)
 
-        user = ctx.bot.get_user(tag.owner_id)
-        creator = user.mention if user else f'Unknown User (ID: {tag.owner_id})'
+        user = ctx.bot.get_user(tag['owner_id'])
+        creator = user.mention if user else f'Unknown User (ID: {tag["owner_id"]})'
         icon_url = user.avatar_url if user else discord.Embed.Empty
 
-        embed = (discord.Embed(colour=ctx.bot.colour, timestamp=tag.created_at)
-                 .set_author(name=tag.name, icon_url=icon_url)
+        embed = (discord.Embed(colour=ctx.bot.colour, timestamp=tag['created_at'])
+                 .set_author(name=tag['name'], icon_url=icon_url)
                  .add_field(name='Created by', value=creator)
-                 .add_field(name='Used', value=f'{formats.pluralize(time=tag.uses)}', inline=False)
-                 .add_field(name='Rank', value=f'#{rank["count"]}', inline=False)
+                 .add_field(name='Used', value=f'{formats.pluralize(time=tag["uses"])}', inline=False)
+                 .add_field(name='Rank', value=f'#{rank}', inline=False)
                  .set_footer(text='Created')
                  )
 
-        if tag.is_alias:
-            embed.description = f'Original Tag: {tag.content}'
+        if tag['is_alias']:
+            embed.description = f'Original Tag: {tag["content"]}'
 
         await ctx.send(embed=embed)
 
@@ -271,12 +253,11 @@ class Tags(Cog):
         """Searches and shows up to the 50 closest matches for a given name."""
         query = """SELECT   name
                    FROM     tags
-                   WHERE    location_id={guild_id} AND name % {name}
-                   ORDER BY similarity(name, {name}) DESC
+                   WHERE    location_id=$1 AND name % $2
+                   ORDER BY similarity(name, $2) DESC
                    LIMIT 5;
                 """
-        params = {'guild_id': ctx.guild.id, 'name': name}
-        tags = [tag['name'] async for tag in await ctx.session.cursor(query, params)]
+        tags = [tag['name'] for tag in await ctx.db.fetch(query, ctx.guild.id, name)]
         entries = (
             itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else
             ['No results found... :(']
@@ -289,8 +270,8 @@ class Tags(Cog):
     @tag.command(name='list', aliases=['all'])
     async def tag_list(self, ctx):
         """Shows all the tags in the server."""
-        query = ctx.session.select(Tag).where(Tag.location_id == ctx.guild.id).order_by(Tag.name)
-        tags = [tag.name async for tag in await query.all()]
+        query = 'SELECT name FROM tags WHERE location_id = $1 ORDER BY name'
+        tags = [tag[0] for tag in await ctx.db.fetch(query, ctx.guild.id)]
 
         entries = (
             itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else
@@ -304,12 +285,9 @@ class Tags(Cog):
     async def tag_by(self, ctx, *, member: discord.Member = None):
         """Shows all the tags in the server."""
         member = member or ctx.author
-        query = (ctx.session.select.from_(Tag)
-                            .where((Tag.location_id == ctx.guild.id) & (Tag.owner_id == member.id))
-                            .order_by(Tag.name)
-                 )
 
-        tags = [tag.name async for tag in await query.all()]
+        query = 'SELECT name FROM tags WHERE location_id = $1 AND owner_id = $2 ORDER BY name'
+        tags = [tag[0] for tag in await ctx.db.fetch(query, ctx.guild.id, ctx.author.id)]
 
         entries = (
             itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else

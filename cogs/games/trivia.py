@@ -1,5 +1,4 @@
 import asyncio
-import asyncqlio
 import collections
 import contextlib
 import discord
@@ -19,52 +18,52 @@ from html import unescape
 
 from . import manager
 
-from ..tables.base import TableBase
 from ..utils.misc import base_filename, emoji_url
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS trivia_categories (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        name TEXT NOT NULL
+        description TEXT NULL,
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS trivia_categories_uniq_idx
+    ON trivia_categories (LOWER(name), guild_id);
+
+    CREATE TABLE IF NOT EXISTS trivia_questions (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES trivia_categories ON DELETE CASCADE,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        image TEXT NULL
+    );
+    CREATE INDEX IF NOT EXISTS trivia_questions_category_id_idx ON trivia_questions (category_id);
+"""
 
 _logger = logging.getLogger(__name__)
 
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
 
-class Category(TableBase, table_name='trivia_categories'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    guild_id = asyncqlio.Column(asyncqlio.BigInt)
-    guild_id_idx = asyncqlio.Index(guild_id)
-
-    name = asyncqlio.Column(asyncqlio.String(256))
-    description = asyncqlio.Column(asyncqlio.String(512), nullable=True)
-
-    # ---------Converter stuffs------------
-
+_CustomCategory = collections.namedtuple('_CustomCategory', 'id name description')
+class Category(commands.Converter):
     _default_categories = {}
 
-    @classmethod
-    async def convert(cls, ctx, arg):
+    async def convert(self, ctx, arg):
         lowered = arg.lower()
         with contextlib.suppress(KeyError):
-            return cls._default_categories[lowered]
+            return self._default_categories[lowered]
 
-        query = ctx.session.select.from_(cls).where((cls.guild_id == ctx.guild.id)
-                                                    & (cls.name == lowered))
-        result = await query.first()
-        if result is None:
+        query = """SELECT id, name, description FROM trivia_categories
+                   WHERE guild_id = $1 AND name = $2;
+                """
+        row = await ctx.db.fetchrow(query, ctx.guild.id, lowered)
+
+        if row is None:
             raise commands.BadArgument(f"Category {lowered} doesn't exist... :(")
-
-        return result
-
-
-class Question(TableBase, table_name='trivia_questions'):
-    id = asyncqlio.Column(asyncqlio.Serial, primary_key=True)
-    category_id = asyncqlio.Column(asyncqlio.Integer, foreign_key=asyncqlio.ForeignKey(Category.id))
-    category_id_idx = asyncqlio.Index(category_id)
-
-    question = asyncqlio.Column(asyncqlio.String(1024))
-    answer = asyncqlio.Column(asyncqlio.String(512))
-    image = asyncqlio.Column(asyncqlio.String(512), nullable=True)
+        return _CustomCategory(**row)
 
 
 # Helper classes for DefaultTrivia, because we don't want to lug all those dicts around.
@@ -185,16 +184,15 @@ class CustomTriviaSession(BaseTriviaSession):
     async def next_question(self):
         query = """SELECT question, answer, image
                    FROM trivia_questions
-                   WHERE category_id={category_id}
+                   WHERE category_id=$1
                    OFFSET FLOOR(RANDOM() * (
                         SELECT COUNT(*)
                         FROM trivia_questions
-                        WHERE category_id={category_id}
+                        WHERE category_id=$1
                    ))
                    LIMIT 1
                 """
-        params = {'category_id': self.category.id}
-        return _QuestionTuple(**await self.ctx.session.fetch(query, params))
+        return _QuestionTuple(**await self.ctx.db.fetchrow(query, self.category.id))
 
 
 _otdb_category = _CategoryTuple(name='Trivia - OTDB',
@@ -353,26 +351,25 @@ class RandomTriviaSession(OTDBTriviaSession):
             # Try using custom categories first, we'll need to use
             # default categories as a fallback in case the server
             # doesn't have any custom categories.
-            query = """ SELECT *
+            query = """ SELECT id, name, description
                         FROM trivia_categories
-                        WHERE guild_id={guild_id}
+                        WHERE guild_id=$1
                         OFFSET FLOOR(RANDOM() * (
                             SELECT COUNT(*)
                             FROM trivia_categories
-                            WHERE guild_id={guild_id}
+                            WHERE guild_id=$1
                         ))
                         LIMIT 1
                     """
-            params = {'guild_id': self.ctx.guild.id}
             try:
-                row = await self.ctx.session.fetch(query, params)
+                row = await self.ctx.db.fetch(query, self.ctx.guild.id)
             except Exception:
                 # Table doesn't exist, ignore it.
                 self._question_type = qt = random.choice(RQT_NO_CUSTOM)
                 _logger.exception('Could not select a trivia question from PostgreSQL.')
             else:
                 if row:
-                    self.category = Category(**row)
+                    self.category = _CustomCategory(**row)
                     return await CustomTriviaSession.next_question(self)
                 else:
                     self._question_type = qt = random.choice(RQT_NO_CUSTOM)
@@ -492,31 +489,30 @@ class Trivia(Cog):
         except IndexError:
             return await ctx.send('You need an attachment.')
 
+        print(attachment)
+
         with io.BytesIO() as file:
             await attachment.save(file)
             file.seek(0)
             category = _process_json(json.load(file), name=attachment.filename)
 
-        row = await ctx.session.add(Category(
-            guild_id=ctx.guild.id,
-            name=category.name,
-            description=category.description,
-        ))
+        query = """INSERT INTO trivia_categories (guild_id, name, description)
+                   VALUES ($1, $2, $3)
+                   RETURNING id;
+                """
+        id = (await ctx.db.fetchrow(query, ctx.guild.id, category.name, category.description))[0]
 
         columns = ('category_id', 'question', 'answer', 'image')
-        to_insert = [(row.id, *q) for q in category.questions]
+        to_insert = [(id, *q) for q in category.questions]
 
-        conn = ctx.session.transaction.acquired_connection
-        await conn.copy_records_to_table('trivia_questions', columns=columns, records=to_insert)
+        await ctx.db.copy_records_to_table('trivia_questions', columns=columns, records=to_insert)
         await ctx.send('\N{OK HAND SIGN}')
 
     @trivia_category.command(name='remove')
     async def trivia_category_remove(self, ctx, name):
         """Removes a custom trivia category."""
-        await (ctx.session.delete.table(Category)
-               .where((Category.guild_id == ctx.guild.id)
-                      & (Category.name == name))
-               )
+        query = 'DELETE FROM trivia_categories WHERE guild_id = $1 AND LOWER(name) = $2;'
+        await ctx.db.execute(query, ctx.guild.id, name)
         await ctx.send('\N{OK HAND SIGN}')
 
 

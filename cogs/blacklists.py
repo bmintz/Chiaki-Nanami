@@ -1,16 +1,21 @@
 import asyncpg
-import asyncqlio
 import datetime
 import discord
 
 from discord.ext import commands
 
-from .tables.base import TableBase
 from .utils import disambiguate
 from .utils.misc import emoji_url, truncate
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS blacklist (
+        snowflake BIGINT PRIMARY KEY,
+        blacklisted_at TIMESTAMP NOT NULL,
+        reason TEXT NULL
+    );
+"""
 
 _blocked_icon = emoji_url('\N{NO ENTRY}')
 _unblocked_icon = emoji_url('\N{WHITE HEAVY CHECK MARK}')
@@ -33,12 +38,6 @@ class Blacklisted(commands.CheckFailure):
         return embed
 
 
-class Blacklist(TableBase):
-    snowflake = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    blacklisted_at = asyncqlio.Column(asyncqlio.Timestamp)
-    reason = asyncqlio.Column(asyncqlio.String(2000), default='')
-
-
 _GuildOrUser = disambiguate.union(discord.Guild, discord.User)
 
 
@@ -51,12 +50,12 @@ class Blacklists(Cog, hidden=True):
 
     async def __global_check_once(self, ctx):
         async def get_blacklist(id):
-            query = ctx.session.select.from_(Blacklist).where(Blacklist.snowflake == id).first()
-            return await query.first()
+            query = "SELECT reason FROM blacklist WHERE snowflake = $1;"
+            return await ctx.db.fetchrow(query, id)
 
         row = await get_blacklist(ctx.author.id)
         if row:
-            raise Blacklisted('You have been blacklisted by the owner.', row.reason)
+            raise Blacklisted('You have been blacklisted by the owner.', row['reason'])
 
         # Only check if it's in DM after checking the user to prevent users
         # from attempting to bypass the blacklist through DM
@@ -65,14 +64,14 @@ class Blacklists(Cog, hidden=True):
 
         row = await get_blacklist(ctx.guild.id)
         if row:
-            raise Blacklisted('This server has been blacklisted by the owner.', row.reason)
+            raise Blacklisted('This server has been blacklisted by the owner.', row['reason'])
 
         return True
 
     # Not sure if I should show the error or not.
-    # async def on_command_error(self, ctx, error):
-    #     if isinstance(error, Blacklisted):
-    #         await ctx.send(embed=error.as_embed())
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, Blacklisted):
+            await ctx.send(embed=error.as_embed())
 
     async def _show_blacklist_embed(self, ctx, colour, action, icon, thing, reason, time):
         embed = discord.Embed(colour=colour)
@@ -97,15 +96,10 @@ class Blacklists(Cog, hidden=True):
             return await ctx.send("You can't blacklist my sensei you baka...")
 
         time = datetime.datetime.utcnow()
-        row = Blacklist(
-            snowflake=server_or_user.id,
-            blacklisted_at=time,
-            reason=reason
-        )
+        query = "INSERT INTO blacklist (snowflake, blacklisted_at, reason) VALUES ($1, $2, $3);"
 
         try:
-            async with ctx.db.get_session() as session:
-                await session.add(row)
+            await ctx.db.execute(query, server_or_user.id, time, reason)
         except asyncpg.UniqueViolationError:
             return await ctx.send(f'{server_or_user} has already been blacklisted.')
         else:
@@ -120,16 +114,13 @@ class Blacklists(Cog, hidden=True):
         if await ctx.bot.is_owner(server_or_user):
             return await ctx.send("You can't blacklist my sensei you baka...")
 
-        async with ctx.db.get_session() as session:
-            query = session.select.from_(Blacklist).where(Blacklist.snowflake == server_or_user.id)
-            row = await query.first()
-            if not row:
-                return await ctx.send(f"{server_or_user} isn't blacklisted.")
+        query = "DELETE FROM blacklist WHERE snowflake = $1;"
+        result = await ctx.db.execute(query, server_or_user.id)
+        if result[-1] == '0':
+            return await ctx.send(f"{server_or_user} isn't blacklisted.")
 
-            await session.remove(row)
-            await self._show_blacklist_embed(ctx, 0x4CAF50, 'unblacklisted', _unblocked_icon,
-                                             server_or_user, reason, datetime.datetime.utcnow())
-
+        await self._show_blacklist_embed(ctx, 0x4CAF50, 'unblacklisted', _unblocked_icon,
+                                         server_or_user, reason, datetime.datetime.utcnow())
 
 
 def setup(bot):
