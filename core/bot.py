@@ -11,6 +11,7 @@ import logging
 import random
 import re
 import sys
+import textwrap
 import traceback
 
 from datetime import datetime
@@ -272,6 +273,16 @@ class Chiaki(commands.Bot):
         async with ctx.acquire():
             await self.invoke(ctx)
 
+    async def run_sql(self):
+        await self.pool.execute(self.schema)
+
+    def _dump_schema(self):
+        with open('schema.sql', 'w') as f:
+            f.write(self.schema)
+
+    async def dump_sql(self):
+        await self.loop.run_in_executor(None, self._dump_schema)
+
     # --------- Events ----------
 
     async def on_ready(self):
@@ -418,7 +429,7 @@ class Chiaki(commands.Bot):
         # The following is the link to the bot's support server.
         # You are allowed to change this to be another server of your choice.
         # However, doing so will instantly void your warranty.
-        # Change this at your own peril.
+        # Change this azt your own peril.
         return 'https://discord.gg/WtkPTmE'
 
     @property
@@ -432,3 +443,8 @@ class Chiaki(commands.Bot):
     @property
     def all_cogs(self):
         return collections.ChainMap(self.cogs, self.cog_aliases)
+
+    @property
+    def schema(self):
+        schema = ''.join(getattr(ext, '__schema__', '') for ext in self.extensions.values())
+        return textwrap.dedent(schema + self.db_scheduler.__schema__)

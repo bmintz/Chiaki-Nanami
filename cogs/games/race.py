@@ -16,6 +16,12 @@ from ..utils import converter, formats
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS racehorses (
+        user_id BIGINT PRIMARY KEY,
+        emoji TEXT NOT NULL
+    );
+"""
 
 TRACK_LENGTH = 40
 DEFAULT_TRACK = '-' * TRACK_LENGTH

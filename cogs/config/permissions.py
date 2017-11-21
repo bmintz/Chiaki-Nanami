@@ -15,6 +15,23 @@ from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        snowflake BIGINT NULL,
+        name TEXT NOT NULL,
+        whitelist BOOLEAN NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS permissions_guild_id_idx ON permissions (guild_id);
+
+    CREATE TABLE IF NOT EXISTS plonks (
+        guild_id BIGINT,
+        entity_id BIGINT,
+        PRIMARY KEY(guild_id, entity_id)
+    );
+    CREATE INDEX IF NOT EXISTS plonks_idx ON plonks (guild_id, entity_id);
+"""
 
 ALL_MODULES_KEY = '*'
 

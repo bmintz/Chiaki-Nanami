@@ -12,6 +12,19 @@ from .utils.misc import str_join
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS selfroles(
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        role_id BIGINT UNIQUE NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS autoroles (
+        guild_id BIGINT PRIMARY KEY,
+        role_id BIGINT NOT NULL
+    );
+"""
+
 
 class LowerRole(commands.RoleConverter):
     async def convert(self, ctx, arg):

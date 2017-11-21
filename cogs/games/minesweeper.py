@@ -20,6 +20,19 @@ from ..utils.time import duration_units
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS minesweeper_games (
+        id SERIAL PRIMARY KEY,
+        level SMALLINT NOT NULL,
+        won BOOLEAN NOT NULL,
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL
+        played_at TIMESTAMP NOT NULL,
+        time REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS minesweeper_games_time_idx ON TABLE minesweeper_games (time);
+"""
+
 
 class MinesweeperException(Exception):
     pass

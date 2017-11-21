@@ -13,6 +13,16 @@ from ..utils import time
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS server_messages (
+        guild_id BIGINT,
+        is_welcome BOOLEAN,
+        channel_id BIGINT NULL,
+        message TEXT NULL,
+        delete_after SMALLINT DEFAULT 0,
+        enabled BOOLEAN DEFAULT FALSE
+    );
+"""
 
 _DEFAULT_CHANNEL_CHANGE_URL = ('https://github.com/discordapp/discord-api-docs/blob/master/docs/'
                                'Change_Log.md#breaking-change-default-channels')

@@ -7,6 +7,17 @@ from .utils.paginator import ListPaginator
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS command_aliases (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        alias TEXT NOT NULL,
+        command TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS command_aliases_uniq_idx
+    ON command_aliases (guild_id, alias);
+"""
 
 def _first_word(string):
     return string.split(' ', 1)[0]

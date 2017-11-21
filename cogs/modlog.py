@@ -18,13 +18,45 @@ from .utils.time import duration_units, parse_delta
 
 from core.cog import Cog
 
-
 log = logging.getLogger(__name__)
 
 
 class ModLogError(errors.ChiakiException):
     pass
 
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS modlog (
+        id SERIAL PRIMARY KEY,
+        channel_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        guild_id BIGINT NOT NULL,
+        action VARCHAR(16) NOT NULL,
+        mod_id BIGINT NOT NULL,
+        reason TEXT NOT NULL,
+        extra TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS modlog_guild_id_idx ON modlog (guild_id);
+
+    CREATE TABLE IF NOT EXISTS modlog_targets (
+        id SERIAL PRIMARY KEY,
+        entry_id INTEGER REFERENCES modlog ON DELETE CASCADE,
+        user_id BIGINT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS modlog_config (
+        guild_id BIGINT PRIMARY KEY,
+        channel_id BIGINT NOT NULL DEFAULT 0,
+
+        -- some booleans
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        log_auto BOOLEAN NOT NULL DEFAULT TRUE,
+        dm_user BOOLEAN NOT NULL DEFAULT TRUE,
+        poll_audit_log BOOLEAN NOT NULL DEFAULT TRUE,
+
+        events INTEGER NOT NULL DEFAULT {default_flags}
+    );
+"""
 
 ModAction = collections.namedtuple('ModAction', 'repr emoji colour')
 
@@ -56,9 +88,10 @@ class EnumConverter(enum.IntFlag):
 ActionFlag = enum.IntFlag('ActionFlag', list(_mod_actions), type=EnumConverter)
 _default_flags = (2 ** len(_mod_actions) - 1) & ~ActionFlag.hackban
 
-
 for k, v in list(_mod_actions.items()):
     _mod_actions[f'auto-{k}'] = v._replace(repr=f'auto-{v.repr}')
+
+__schema__ = __schema__.format(default_flags=_default_flags.value)
 
 MASSBAN_THUMBNAIL = emoji_url('\N{NO ENTRY}')
 

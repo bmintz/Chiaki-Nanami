@@ -22,6 +22,25 @@ from ..utils.misc import base_filename, emoji_url
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS trivia_categories (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        name TEXT NOT NULL
+        description TEXT NULL,
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS trivia_categories_uniq_idx
+    ON trivia_categories (LOWER(name), guild_id);
+
+    CREATE TABLE IF NOT EXISTS trivia_questions (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES trivia_categories ON DELETE CASCADE,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        image TEXT NULL
+    );
+    CREATE INDEX IF NOT EXISTS trivia_questions_category_id_idx ON trivia_questions (category_id);
+"""
 
 _logger = logging.getLogger(__name__)
 

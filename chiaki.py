@@ -28,7 +28,7 @@ def main():
     parser.add_argument('--create-tables', action='store_true', help='Create the tables before running the bot.')
     args = parser.parse_args()
     if args.create_tables:
-        bot.loop.run_until_complete(bot.create_tables())
+        bot.loop.run_until_complete(bot.run_sql())
 
     bot.run()
     return 69 * bot.reset_requested

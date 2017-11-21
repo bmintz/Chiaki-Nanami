@@ -9,6 +9,13 @@ from .utils.misc import emoji_url, truncate
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS blacklist (
+        snowflake BIGINT PRIMARY KEY,
+        blacklisted_at TIMESTAMP NOT NULL,
+        reason TEXT NULL
+    );
+"""
 
 _blocked_icon = emoji_url('\N{NO ENTRY}')
 _unblocked_icon = emoji_url('\N{WHITE HEAVY CHECK MARK}')

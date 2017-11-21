@@ -14,7 +14,33 @@ from ..utils.time import duration_units
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS currency (
+        user_id BIGINT PRIMARY KEY,
+        amount INTEGER NOT NULL
+    );
 
+    CREATE TABLE IF NOT EXISTS givelog (
+        id SERIAL PRIMARY KEY,
+        giver BIGINT NOT NULL,
+        recipient BIGINT NOT NULL,
+        amount INTEGER NOT NULL,
+        time TIMESTAMP NOT NULL DEFAULT (now() at time zone 'utc')
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_cash_cooldowns (
+        user_id BIGINT PRIMARY KEY,
+        latest_time TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS dailylog (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT,
+        time TIMESTAMP NOT NULL,
+        amount INTEGER NOT NULL
+    );
+
+"""
 # Cooldown for ->daily$
 DAILY_CASH_COOLDOWN_TIME = 60 * 60 * 24
 

@@ -17,6 +17,22 @@ from .utils.time import human_timedelta
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS commands (
+        id BIGSERIAL PRIMARY KEY NOT NULL,
+        guild_id BIGINT NULL,
+        channel_id BIGINT NOT NULL,
+        author_id BIGINT NOT NULL,
+        used TIMESTAMP NOT NULL,
+        prefix TEXT NOT NULL,
+        command TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS commands_author_id_idx ON commands (author_id);
+    CREATE INDEX IF NOT EXISTS commands_command_idx ON commands (command);
+    CREATE INDEX IF NOT EXISTS commands_guild_id_idx ON commands (guild_id);
+"""
+
 _ignored_exceptions = (
     commands.NoPrivateMessage,
     commands.DisabledCommand,

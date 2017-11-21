@@ -19,7 +19,33 @@ from .utils.paginator import ListPaginator, EmbedFieldPages
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS warn_entries (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        reason TEXT NOT NULL,
+        warned_at TIMESTAMP NOT NULL
+    );
 
+    CREATE TABLE IF NOT EXISTS warn_timeouts (
+        guild_id BIGINT PRIMARY KEY,
+        timeout INTERVAL
+    );
+
+    CREATE TABLE IF NOT EXISTS warn_punishments (
+        guild_id BIGINT,
+        warns BIGINT,
+        type TEXT,
+        duration INTEGER DEFAULT 0,
+        PRIMARY KEY(guild_id, warns)
+    );
+
+    CREATE TABLE IF NOT EXISTS muted_roles (
+        guild_id BIGINT PRIMARY KEY,
+        role_id BIGINT
+    );
+"""
 # Dummy punishment class for default warn punishment
 _DummyPunishment = namedtuple('_DummyPunishment', 'warns type duration')
 _default_punishment = _DummyPunishment(warns=3, type='mute', duration=60 * 10)
