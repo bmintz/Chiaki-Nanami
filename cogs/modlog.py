@@ -266,8 +266,11 @@ class ModLog(Cog):
                  .set_author(name=f'{action_applied}!', icon_url=emoji_url(mod_action.emoji))
                  .add_field(name='In', value=str(server), inline=False)
                  .add_field(name='By', value=str(user), inline=False)
-                 .add_field(name='Reason', value=reason, inline=False)
                  )
+
+        # Don't specify a reason if there is None.
+        if reason:
+            embed.add_field(name='Reason', value=reason, inline=False)
 
         for target in targets:
             with contextlib.suppress(discord.HTTPException):
@@ -322,7 +325,7 @@ class ModLog(Cog):
         extra = ctx.args[3] if 'duration' in ctx.command.params else None
         # In the event of a massban, the reason is a required positional argument
         # rather than a keyword-only consume rest one.
-        reason = ctx.kwargs.get('reason') or ctx.args[2]
+        reason = ctx.args[2] if name == 'massban' else ctx.kwargs.get('reason')
 
         # We have get the config outside the two functions because we use it twice.
         config = await self._get_case_config(ctx.session, ctx.guild.id)
