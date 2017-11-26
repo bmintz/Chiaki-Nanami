@@ -126,9 +126,6 @@ class ConnectFourSession:
         if lowered in {'quit', 'stop'}:
             raise errors.RageQuit
 
-        if lowered in {'help', 'h'}:
-            return 'h'
-
         column = int(one(string))
         if not 1 <= column <= 7:
             raise ValueError('must be 1 <= column <= 7')
@@ -169,9 +166,6 @@ class ConnectFourSession:
                     except (asyncio.TimeoutError, errors.RageQuit):
                         return Stats(next(cycle), turn)
 
-                    if column == 'h':
-                        await self._send_help_embed()
-                        continue
                     try:
                         self.board.place(column, tile)
                     except (ValueError, IndexError):
