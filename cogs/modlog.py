@@ -259,7 +259,7 @@ class ModLog(Cog):
         action_applied = f'You were {mod_action.repr}'
         if extra:
             # TODO: Get the warn number.
-            action_applied += ' for {duration_units(extra)}'
+            action_applied += f' for {duration_units(extra)}'
 
         # Will probably refactor this later.
         embed = (discord.Embed(colour=mod_action.colour, timestamp=datetime.utcnow())
