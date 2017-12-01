@@ -16,7 +16,7 @@ from .tables.base import TableBase
 from .utils import cache, errors
 from .utils.misc import emoji_url, truncate, unique
 from .utils.paginator import EmbedFieldPages
-from .utils.time import duration_units
+from .utils.time import parse_delta
 
 from core.cog import Cog
 
@@ -259,7 +259,7 @@ class ModLog(Cog):
         action_applied = f'You were {mod_action.repr}'
         if extra:
             # TODO: Get the warn number.
-            action_applied += f' for {duration_units(extra)}'
+            action_applied += f' for {parse_delta(extra.delta)}'
 
         # Will probably refactor this later.
         embed = (discord.Embed(colour=mod_action.colour, timestamp=datetime.utcnow())
