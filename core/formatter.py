@@ -12,7 +12,6 @@ from discord.ext import commands
 from more_itertools import sliced
 
 from cogs.utils.context_managers import temp_attr
-from cogs.utils.formats import truncate
 from cogs.utils.paginator import BaseReactionPaginator, ListPaginator, page
 
 
@@ -152,8 +151,7 @@ async def _can_run(command, ctx):
 async def _command_formatters(commands, ctx):
     for command in commands:
         fmt = '`{}`' if await _can_run(command, ctx) else '~~`{}`~~'
-        line = ' | '.join(map(fmt.format, _all_names(command)))
-        yield line, truncate(command.short_doc, 25, '...')
+        yield map(fmt.format, _all_names(command))
 
 
 _note = (
@@ -176,7 +174,7 @@ class CogPages(ListPaginator):
                    if not (c.hidden or ctx.bot.formatter.show_hidden))
 
         formats = _command_formatters(sorted(entries, key=str), ctx)
-        lines = [line async for line in formats]
+        lines = [' | '.join(line) async for line in formats]
 
         self = cls(ctx, lines)
         self._cog_doc = inspect.getdoc(cog) or 'No description... yet.'
@@ -185,11 +183,9 @@ class CogPages(ListPaginator):
         return self
 
     def _create_embed(self, idx, entries):
-        lines, docs = zip(*entries)
         return (discord.Embed(colour=self.colour, description=self._cog_doc)
                 .set_author(name=self._cog_name)
-                .add_field(name='Commands', value='\n'.join(lines))
-                .add_field(name='\u200b', value='\n'.join(docs))
+                .add_field(name='Commands', value='\n'.join(entries))
                 .add_field(name='Note', value=_note, inline=False)
                 .set_footer(text=f'Currently on page {idx + 1}')
                 )
@@ -232,11 +228,8 @@ class GeneralHelpPaginator(ListPaginator):
             else:
                 description = inspect.getdoc(cog) or 'No description... yet.'
 
-            lines = [line async for line in _command_formatters(cmds, ctx)]
-            nested_pages.extend(
-                (parent, name, description, page)
-                for page in sliced(lines, per_page)
-            )
+            lines = [' | '.join(line) async for line in _command_formatters(cmds, ctx)]
+            nested_pages.extend((parent, name, description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
@@ -266,14 +259,12 @@ class GeneralHelpPaginator(ListPaginator):
     def _create_embed(self, idx, page):
         _, name, description, lines = page[0]
         note = f'Type `{self.context.clean_prefix}help command`\nfor more info on a command.'
-        lines, docs = zip(*lines)
+        commands = '\n'.join(lines) + f'\n\n{note}'
 
         return self._page_footer_embed(
             discord.Embed(colour=self.colour, description=description)
             .set_author(name=name)
-            .add_field(name='Commands', value='\n'.join(lines))
-            .add_field(name='\u200b', value='\n'.join(docs))
-            .add_field(name='\u200b', value=note, inline=False)
+            .add_field(name='Commands', value=commands)
             .add_field(name='Note', value=_note, inline=False),
             offset=self._num_extra_pages
         )
