@@ -41,8 +41,32 @@ __schema__ = """
     );
 
 """
+
+
 # Cooldown for ->daily$
 DAILY_CASH_COOLDOWN_TIME = 60 * 60 * 24
+# minimum account age in days before one can use ->give or ->daily$
+MINIMUM_ACCOUNT_AGE = 7
+MINIMUM_ACCOUNT_AGE_IN_SECONDS = MINIMUM_ACCOUNT_AGE * 24 * 60 * 60
+
+
+class AccountTooYoung(commands.CheckFailure):
+    """Exception raised when an account is less than 7 days old."""
+    pass
+
+
+def maybe_not_alt():
+    def predicate(ctx):
+        delta = ctx.message.created_at - ctx.author.created_at
+        if delta.days > MINIMUM_ACCOUNT_AGE:
+            return True
+
+        retry_after = duration_units(MINIMUM_ACCOUNT_AGE_IN_SECONDS - delta.total_seconds())
+        raise AccountTooYoung(
+            f"Sorry. You're too young. Wait until you're a little older "
+            f"({retry_after}) before you can use `{ctx.clean_prefix}{ctx.command}`."
+        )
+    return commands.check(predicate)
 
 
 class Side(enum.Enum):
@@ -133,6 +157,8 @@ class Money(Cog):
     async def __error(self, ctx, error):
         if isinstance(error, NotNegative):
             await ctx.send("I'm not letting you mess up my economy \N{POUTING FACE}")
+        elif isinstance(error, AccountTooYoung):
+            await ctx.send(error)
 
     @property
     def image_size(self):
@@ -195,6 +221,7 @@ class Money(Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
+    @maybe_not_alt()
     async def give(self, ctx, amount: positive_int, user: NonBlacklistedMember):
         """Gives some of your money to another user.
 
@@ -357,6 +384,7 @@ class Money(Cog):
         await ctx.send(file=file, embed=embed)
 
     @commands.command(name='daily$', aliases=['$daily'])
+    @maybe_not_alt()
     async def daily_cash(self, ctx):
         """Command to give you daily cash (between 50 and 200).
 
