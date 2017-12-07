@@ -45,15 +45,16 @@ class Blacklists(Cog, hidden=True):
     def __init__(self, bot):
         self.bot = bot
 
+    @staticmethod
+    async def get_blacklist(thing, *, connection):
+        query = "SELECT reason FROM blacklist WHERE snowflake = $1;"
+        return await connection.fetchrow(query, thing.id)
+
     async def __local_check(self, ctx):
         return await ctx.bot.is_owner(ctx.author)
 
     async def __global_check_once(self, ctx):
-        async def get_blacklist(id):
-            query = "SELECT reason FROM blacklist WHERE snowflake = $1;"
-            return await ctx.db.fetchrow(query, id)
-
-        row = await get_blacklist(ctx.author.id)
+        row = await self.get_blacklist(ctx.author, connection=ctx.db)
         if row:
             raise Blacklisted('You have been blacklisted by the owner.', row['reason'])
 
@@ -62,7 +63,7 @@ class Blacklists(Cog, hidden=True):
         if ctx.guild is None:
             return True
 
-        row = await get_blacklist(ctx.guild.id)
+        row = await self.get_blacklist(ctx.guild, connection=ctx.db)
         if row:
             raise Blacklisted('This server has been blacklisted by the owner.', row['reason'])
 

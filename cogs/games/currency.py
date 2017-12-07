@@ -93,6 +93,17 @@ def positive_int(arg):
     raise NotNegative('expected a positive value')
 
 
+class NonBlacklistedMember(commands.MemberConverter):
+    async def convert(self, ctx, arg):
+        member = await super().convert(ctx, arg)
+        blacklist = ctx.bot.get_cog('Blacklists')
+
+        if blacklist:
+            if await blacklist.get_blacklist(member, connection=ctx.db):
+                raise commands.BadArgument("This user is blacklisted.")
+        return member
+
+
 class Money(Cog):
     """For all you gamblers and money-lovers, this is this cog for you!
 
@@ -184,7 +195,7 @@ class Money(Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
-    async def give(self, ctx, amount: positive_int, user: discord.Member):
+    async def give(self, ctx, amount: positive_int, user: NonBlacklistedMember):
         """Gives some of your money to another user.
 
         You must have at least the amount you're trying to give.
