@@ -97,6 +97,13 @@ class Owner(Cog, hidden=True):
         body = self.cleanup_code(body)
         to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
 
+        async def safe_send(content):
+            if len(content) >= 1990:  # len(```py\n\n```') == 10
+                with io.BytesIO(content.encode('utf-8')) as f:
+                    await ctx.send('Content too big.', file=discord.File(f, 'result.txt'))
+            else:
+                await ctx.send(f'```py\n{content}\n```')
+
         try:
             exec(to_compile, env)
         except SyntaxError as e:
@@ -105,11 +112,15 @@ class Owner(Cog, hidden=True):
         func = env['func']
         with io.StringIO() as stdout:
             try:
+                # TODO: Find a way to make this concurrency-safe. Right now
+                # if the function in the eval takes a long time. The global
+                # sys.stdout will stay redirected for a long time, potentially
+                # throwing off other prints.
                 with contextlib.redirect_stdout(stdout):
                     ret = await func()
             except Exception as e:
                 value = stdout.getvalue()
-                await ctx.send(f'```py\n{value}{traceback.format_exc()}\n```')
+                await safe_send(f'{value}{traceback.format_exc()}')
             else:
                 value = stdout.getvalue()
                 with contextlib.suppress(discord.HTTPException):
@@ -117,10 +128,10 @@ class Owner(Cog, hidden=True):
 
                 if ret is None:
                     if value:
-                        await ctx.send(f'```py\n{value}\n```')
+                        await safe_send(value)
                 else:
                     self._last_result = ret
-                    await ctx.send(f'```py\n{value}{ret}\n```')
+                    await safe_send(f'{value}{ret}')
 
     @commands.command(hidden=True)
     async def sql(self, ctx, *, query: str):
