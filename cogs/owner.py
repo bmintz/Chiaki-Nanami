@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from .utils.context_managers import temp_attr
 from .utils.disambiguate import DisambiguateGuild
+from .utils.subprocesses import run_subprocess
 
 from core.cog import Cog
 
@@ -169,6 +170,38 @@ class Owner(Cog, hidden=True):
             await ctx.send('Too many results...', file=discord.File(fp, 'results.txt'))
         else:
             await ctx.send(fmt)
+
+    @commands.command(aliases=['sh'])
+    async def shell(self, ctx, *, command):
+        """Runs a shell command"""
+        embed = (discord.Embed(colour=ctx.bot.colour, description=f'```\n{command}```')
+                 .set_author(name='Output')
+                 )
+
+        files = []
+
+        def maybe_put_content(content, *, name):
+            if len(content) >= 1017:  # len('```\n```') == 7
+                # TODO: transfer.sh or something because these files look weird
+                #       on top of the embed. Then again links aren't clickable
+                #       on mobile...
+                files.append(discord.File(io.BytesIO(content.encode('utf-8')), f'{name}.txt'))
+                content = 'Too big.'
+            elif not content:
+                content = 'Nothing'
+            else:
+                content = f'```\n{content}```'
+
+            embed.add_field(name=name, value=content, inline=False)
+
+        out, err = await run_subprocess(command)
+        maybe_put_content(out, name='stdout')
+        maybe_put_content(err, name='stderr')
+
+        # idk if sending an empty list for files is ok but
+        # I'm gonna play it safe here.
+        files = files or None
+        await ctx.send(files=files, embed=embed)
 
     @commands.command()
     async def botav(self, ctx, *, avatar):
