@@ -12,9 +12,6 @@ from discord.ext import commands
 from .misc import maybe_awaitable
 
 
-_log = logging.getLogger(__name__)
-
-
 @contextlib.contextmanager
 def _always_done_future(fut):
     fut = asyncio.ensure_future(fut)
@@ -146,8 +143,6 @@ class BaseReactionPaginator:
             emoji = getattr(member, '__reaction_emoji__', None)
             if emoji:
                 cls._reaction_map[emoji] = name
-                _log.debug('Initializing emoji %s for method %s in class %s',
-                           hex(ord(emoji)), member.__qualname__, cls.__name__)
 
         # We need to move stop to the end (assuming it exists).
         # Otherwise it will show up somewhere in the middle
