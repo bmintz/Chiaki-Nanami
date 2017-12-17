@@ -5,6 +5,3 @@ class ChiakiException(commands.CommandError):
 
 class InvalidUserArgument(ChiakiException):
     """Exception raised when the user inputs an invalid argument, even though conversion is successful."""
-
-class ResultsNotFound(ChiakiException):
-    """Exception raised when a search returns some form of "not found" """

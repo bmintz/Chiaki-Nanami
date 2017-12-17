@@ -18,7 +18,7 @@ from operator import attrgetter
 
 from .utils import cache, disambiguate
 from .utils.colours import url_color, user_color
-from .utils.context_managers import redirect_exception, temp_message
+from .utils.context_managers import temp_message
 from .utils.converter import BotCommand, union
 from .utils.formats import *
 from .utils.misc import group_strings, str_join, nice_time, ordinal
@@ -46,7 +46,7 @@ async def _mee6_stats(session, member):
         if user_stats.get("id") == str(member.id):
             user_stats["rank"] = idx
             return user_stats
-    raise errors.ResultsNotFound(f"{member} does not have a mee6 level. :frowning:")
+    return None
 
 
 _role_create = discord.AuditLogAction.role_create
@@ -404,10 +404,14 @@ class Meta(Cog):
             member = ctx.author
         avatar_url = member.avatar_url
 
-        no_mee6_in_server = "No stats found. You don't have mee6 in this server... I think."
-        with redirect_exception((json.JSONDecodeError, no_mee6_in_server)):
-            async with ctx.typing(), temp_message(ctx, "Fetching data, please wait..."):
+        async with ctx.typing(), temp_message(ctx, "Fetching data, please wait..."):
+            try:
                 stats = await _mee6_stats(ctx.bot.session, member)
+            except json.JSONDecodeError:
+                return await ctx.send("No stats found.")
+            else:
+                if stats is None:
+                    return await ctx.send(f"{member} doesn't have a level yet...")
 
         description = f"Currently sitting at {stats['rank']}!"
         xp_progress = "{xp}/{lvl_xp} ({xp_percent}%)".format(**stats)
