@@ -1,6 +1,4 @@
 import contextlib
-from collections.abc import Sequence
-from core.errors import ChiakiException
 
 _sentinel = object()
 
@@ -17,20 +15,6 @@ def temp_attr(obj, attr, value):
             delattr(obj, attr)
         else:
             setattr(obj, attr, old_value)
-
-
-@contextlib.contextmanager
-def redirect_exception(*exceptions, cls=ChiakiException):
-    """Context manager to re-raise exceptions with a proxy exception class.
-
-    The exceptions can either be an exception type or a (exc_type, string) pair.
-    """
-    exceptions = dict(exc if isinstance(exc, Sequence) else (exc, None)
-                      for exc in exceptions)
-    try:
-        yield
-    except tuple(exceptions) as e:
-        raise cls(exceptions[type(e)] or str(e)) from e
 
 
 # asynccontextmanager when
