@@ -49,6 +49,12 @@ __schema__ = """
 """
 
 
+class AlreadyWarned(errors.ChiakiException):
+    """Exception raised to avoid the case where a failed-warn due 
+    to the cooldown would be considered to be a success"""
+    pass
+
+
 # Dummy punishment class for default warn punishment
 _DummyPunishment = namedtuple('_DummyPunishment', 'warns type duration')
 _default_punishment = _DummyPunishment(warns=3, type='mute', duration=60 * 10)
@@ -392,8 +398,8 @@ class Moderator(Cog):
             if retry_after <= 60:
                 # Must throw an error because return await triggers on_command_completion
                 # Which would end up logging a case even though it doesn't work.
-                raise RuntimeError(f"{member} has been warned already, try again in "
-                                   f"{60 - retry_after :.2f} seconds...")
+                raise AlreadyWarned(f"{member} has been warned already, try again in "
+                                    f"{60 - retry_after :.2f} seconds...")
 
         # Add the warn
         query = """INSERT INTO warn_entries (guild_id, user_id, mod_id, reason, warned_at)
@@ -444,12 +450,6 @@ class Moderator(Cog):
         ctx.command = punishment_command
         ctx.args[2:] = args
         ctx.kwargs['reason'] = punishment_reason
-
-    @warn.error
-    async def warn_error(self, ctx, error):
-        original = getattr(error, 'original', None)
-        if isinstance(original, RuntimeError):
-            await ctx.send(original)
 
     # XXX: Should this be a group?
 
