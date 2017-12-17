@@ -13,7 +13,7 @@ from discord.ext import commands
 from .utils.converter import number
 
 from core.cog import Cog
-from core.errors import InvalidUserArgument, private_message_only
+from core.errors import InvalidUserArgument
 
 try:
     import webcolors
@@ -33,6 +33,19 @@ else:
             return webcolors.rgb_to_name(requested_colour)
         except ValueError:
             return closest_colour(requested_colour)
+
+
+# TODO: Make a check file.
+class PrivateMessagesOnly(commands.CheckFailure):
+    pass
+
+
+def dm_only():
+    def predicate(ctx):
+        if isinstance(ctx.channel, (discord.GroupChannel, discord.DMChannel)):
+            return True
+        raise PrivateMessagesOnly('This command can only be used in private messages.')
+    return commands.check(predicate)
 
 
 _diepio_tanks = [
@@ -299,7 +312,7 @@ class RNG(Cog):
         await ctx.send(uuid.uuid4())
 
     @random.command(aliases=['pw'])
-    @private_message_only("Why are you asking for a password in public...?")
+    @dm_only()
     async def password(self, ctx, n: int=8, *rest: str):
         """Generates a random password
 
@@ -318,6 +331,11 @@ class RNG(Cog):
             letters = letters.translate(symbol_deletion)
         password = _password(n, letters)
         await ctx.send(password)
+
+    @password.error
+    async def password_error(self, ctx, error):
+        if isinstance(error, PrivateMessagesOnly):
+            await ctx.send('Why are you asking for a password in public...?')
 
     @random.command()
     async def maze(self, ctx, w: int=5, h: int=5):
