@@ -306,7 +306,7 @@ class Racing(Cog):
             await ctx.send(
                 f'Race has started! Type `{ctx.prefix}{ctx.invoked_with}` to join! '
                 f'Be quick though, you only have 30 seconds, or until {ctx.author.mention} '
-                f'closes the race with `{ctx.prefix}{ctx.invoked_with} close!`'
+                f'closes the race with `{ctx.prefix}{ctx.invoked_with} close`!'
             )
 
             if not await waiter.wait():
