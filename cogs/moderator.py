@@ -47,6 +47,8 @@ __schema__ = """
         role_id BIGINT
     );
 """
+
+
 # Dummy punishment class for default warn punishment
 _DummyPunishment = namedtuple('_DummyPunishment', 'warns type duration')
 _default_punishment = _DummyPunishment(warns=3, type='mute', duration=60 * 10)
@@ -285,7 +287,7 @@ class Moderator(Cog):
 
         if isinstance(num_or_user, int):
             if num_or_user < 1:
-                raise errors.InvalidUserArgument(f"How can I delete {number} messages...?")
+                return await ctx.send(f"How can I delete {number} messages...?")
             deleted = await ctx.channel.purge(limit=min(num_or_user, 1000) + 1)
         elif isinstance(num_or_user, discord.Member):
             deleted = await ctx.channel.purge(check=lambda m: m.author.id == num_or_user.id)
