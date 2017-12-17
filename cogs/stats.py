@@ -8,13 +8,13 @@ import traceback
 from discord.ext import commands
 from more_itertools import ilen, partition
 
-from .utils import errors
 from .utils.disambiguate import DisambiguateGuild
 from .utils.formats import pluralize
 from .utils.misc import emoji_url
 from .utils.paginator import ListPaginator, EmbedFieldPages
 from .utils.time import human_timedelta
 
+from core import errors
 from core.cog import Cog
 
 __schema__ = """

@@ -18,11 +18,10 @@ from datetime import datetime
 from discord.ext import commands
 from more_itertools import always_iterable
 
-from . import context
+from . import context, errors
 from .cog import Cog
 from .formatter import ChiakiFormatter
 
-from cogs.utils import errors
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.misc import file_handler
 from cogs.utils.scheduler import DatabaseScheduler

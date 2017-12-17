@@ -1,6 +1,6 @@
 import contextlib
 from collections.abc import Sequence
-from .errors import ChiakiException
+from core.errors import ChiakiException
 
 _sentinel = object()
 

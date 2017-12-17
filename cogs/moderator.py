@@ -10,13 +10,14 @@ from collections import Counter, namedtuple
 from discord.ext import commands
 from operator import attrgetter
 
-from .utils import errors, formats, time
+from .utils import formats, time
 from .utils.context_managers import temp_attr
 from .utils.converter import union
 from .utils.jsonf import JSONFile
 from .utils.misc import ordinal
 from .utils.paginator import ListPaginator, EmbedFieldPages
 
+from core import errors
 from core.cog import Cog
 
 __schema__ = """

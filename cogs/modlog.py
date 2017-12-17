@@ -11,11 +11,12 @@ from datetime import datetime, timedelta
 from discord.ext import commands
 from functools import reduce
 
-from .utils import cache, errors
+from .utils import cache
 from .utils.misc import emoji_url, truncate, unique
 from .utils.paginator import EmbedFieldPages
 from .utils.time import duration_units, parse_delta
 
+from core import errors
 from core.cog import Cog
 
 log = logging.getLogger(__name__)

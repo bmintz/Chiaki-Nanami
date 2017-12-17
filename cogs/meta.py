@@ -20,12 +20,12 @@ from .utils import cache, disambiguate
 from .utils.colours import url_color, user_color
 from .utils.context_managers import redirect_exception, temp_message
 from .utils.converter import BotCommand, union
-from .utils.errors import ResultsNotFound
 from .utils.formats import *
 from .utils.misc import group_strings, str_join, nice_time, ordinal
 from .utils.paginator import BaseReactionPaginator, ListPaginator, page
 from .utils.subprocesses import run_subprocess
 
+from core import errors
 from core.cog import Cog
 
 
@@ -46,7 +46,7 @@ async def _mee6_stats(session, member):
         if user_stats.get("id") == str(member.id):
             user_stats["rank"] = idx
             return user_stats
-    raise ResultsNotFound(f"{member} does not have a mee6 level. :frowning:")
+    raise errors.ResultsNotFound(f"{member} does not have a mee6 level. :frowning:")
 
 
 _role_create = discord.AuditLogAction.role_create

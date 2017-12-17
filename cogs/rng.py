@@ -11,9 +11,9 @@ import uuid
 from discord.ext import commands
 
 from .utils.converter import number
-from .utils.errors import InvalidUserArgument, private_message_only
 
 from core.cog import Cog
+from core.errors import InvalidUserArgument, private_message_only
 
 try:
     import webcolors
