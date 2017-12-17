@@ -82,6 +82,23 @@ class BannedMember(commands.Converter):
         return thing
 
 
+class CheckedMember(commands.Converter):
+    def __init__(self, type=commands.MemberConverter):
+        self.converter = type()
+
+    async def convert(self, ctx, arg):
+        member = await self.converter.convert(ctx, arg)
+        if not isinstance(member, discord.Member):
+            return member
+
+        if ctx.author.id == member.id:
+            raise commands.BadArgument("Please don't hurt yourself. :(")
+        if member.id == ctx.bot.user.id:
+            raise commands.BadArgument("Hey, what did I do??")
+
+        return member
+
+
 _warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
 _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
@@ -354,7 +371,6 @@ class Moderator(Cog):
     @commands.has_permissions(manage_messages=True)
     async def warn(self, ctx, member: discord.Member, *, reason: str):
         """Warns a user (obviously)"""
-        self._check_user(ctx, member)
         author, current_time, guild_id = ctx.author, ctx.message.created_at, ctx.guild.id
         timeout = await self._get_warn_timeout(ctx.db, guild_id)
 
@@ -513,13 +529,6 @@ class Moderator(Cog):
             'after their oldest warn, bad things will happen.'
         )
 
-    @staticmethod
-    def _check_user(ctx, member):
-        if ctx.author.id == member.id:
-            raise errors.InvalidUserArgument("Please don't hurt yourself. :(")
-        if member.id == ctx.bot.user.id:
-            raise errors.InvalidUserArgument("Hey, what did I do??")
-
     async def _get_muted_role(self, guild, connection=None):
         connection = connection or self.bot.pool
 
@@ -571,7 +580,7 @@ class Moderator(Cog):
 
     @commands.command(usage=['192060404501839872 stfu about your gf'])
     @commands.has_permissions(manage_messages=True)
-    async def mute(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
+    async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: str=None):
         """Mutes a user (obviously)
 
         This command might take a while when this is used for the
@@ -583,7 +592,6 @@ class Moderator(Cog):
         this only happens once.
         (not so obviously)
         """
-        self._check_user(ctx, member)
         when = ctx.message.created_at + duration.delta
         await self._do_mute(member, when, ctx.db)
         await ctx.send(f"Done. {member.mention} will now be muted for "
@@ -689,29 +697,26 @@ class Moderator(Cog):
 
     @commands.command(usage='@Salt#3514 Inferior bot')
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason: str=None):
+    async def kick(self, ctx, member: CheckedMember, *, reason: str=None):
         """Kick a user (obviously)"""
 
-        self._check_user(ctx, member)
         await member.kick(reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
     @commands.command(aliases=['sb'], usage='259209114268336129 Enough of your raid fetish.')
     @commands.has_permissions(kick_members=True, manage_messages=True)
-    async def softban(self, ctx, member: discord.Member, *, reason: str=None):
+    async def softban(self, ctx, member: CheckedMember, *, reason: str=None):
         """Softbans a user (obviously)"""
 
-        self._check_user(ctx, member)
         await member.ban(reason=reason)
         await member.unban(reason=f'softban (original reason: {reason})')
         await ctx.send("Done. At least he'll be ok...")
 
     @commands.command(aliases=['tb'], usage='Kwoth#2560 Your bot sucks lol')
     @commands.has_permissions(ban_members=True)
-    async def tempban(self, ctx, member: discord.Member, duration: time.Delta, *, reason: str=None):
+    async def tempban(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: str=None):
         """Temporarily bans a user (obviously)"""
 
-        self._check_user(ctx, member)
         await ctx.guild.ban(member, reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
@@ -719,15 +724,12 @@ class Moderator(Cog):
 
     @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx, member: MemberID, *, reason: str=None):
+    async def ban(self, ctx, member: CheckedMember(MemberID), *, reason: str=None):
         """Bans a user (obviously)
 
         You can also use this to ban someone even if they're not in the server,
         just use the ID. (not so obviously)
         """
-        with contextlib.suppress(AttributeError):
-            self._check_user(ctx, member)
-
         await ctx.guild.ban(member, reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
@@ -742,7 +744,7 @@ class Moderator(Cog):
 
     @commands.command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
     @commands.has_permissions(ban_members=True)
-    async def massban(self, ctx, reason, *members: MemberID):
+    async def massban(self, ctx, reason, *members: CheckedMember(MemberID)):
         """Bans multiple users from the server (obviously)"""
         for m in members:
             await ctx.guild.ban(m, reason=reason)
