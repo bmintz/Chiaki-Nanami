@@ -1,4 +1,5 @@
 import asyncio
+import asyncpg
 import discord
 import functools
 import io
@@ -15,10 +16,29 @@ from discord.ext import commands
 from more_itertools import always_iterable
 from PIL import Image
 
+from .utils.paginator import ListPaginator
 from .utils.misc import emoji_url, load_async
 
 from core.cog import Cog
 
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS rigged_ships (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        partner_id BIGINT NOT NULL,
+        score SMALLINT NOT NULL,
+        comment TEXT NULL,
+
+        -- Metadata
+        guild_id BIGINT NOT NULL,
+        rigger_id BIGINT NOT NULL,
+
+        -- constraints
+        CHECK (user_id <= partner_id),
+        UNIQUE (guild_id, user_id, partner_id)
+    );
+"""
 
 # ---------------- Ship-related utilities -------------------
 
@@ -79,31 +99,43 @@ class _ShipRating(namedtuple('ShipRating', 'value comment')):
     __slots__ = ()
 
     def __new__(cls, value, comment=None):
-        if comment is None:
+        if not comment:
             index = round(_value_to_index(value))
             comment = _default_rating_comments[index]
         return super().__new__(cls, value, comment)
 
 
-_special_pairs = {}
+def _sort_users(user1, user2):
+    # We want user1 x user2 to be the same as user2 x user1,
+    # but we don't want duplicated entries on the table to have
+    # user, partner = user1, user2 and user, partner = user2, user1
+    # as not only the table would be huge, it would also make it a nightmare
+    # to make a proper query for this.
+    return sorted((user1, user2), key=lambda u: u.id)
 
 
-def _get_special_pairing(user1, user2):
-    keys = f'{user1.id}/{user2.id}', f'{user2.id}/{user1.id}'
+async def _get_special_pairing(user_id, partner_id, guild_id, *, connection):
+    query = """SELECT score, comment FROM rigged_ships
+               WHERE guild_id = $1
+               AND user_id = $2
+               AND partner_id = $3;
+            """
+    row = await connection.fetchrow(query, guild_id, user_id, partner_id)
+    if row is None:
+        return None
 
-    # Don't wanna use more_itertools.first_true because of its dumb signature
-    result = next(filter(None, map(_special_pairs.get, keys)), None)
-    if result is None:
-        return result
+    return _ShipRating(*row)
 
-    value = result.get('value', random.randrange(101))
 
-    try:
-        comment = random.choice(always_iterable(result.get('comments')))
-    except IndexError:      # most likely no comment field was specified
-        comment = None
+MIN_SCORE, MAX_SCORE = -32768, 32767
 
-    return _ShipRating(value=value, comment=comment)
+def score(num):
+    num = int(num)
+    if num < MIN_SCORE:
+        raise commands.BadArgument(f'Score should be at least {MIN_SCORE}.')
+    if num > MAX_SCORE:
+        raise commands.BadArgument(f'Score should be less than {MAX_SCORE}.')
+    return num
 
 
 # List of possible ratings when someone attempts to ship themself
@@ -117,10 +149,6 @@ def _calculate_rating(user1, user2):
     if user1 == user2:
         index = _seed % 2
         return _ShipRating(index * 100, _self_ratings[index].format(user=user1))
-
-    special = _get_special_pairing(user1, user2)
-    if special:
-        return special
 
     score = ((_user_score(user1) + _user_score(user2)) * _OFFSET + _seed) % 100
     return _ShipRating(score)
@@ -246,13 +274,25 @@ class OtherStuffs(Cog):
         return await self.bot.loop.run_in_executor(None, self._create_ship_image, score,
                                                    user_avatar_data1, user_avatar_data2)
 
+    async def _get_ship_rating(self, user, partner, guild, *, connection):
+        user, partner = _sort_users(user, partner)
+
+        special_rating = await _get_special_pairing(
+            user.id, partner.id, guild.id,
+            connection=connection
+        )
+        if special_rating:
+            return special_rating
+
+        return _calculate_rating(user, partner)
+
     @commands.command()
     async def ship(self, ctx, user1: discord.Member, user2: discord.Member=None):
         """Ships two users together, and scores accordingly."""
         if user2 is None:
             user1, user2 = ctx.author, user1
 
-        score, comment = _calculate_rating(user1, user2)
+        score, comment = await self._get_ship_rating(user1, user2, ctx.guild, connection=ctx.db)
         file = await self._ship_image(score, user1, user2)
         colour = discord.Colour.from_rgb(*_lerp_pink(score / 100))
 
@@ -328,6 +368,82 @@ class OtherStuffs(Cog):
                       .set_footer(text=msg2)
                       )
         await ctx.send(embed=slap_embed)
+
+    @commands.command()
+    # @commands.has_permissions(manage_guild=True)
+    async def rig(self, ctx, user: discord.Member, partner: discord.Member, score: score, *, comment):
+        """Makes `{prefix}ship`ing two users give the results *you* want."""
+        user, partner = _sort_users(user, partner)
+
+        query = """
+            INSERT INTO rigged_ships (
+                guild_id,
+                user_id,
+                partner_id,
+                score,
+                comment,
+                rigger_id
+            ) VALUES ($1, $2, $3, $4, $5, $6);
+        """
+
+        try:
+            await ctx.db.execute(
+                query, ctx.guild.id, user.id, partner.id,
+                score, comment, ctx.author.id
+            )
+        except asyncpg.UniqueViolationError:
+            await ctx.send('Sorry, these two have already been rigged.')
+        else:
+            await ctx.send(f'Done. {user} and {partner} will be lovely together. <3')
+
+    @commands.command()
+    async def unrig(self, ctx, user: discord.Member, partner: discord.Member):
+        """Lets me decide what I think of two users from my own free will."""
+        user, partner = _sort_users(user, partner)
+
+        # It's expensive to do two queries but there's no easy way of
+        # differentiating between the pair never being rigged and the pair
+        # being rigged by someone else.
+        query = """SELECT id, user_id, partner_id, rigger_id FROM rigged_ships
+                   WHERE guild_id = $1
+                   AND user_id = $2
+                   AND partner_id = $3;
+                """
+
+        row = await ctx.db.fetchrow(query, ctx.guild.id, user.id, partner.id)
+        if row is None:
+            return await ctx.send('These two were never a thing...')
+        elif (
+            ctx.author.id not in row[1:]  # (user, partner, rigger)
+            and not ctx.author.guild_permissions.administrator
+        ):
+            return await ctx.send("You can't ruin this beautiful ship T.T")
+
+        query = 'DELETE FROM rigged_ships WHERE id = $1';
+        await ctx.db.execute(query, row['id'])
+        await ctx.send(f'Nooooooo... {user} and {partner} were made for each other! :sob:')
+
+    @commands.command()
+    async def rigs(self, ctx):
+        """Shows all the ships that are "rigged"""
+        query = """SELECT user_id, partner_id, score FROM rigged_ships
+                   WHERE guild_id = $1
+                   ORDER BY score;
+                """
+        records = await ctx.db.fetch(query, ctx.guild.id)
+        if not records:
+            entries = [
+                'No one has been rigged yet.',
+                f'Why not add a rig two people with `{ctx.clean_prefix}rig`?'
+            ]
+        else:
+            entries = (
+                f'<@{user_id}> x <@{partner_id}>: **{score}%**'
+                for user_id, partner_id, score in records
+            )
+
+        paginator = ListPaginator(ctx, entries, title='Special pairings <3')
+        await paginator.interact()
 
     @commands.command(name='10s')
     async def ten_seconds(self, ctx):
