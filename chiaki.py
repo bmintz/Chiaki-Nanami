@@ -29,7 +29,7 @@ _old_send = discord.abc.Messageable.send
 async def new_send(self, content=None, *, allow_everyone=False, **kwargs):
     if content is not None:
         if not allow_everyone:
-            content = content.replace('@everyone', '@\u200beveryone').replace('@here', '@\u200bhere')
+            content = str(content).replace('@everyone', '@\u200beveryone').replace('@here', '@\u200bhere')
 
     return await _old_send(self, content, **kwargs)
 
