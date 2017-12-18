@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import discord
 import logging
 import sys
 
@@ -23,6 +24,16 @@ bot = Chiaki()
 
 #--------------MAIN---------------
 
+_old_send = discord.abc.Messageable.send
+
+async def new_send(self, content=None, *, allow_everyone=False, **kwargs):
+    if content is not None:
+        if not allow_everyone:
+            content = content.replace('@everyone', '@\u200beveryone').replace('@here', '@\u200bhere')
+
+    return await _old_send(self, content, **kwargs)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--create-tables', action='store_true', help='Create the tables before running the bot.')
@@ -30,8 +41,13 @@ def main():
     if args.create_tables:
         bot.loop.run_until_complete(bot.create_tables())
 
-    bot.run()
+    discord.abc.Messageable.send = new_send
+    try:
+        bot.run()
+    finally:
+        discord.abc.Messageable.send = _old_send
     return 69 * bot.reset_requested
+
 
 if __name__ == '__main__':
     sys.exit(main())
