@@ -4,12 +4,13 @@ import inspect
 import itertools
 import operator
 import random
+import sys
 import textwrap
 import time
 
 from collections import Counter, OrderedDict
 from discord.ext import commands
-from more_itertools import sliced
+from more_itertools import ilen, sliced, spy
 
 from cogs.utils.context_managers import temp_attr
 from cogs.utils.paginator import BaseReactionPaginator, ListPaginator, page
@@ -25,6 +26,15 @@ def _all_names(command):
 
 def _has_subcommands(command):
     return isinstance(command, commands.GroupMixin)
+
+
+def _command_category(command):
+    instance = command.instance
+    if instance is None:
+        return '\u200b\u200bNone'
+
+    category = instance.__class__.__parent_category__ or '\u200bOther'
+    return category.title()
 
 
 def _make_command_requirements(command):
@@ -119,7 +129,8 @@ class HelpCommandPage(BaseReactionPaginator):
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
-        footer = f'Module: {command.cog_name} | Click the info button below to see an example.'
+        category = _command_category(command)
+        footer = f'Category: {category} | Click the info button below to see an example.'
         return cmd_embed.set_footer(text=func(footer))
 
     def _example(self):
@@ -205,31 +216,30 @@ class GeneralHelpPaginator(ListPaginator):
 
     @classmethod
     async def create(cls, ctx):
-        def key(c):
-            inst = c.instance
-            cls = inst.__class__.name if inst else '\u200bMisc'
-            return inst.__class__.__parent_category__, cls
+        entries = (
+            cmd for cmd in sorted(ctx.bot.commands, key=_command_category)
+            if not (cmd.hidden or cmd.instance.__hidden__)
+        )
 
-        entries = (cmd for cmd in sorted(ctx.bot.commands, key=key) if not cmd.hidden)
         nested_pages = []
         per_page = 10
 
         # (cog, description, first 10 commands)
         # (cog, description, next 10 commands)
         # ...
-        get_cog = ctx.bot.get_cog
-        for (parent, name), cmds in itertools.groupby(entries, key=key):
-            cog = get_cog(name)
-            if getattr(cog, '__hidden__', False):
-                continue
+        for parent, cmds in itertools.groupby(entries, key=_command_category):
+            command, cmds = spy(cmds)
+            command = next(iter(command))  # spy returns (list, iterator)
 
-            if cog is None:
-                description = 'This is all the misc commands!'
-            else:
-                description = inspect.getdoc(cog) or 'No description... yet.'
+            # We can't rely on the package being in bot.extensions, because
+            # maybe they wanted to only import one or a few extensions instead
+            # of the whole folder.
+            pkg_name = command.module.rpartition('.')[0]
+            module = sys.modules[pkg_name]
+            description = inspect.getdoc(module) or 'No description... yet.'
 
             lines = [' | '.join(line) async for line in _command_formatters(cmds, ctx)]
-            nested_pages.extend((parent, name, description, page) for page in sliced(lines, per_page))
+            nested_pages.extend((parent, description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
@@ -257,7 +267,7 @@ class GeneralHelpPaginator(ListPaginator):
         return embed.set_footer(text=f'Currently on page {self._index + offset + 1}/{len(self)}')
 
     def _create_embed(self, idx, page):
-        _, name, description, lines = page[0]
+        name, description, lines = page[0]
         note = f'Type `{self.context.clean_prefix}help command`\nfor more info on a command.'
         commands = '\n'.join(lines) + f'\n\n{note}'
 
@@ -305,28 +315,25 @@ class GeneralHelpPaginator(ListPaginator):
         """Table of contents (this page)"""
         extra_docs = enumerate(map(inspect.getdoc, self._extra_pages), start=1)
         extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
-        counter = self._num_extra_pages + 1
 
-        def cog_pages(iterator):
-            nonlocal counter
-            name_counter = Counter(map(operator.itemgetter(1), iterator))
-            for name, count in name_counter.items():
+        def cog_pages(iterable, start):
+            for name, g in itertools.groupby(iterable, key=operator.itemgetter(0)):
+                count = ilen(g)
                 if count == 1:
-                    yield str(counter), name
+                    yield str(start), name
                 else:
-                    yield f'{counter}-{counter + count - 1}', name
-                counter += count
+                    yield f'{start}-{start + count - 1}', name
+                start += count
+
+        # create the page numbers for the cogs
+        pairs = list(cog_pages(self.entries, self._num_extra_pages + 1))
+        padding = max(len(p[0]) for p in pairs)
+        lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
 
         embed = (discord.Embed(colour=self.colour, description='\n'.join(extra_lines))
                  .set_author(name='Table of Contents')
+                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
                  )
-
-        for category, entries in itertools.groupby(self.entries, operator.itemgetter(0)):
-            pairs = list(cog_pages(entries))
-            padding = max(len(p[0]) for p in pairs)
-            lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
-
-            embed.add_field(name=category.title(), value='\n'.join(lines), inline=False)
 
         return embed.add_field(name='Other', value=f'`{len(self)}` - Some useful links.', inline=False)
 

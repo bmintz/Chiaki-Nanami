@@ -59,4 +59,4 @@ class Cog:
         # Get the folder the cog is in, if it's in one.
         folder = cls.__module__.rpartition('.')[0]
         cogs, _, tail = folder.partition('.')
-        cls.__parent_category__ = tail or cogs
+        cls.__parent_category__ = tail
