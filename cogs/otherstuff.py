@@ -87,22 +87,45 @@ _default_rating_comments = (
     'What are you waiting for?!',
 )
 
+_ship_heart_emojis = [
+    '\N{BLACK HEART}',
+    '\N{BROKEN HEART}',
+    '\N{YELLOW HEART}',
+    '\N{YELLOW HEART}',
+    '\N{HEAVY BLACK HEART}',
+    '\N{SPARKLING HEART}',
+    '\N{TWO HEARTS}',
+    '\N{REVOLVING HEARTS}',
+]
+
 
 def _scale(old_min, old_max, new_min, new_max, number):
     return ((number - old_min) / (old_max - old_min)) * (new_max - new_min) + new_min
 
+def _clamp_scale(old_min, old_max, new_min, new_max, number):
+    return min(new_max, max(_scale(old_min, old_max, new_min, new_max, number), new_min))
+
 
 _value_to_index = functools.partial(_scale, 0, 100, 0, len(_default_rating_comments) - 1)
+_value_to_emoji = functools.partial(_clamp_scale, 0, 100, 0, len(_ship_heart_emojis) - 1)
+
+def _emoji_from_score(score):
+    return _ship_heart_emojis[round(_value_to_emoji(score))]
 
 
-class _ShipRating(namedtuple('ShipRating', 'value comment')):
+class _ShipRating(namedtuple('ShipRating', 'value comment emoji', verbose=True)):
     __slots__ = ()
 
     def __new__(cls, value, comment=None):
         if not comment:
             index = round(_value_to_index(value))
             comment = _default_rating_comments[index]
-        return super().__new__(cls, value, comment)
+
+        emoji = _emoji_from_score(value)
+        return super().__new__(cls, value, comment, emoji)
+
+def _splice(s1, s2):
+    return s1[:len(s1) // 2] + s2[len(s2) // 2:]
 
 
 def _sort_users(user1, user2):
@@ -292,14 +315,18 @@ class OtherStuffs(Cog):
         if user2 is None:
             user1, user2 = ctx.author, user1
 
-        score, comment = await self._get_ship_rating(user1, user2, ctx.guild, connection=ctx.db)
+        score, comment, emoji = await self._get_ship_rating(
+            user1, user2, ctx.guild,
+            connection=ctx.db
+        )
+
         file = await self._ship_image(score, user1, user2)
         colour = discord.Colour.from_rgb(*_lerp_pink(score / 100))
+        ship_name = _splice(user1.display_name, user2.display_name)
 
         embed = (discord.Embed(colour=colour, description=f"{user1.mention} x {user2.mention}")
-                 .set_author(name='Shipping')
-                 .add_field(name='Score', value=f'{score}/100')
-                 .add_field(name='\u200b', value=f'*{comment}*', inline=False)
+                 .set_author(name=f'Shipping: {ship_name}')
+                 .add_field(name=f'Score: {score}/100 {emoji}', value=f'*{comment}*')
                  .set_image(url='attachment://test.png')
                  )
         await ctx.send(file=file, embed=embed)
@@ -438,7 +465,7 @@ class OtherStuffs(Cog):
             ]
         else:
             entries = (
-                f'<@{user_id}> x <@{partner_id}>: **{score}%**'
+                f'{_emoji_from_score(score)} <@{user_id}> x <@{partner_id}>: **{score}%**'
                 for user_id, partner_id, score in records
             )
 
