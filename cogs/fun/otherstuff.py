@@ -16,8 +16,8 @@ from discord.ext import commands
 from more_itertools import always_iterable
 from PIL import Image
 
-from .utils.paginator import ListPaginator
-from .utils.misc import emoji_url, load_async
+from ..utils.paginator import ListPaginator
+from ..utils.misc import emoji_url, load_async
 
 from core.cog import Cog
 
@@ -113,7 +113,7 @@ def _emoji_from_score(score):
     return _ship_heart_emojis[round(_value_to_emoji(score))]
 
 
-class _ShipRating(namedtuple('ShipRating', 'value comment emoji', verbose=True)):
+class _ShipRating(namedtuple('ShipRating', 'value comment emoji')):
     __slots__ = ()
 
     def __new__(cls, value, comment=None):

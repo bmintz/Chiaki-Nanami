@@ -5,8 +5,8 @@ import logging
 
 from discord.ext import commands
 
-from .utils import formats
-from .utils.paginator import ListPaginator
+from ..utils.paginator import ListPaginator
+from ..utils import formats
 
 from core.cog import Cog
 

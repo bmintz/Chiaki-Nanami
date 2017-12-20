@@ -1,4 +1,4 @@
-"""Set me up the way you want it~ <3"""
+"""Let's have some real fun~"""
 
 def _get_module_names():
     import pathlib

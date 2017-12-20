@@ -1,4 +1,4 @@
-"""Set me up the way you want it~ <3"""
+"""**For the bot owner only!"""
 
 def _get_module_names():
     import pathlib

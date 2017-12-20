@@ -7,11 +7,11 @@ from discord.ext import commands
 from datetime import datetime
 from more_itertools import one
 
-from ._initroot import InitRoot
-
 from ..utils import time
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
+
+from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS server_messages (
@@ -70,7 +70,7 @@ def special_message(message):
     return message if '{user}' in message else f'{{user}}{message}'
 
 
-class WelcomeMessages(InitRoot):
+class WelcomeMessages(Cog):
     """Commands related to welcome and leave messages."""
     # TODO: Put this in a config module.
 

@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from itertools import starmap
 
-from ._initroot import InitRoot
+from core.cog import Cog
 
 
 class Prefix(commands.Converter):
@@ -20,7 +20,7 @@ class Prefix(commands.Converter):
         return argument
 
 
-class Prefixes(InitRoot):
+class Prefixes(Cog):
     @commands.group(aliases=['prefixes'], invoke_without_command=True)
     async def prefix(self, ctx):
         """Shows the prefixes that you can use in this server."""

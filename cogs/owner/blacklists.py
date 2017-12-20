@@ -4,8 +4,8 @@ import discord
 
 from discord.ext import commands
 
-from .utils import disambiguate
-from .utils.misc import emoji_url, truncate
+from ..utils import disambiguate
+from ..utils.misc import emoji_url, truncate
 
 from core.cog import Cog
 

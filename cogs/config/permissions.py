@@ -8,12 +8,12 @@ from collections import defaultdict, namedtuple
 from discord.ext import commands
 from more_itertools import iterate, partition
 
-from ._initroot import InitRoot
-
 from ..utils import cache, formats, disambiguate
 from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
+
+from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS permissions (
@@ -172,7 +172,7 @@ _plonk_embed_mappings = {
 PLONK_ICON = emoji_url('\N{HAMMER}')
 
 
-class Permissions(InitRoot):
+class Permissions(Cog):
     """Used for enabling or disabling commands for a channel, member,
     role, or even the whole server.
     """
@@ -187,9 +187,6 @@ class Permissions(InitRoot):
     # yourself out. You can't lock these commands anyway, so nothing really
     # bad will happen, unlike having *overrides*, which are a million times
     # more dangerous.
-
-    def __init__(self, bot):
-        super().__init__(bot)
 
     async def __global_check_once(self, ctx):
         if not ctx.guild:

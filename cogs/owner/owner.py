@@ -9,9 +9,9 @@ import traceback
 
 from discord.ext import commands
 
-from .utils.context_managers import temp_attr
-from .utils.disambiguate import DisambiguateGuild
-from .utils.subprocesses import run_subprocess
+from ..utils.context_managers import temp_attr
+from ..utils.disambiguate import DisambiguateGuild
+from ..utils.subprocesses import run_subprocess
 
 from core.cog import Cog
 

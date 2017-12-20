@@ -3,7 +3,7 @@ import copy
 from discord.ext import commands
 from itertools import starmap
 
-from .utils.paginator import ListPaginator
+from ..utils.paginator import ListPaginator
 
 from core.cog import Cog
 

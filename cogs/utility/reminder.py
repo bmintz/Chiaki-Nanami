@@ -4,9 +4,9 @@ import json
 
 from discord.ext import commands
 
-from .utils.misc import emoji_url, truncate
-from .utils.paginator import EmbedFieldPages
-from .utils.time import FutureTime, human_timedelta
+from ..utils.misc import emoji_url, truncate
+from ..utils.paginator import EmbedFieldPages
+from ..utils.time import FutureTime, human_timedelta
 
 from core.cog import Cog
 
