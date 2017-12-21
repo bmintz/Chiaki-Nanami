@@ -21,7 +21,9 @@ __schema__ = """
         guild_id BIGINT NOT NULL,
         snowflake BIGINT NULL,
         name TEXT NOT NULL,
-        whitelist BOOLEAN NOT NULL
+        whitelist BOOLEAN NOT NULL,
+        UNIQUE (snowflake, name)
+
     );
     CREATE INDEX IF NOT EXISTS permissions_guild_id_idx ON permissions (guild_id);
 
@@ -43,7 +45,10 @@ class _PermissionFormattingMixin:
         elif self.cog == ALL_MODULES_KEY:
             return 'All modules are'
         else:
-            return f'Cog **{self.cog}** is'
+            category, _, cog = self.cog.partition('/')
+            if cog:
+                return f'Module **{cog}** is'
+            return f'Category **{category.title()}** is'
 
 
 class PermissionDenied(_PermissionFormattingMixin, commands.CheckFailure):
@@ -106,15 +111,30 @@ class CommandName(BotCommand):
         return _command_node(command)
 
 
-class CogName(BotCogConverter):
-    async def convert(self, ctx, arg):
-        cog = await super().convert(ctx, arg)
-        name = type(cog).__name__
+class ModuleName(BotCogConverter):
+    def _maybe_module(self, ctx, arg):
+        parents = {c.__parent_category__.lower() for c in ctx.bot.cogs.values()}
+        lowered = arg.lower()
+        if lowered not in parents:
+            raise commands.BadArgument('No module called {arg} found.')
 
-        if name in {'Permissions', 'Owner'}:
+        if lowered == 'owner':
             raise commands.BadArgument("You can't modify this cog...")
 
-        return name
+        return lowered
+
+    async def convert(self, ctx, arg):
+        try:
+            cog = await super().convert(ctx, arg)
+        except commands.BadArgument:
+            return self._maybe_module(ctx, arg)
+        else:
+            name = type(cog).__name__
+
+            if name in {'Permissions', 'Owner'}:
+                raise commands.BadArgument("You can't modify this cog...")
+
+            return f'{cog.__parent_category__}/{name}'
 
 
 PermissionEntity = disambiguate.union(discord.Member, discord.Role, discord.TextChannel)
@@ -219,8 +239,12 @@ class Permissions(Cog):
     async def _set_one_permission(self, connection, guild_id, name, entity, whitelist):
         id = entity.id
         if whitelist is None:
-            query = 'DELETE FROM permissions WHERE guild_id = $1 AND name = $2 AND snowflake = $3;'
-            status = await connection.execute(query, guild_id, name, id, whitelist)
+            if id is None:
+                query = 'DELETE FROM permissions WHERE guild_id = $1 AND name = $2 AND snowflake IS NULL;'
+                status = await connection.execute(query, guild_id, name)
+            else:
+                query = 'DELETE FROM permissions WHERE guild_id = $1 AND name = $2 AND snowflake = $3;'
+                status = await connection.execute(query, guild_id, name, id)
             count = status.partition(' ')[-2]
 
             if count == '0':
@@ -230,10 +254,10 @@ class Permissions(Cog):
         else:
             query = """INSERT INTO permissions (guild_id, snowflake, name, whitelist)
                      VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (guild_id, snowflake, name)
+                     ON CONFLICT (snowflake, name)
                      DO UPDATE SET whitelist = $4
                     """
-            await connection.execute(query, guild_id, name, entity, whitelist)
+            await connection.execute(query, guild_id, id, name, whitelist)
 
     async def _bulk_set_permissions(self, connection, guild_id, name, *entities, whitelist):
         ids = tuple(unique(e.id for e in entities))
@@ -307,9 +331,10 @@ class Permissions(Cog):
              ('server', dummy_server)],
         )
 
+        parent = ctx.cog.__parent_category__
         names = itertools.chain(
             map(_command_node, _walk_parents(ctx.command)),
-            (ctx.command.cog_name, ALL_MODULES_KEY)
+            (f'{parent}/{ctx.command.cog_name}', parent, ALL_MODULES_KEY)
         )
 
         # The following code is roughly along the lines of this:
@@ -387,10 +412,11 @@ class Permissions(Cog):
 
         base_doc_string = f'Group for {participle.lower()} commands or cogs.'
         cmd_doc_string = f'{desc} a command.\n{format_entity(thing="a command")}'
-        cog_doc_string = f'{desc} a cog.\n{format_entity(thing="a cog")}'
+        cog_doc_string = f'{desc} a category.\n{format_entity(thing="a category")}'
         all_doc_string = (f'{desc} all cogs, and subsequently all commands.\n'
                           f'{format_entity(thing="all cogs")}')
 
+        # TODO: ->enable without ANY subcommands
         @commands.group(name=name, help=base_doc_string)
         @commands.has_permissions(manage_guild=True)
         async def group(self, ctx):
@@ -451,10 +477,10 @@ class Permissions(Cog):
         # but that would force me to make the commands case sensitive.
         #
         # Not sure whether that would be good or bad for the end user.
-        @group.command(name='cog', help=cog_doc_string, aliases=['module'])
-        async def group_cog(self, ctx, cog: CogName, *entities: PermissionEntity):
-            await self._set_permissions_command(ctx, cog, *entities,
-                                                whitelist=value, type_='Cog')
+        @group.command(name='category', help=cog_doc_string, aliases=['cog', 'module'])
+        async def group_category(self, ctx, category: ModuleName, *entities: PermissionEntity):
+            await self._set_permissions_command(ctx, category, *entities,
+                                                whitelist=value, type_='Category')
 
         @group.command(name='all', help=all_doc_string)
         async def group_all(self, ctx, *entities: PermissionEntity):
@@ -463,7 +489,7 @@ class Permissions(Cog):
 
         # Must return all of these otherwise the subcommands won't get added
         # properly -- they will end up having no instance.
-        return group, group_command, group_cog, group_all
+        return group, group_command, group_category, group_all
 
     # The actual commands... yes it's really short.
     enable, enable_command, enable_cog, enable_all = _make_command(True, 'enable', desc='Enables')
