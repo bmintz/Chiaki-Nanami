@@ -8,7 +8,7 @@ from datetime import datetime
 from ..utils.converter import BotCogConverter, BotCommand
 from ..utils.formats import multi_replace
 from ..utils.misc import emoji_url, truncate
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
 
 from core.cog import Cog
 
@@ -74,9 +74,12 @@ def default_help_command(func=lambda s: s, **kwargs):
 
 
 async def default_help(ctx, command=None, func=lambda s: s):
-    command = ctx.bot if command is None else command
-    page = await ctx.bot.formatter.format_help_for(ctx, command, func)
-    await page.interact()
+    if command is None:
+        paginator = await GeneralHelpPaginator.create(ctx)
+    else:
+        paginator = HelpCommandPage(ctx, command, func)
+
+    await paginator.interact()
 
 
 _bracket_repls = {
@@ -144,7 +147,8 @@ class Help(Cog):
     @commands.command(name='commands', aliases=['cmds'])
     async def commands_(self, ctx, cog: BotCogConverter):
         """Shows all the *visible* commands I have in a given cog/module"""
-        await default_help(ctx, cog)
+        paginator = await CogPages.create(ctx, cog)
+        await paginator.interact()
 
     async def _show_tip(self, ctx, number):
         if number > _get_tip_index() + 1:

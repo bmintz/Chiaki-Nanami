@@ -20,7 +20,6 @@ from more_itertools import always_iterable
 
 from . import context, errors
 from .cog import Cog
-from .formatter import ChiakiFormatter
 
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.misc import file_handler
@@ -121,7 +120,6 @@ def _callable_prefix(bot, message):
 
 
 VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro')
-_chiaki_formatter = ChiakiFormatter(width=MAX_FORMATTER_WIDTH, show_check_failure=True)
 
 
 class Chiaki(commands.Bot):
@@ -130,7 +128,6 @@ class Chiaki(commands.Bot):
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
-                         formatter=_chiaki_formatter,
                          description=config.description,
                          pm_help=None)
 
