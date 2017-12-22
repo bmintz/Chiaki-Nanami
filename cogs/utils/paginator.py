@@ -169,7 +169,7 @@ class BaseReactionPaginator:
 
     @page('\N{BLACK SQUARE FOR STOP}')
     def stop(self):
-        """Stops the interactive pagination"""
+        """Exit"""
         self._paginating = False
 
     def _check_reaction(self, reaction, user):
@@ -292,22 +292,22 @@ class ListPaginator(BaseReactionPaginator):
 
     @page('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
     def default(self):
-        """Returns the first page"""
+        """First page"""
         return self[0]
 
     @page('\N{BLACK LEFT-POINTING TRIANGLE}')
     def previous(self):
-        """Returns the previous page"""
+        """Previous page"""
         return self.page_at(self._index - 1)
 
     @page('\N{BLACK RIGHT-POINTING TRIANGLE}')
     def next(self):
-        """Returns the next page"""
+        """Next page"""
         return self.page_at(self._index + 1)
 
     @page('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
     def last(self):
-        """Returns the last page"""
+        """Last page"""
         return self[-1]
 
     def page_at(self, index):
@@ -322,7 +322,7 @@ class ListPaginator(BaseReactionPaginator):
 
     @page('\N{INPUT SYMBOL FOR NUMBERS}')
     async def numbered(self):
-        """Takes a number from the user and goes to that page"""
+        """Go to page"""
         ctx = self.context
         channel = self._message.channel
         to_delete = []
@@ -419,7 +419,7 @@ class ListPaginator(BaseReactionPaginator):
 
     @page('\N{INFORMATION SOURCE}')
     def help_page(self):
-        """Shows this message"""
+        """Help - this message"""
         initial_message = "This is the interactive help thing!",
         funcs = (f'{em} => {getattr(self, f).__doc__}' for em, f in self._reaction_map.items())
         extras = zip(self._extra, (random.choice(_extra_remarks) for _ in itertools.count()))
@@ -762,7 +762,7 @@ class GeneralHelpPaginator(ListPaginator):
         return result
 
     def _page_footer_embed(self, embed, *, offset=0):
-        return embed.set_footer(text=f'Currently on page {self._index + offset + 1}/{len(self)}')
+        return embed.set_footer(text=f'Page {self._index + offset + 1}/{len(self)}')
 
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
@@ -797,20 +797,18 @@ class GeneralHelpPaginator(ListPaginator):
                 )
 
     def instructions(self):
-        """How to navigate through this help page"""
+        """Instructions"""
         description = (
-            'This is a paginator run on reactions. To navigate\n'
-            'through this help page, you must click on any of\n'
-            'the reactions below.\n'
+            f'**Click one of the reactions below**\n'
+            '-------------------------------------\n'
+            + self.reaction_help
         )
-
         return (discord.Embed(colour=self.colour, description=description)
-                .set_author(name='How to use the help page')
-                .add_field(name='Here are all of the reactions', value=self.reaction_help, inline=False)
+                .set_author(name='Instructions')
                 )
 
     def table_of_contents(self):
-        """Table of contents (this page)"""
+        """Table of Contents"""
         extra_docs = enumerate(map(inspect.getdoc, self._extra_pages), start=1)
         extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
 
@@ -844,7 +842,7 @@ class GeneralHelpPaginator(ListPaginator):
         )
 
         note = textwrap.dedent('''
-            **Do not type in the brackets!**
+            **Don't type in the brackets!**
             --------------------------------
             This means you must type the commands like this:
             YES: `->inrole My Role`
@@ -874,7 +872,7 @@ class GeneralHelpPaginator(ListPaginator):
 
         return (discord.Embed(colour=self.colour)
                 .set_thumbnail(url=bot.user.avatar_url)
-                .set_author(name="You've reached the end of the help page!")
+                .set_author(name="You've reached the last page!")
                 .add_field(name='For more help', value=support, inline=False)
                 .add_field(name='To suggest any new features or bug fixes', value=feedback, inline=False)
                 .add_field(name='And for some other useful links...', value=useful_links, inline=False)
@@ -882,7 +880,7 @@ class GeneralHelpPaginator(ListPaginator):
 
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
-        """Exit the help page"""
+        """Exit"""
         super().stop()
 
         # Only do it for a minute, so if someone does a quick stop,
@@ -891,7 +889,7 @@ class GeneralHelpPaginator(ListPaginator):
         if end - self._start_time < 60:
             return
 
-        final_embed = (discord.Embed(colour=self.colour, description='*Just remember...* \N{HEAVY BLACK HEART}')
+        final_embed = (discord.Embed(colour=self.colour, description='*Remember...* \N{HEAVY BLACK HEART}')
                        .set_author(name='Thank you for looking at the help page!')
                        .set_image(url=CHIAKI_MOTIVATION_URL)
                        )
@@ -904,13 +902,12 @@ class GeneralHelpPaginator(ListPaginator):
         intro,
         table_of_contents,
         instructions,
-        # how_to_use,
     ]
     _num_extra_pages = len(_extra_pages)
 
     @page('\N{WHITE QUESTION MARK ORNAMENT}')
     def signature(self):
-        """Shows how to use the bot."""
+        """How to use the bot"""
         return self.how_to_use()
 
     async def interact(self, **kwargs):
