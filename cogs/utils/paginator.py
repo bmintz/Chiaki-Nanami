@@ -714,8 +714,11 @@ class GeneralHelpPaginator(ListPaginator):
 
     @classmethod
     async def create(cls, ctx):
+        def sort_key(c):
+            return _command_category(c), c.qualified_name
+
         entries = (
-            cmd for cmd in sorted(ctx.bot.commands, key=_command_category)
+            cmd for cmd in sorted(ctx.bot.commands, key=sort_key)
             if not (cmd.hidden or cmd.instance.__hidden__)
         )
 
