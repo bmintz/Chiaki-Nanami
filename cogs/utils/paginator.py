@@ -711,6 +711,7 @@ class GeneralHelpPaginator(ListPaginator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._start_time = None
+        self._index = -1
 
     @classmethod
     async def create(cls, ctx):
@@ -780,11 +781,6 @@ class GeneralHelpPaginator(ListPaginator):
             offset=self._num_extra_pages
         )
 
-    @page('\N{NOTEBOOK WITH DECORATIVE COVER}')
-    def jump_to_commands(self):
-        """Jump to the table of contents"""
-        return self[1]
-
     def intro(self):
         """The intro, ie the thing you just saw."""
         instructions = (
@@ -798,6 +794,17 @@ class GeneralHelpPaginator(ListPaginator):
                 .add_field(name="Welcome to my help page!", value=instructions, inline=False)
                 .set_image(url=CHIAKI_INTRO_URL)
                 )
+
+    # Needed to table_of_contents will set the _index properly
+    def first(self):
+        """Table of contents"""
+        return self[0]
+
+    def default(self):
+        # Delete the first page so the Table of Contents will be the first page.
+        # XXX: Deal with pressing the previous page button
+        self.default = self.first
+        return self.intro()
 
     def instructions(self):
         """Instructions"""
@@ -908,7 +915,6 @@ class GeneralHelpPaginator(ListPaginator):
         return await asyncio.sleep(10)
 
     _extra_pages = [
-        intro,
         table_of_contents,
         instructions,
     ]
