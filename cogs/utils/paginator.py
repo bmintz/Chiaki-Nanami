@@ -812,6 +812,7 @@ class GeneralHelpPaginator(ListPaginator):
 
     def table_of_contents(self):
         """Table of Contents"""
+        bot = self.context.bot
         extra_docs = enumerate(map(inspect.getdoc, self._extra_pages), start=1)
         extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
 
@@ -829,12 +830,17 @@ class GeneralHelpPaginator(ListPaginator):
         padding = max(len(p[0]) for p in pairs)
         lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
 
-        embed = (discord.Embed(colour=self.colour, description='\n'.join(extra_lines))
-                 .set_author(name='Table of Contents')
-                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
-                 )
+        last = (
+            f'`{len(self)}` - Useful info'
+            f'\n\nFor more help, go to the [support server]({bot.support_invite})'
+        )
 
-        return embed.add_field(name='Other', value=f'`{len(self)}` - Some useful links.', inline=False)
+        return (discord.Embed(colour=self.colour)
+                .set_author(name='Help', icon_url=self.context.bot.user.avatar_url)
+                .add_field(name='Table of Contents', value='\n'.join(extra_lines))
+                .add_field(name='Categories', value='\n'.join(lines), inline=False)
+                .add_field(name='Other', value=last, inline=False)
+                )
 
     def how_to_use(self):
         """How to use the bot"""
