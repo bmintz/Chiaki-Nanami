@@ -663,10 +663,7 @@ async def _command_formatters(commands, ctx):
         yield map(fmt.format, _all_names(command))
 
 
-_note = (
-    "You can't commands that have\n"
-    "been crossed out (~~`like this`~~)"
-)
+CROSSED_NOTE = "**Note:** You can't use commands\nthat are ~~crossed out~~."
 
 
 class CogPages(ListPaginator):
@@ -694,8 +691,7 @@ class CogPages(ListPaginator):
     def _create_embed(self, idx, entries):
         return (discord.Embed(colour=self.colour, description=self._cog_doc)
                 .set_author(name=self._cog_name)
-                .add_field(name='Commands', value='\n'.join(entries))
-                .add_field(name='Note', value=_note, inline=False)
+                .add_field(name='Commands', value='\n'.join(entries) + f'\n\n{CROSSED_NOTE}')
                 .set_footer(text=f'Currently on page {idx + 1}')
                 )
 
@@ -765,14 +761,14 @@ class GeneralHelpPaginator(ListPaginator):
 
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
-        note = f'Type `{self.context.clean_prefix}help command`\nfor more info on a command.'
-        commands = '\n'.join(lines) + f'\n\n{note}'
+        note = f'For more help on a command,\ntype `{self.context.clean_prefix}help "a command"`.'
+        # ZWS is needed for mobile where they like to strip blank lines for no reason.
+        commands = '\n'.join(lines) + f'\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
 
         return self._page_footer_embed(
             discord.Embed(colour=self.colour, description=description)
             .set_author(name=name)
-            .add_field(name='Commands', value=commands)
-            .add_field(name='Note', value=_note, inline=False),
+            .add_field(name='Commands', value=commands),
             offset=self._num_extra_pages
         )
 
