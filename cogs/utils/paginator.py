@@ -747,22 +747,17 @@ class GeneralHelpPaginator(ListPaginator):
         return self
 
     def __len__(self):
-        return self._num_extra_pages + super().__len__() + 1
+        return self._num_extra_pages + super().__len__()
 
     def __getitem__(self, idx):
         if 0 <= idx < self._num_extra_pages:
             self._index = idx
             return self._page_footer_embed(self._extra_pages[idx](self))
-        elif idx in {-1, len(self) - 1}:
-            if idx < 0:
-                # normalize the index because -1 isn't technically allowed
-                idx += len(self)
-
-            self._index = idx
-            return self.ending()
 
         result = super().__getitem__(idx - self._num_extra_pages)
-        self._index = idx  # properly set the index
+        # Properly set the index, because ListPagination.__getitem__ sets
+        # _index to two pages before, breaking it
+        self._index = idx
         return result
 
     def _page_footer_embed(self, embed, *, offset=0):
@@ -837,16 +832,11 @@ class GeneralHelpPaginator(ListPaginator):
         padding = max(len(p[0]) for p in pairs)
         lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
 
-        last = (
-            f'`{len(self)}` - Useful info'
-            f'\n\nFor more help, go to the [support server]({bot.support_invite})'
-        )
-
-        return (discord.Embed(colour=self.colour)
+        description = f'For more help, go to the **[support server]({bot.support_invite})**'
+        return (discord.Embed(colour=self.colour, description=description)
                 .set_author(name='Help', icon_url=self.context.bot.user.avatar_url)
                 .add_field(name='Table of Contents', value='\n'.join(extra_lines))
                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
-                .add_field(name='Other', value=last, inline=False)
                 )
 
     def how_to_use(self):
@@ -873,25 +863,6 @@ class GeneralHelpPaginator(ListPaginator):
                 .add_field(name='[A|B]', value='You can type either **A** or **B**.', inline=False)
                 .add_field(name='[arguments...]', value='You can have multiple arguments.', inline=False)
                 .add_field(name='Note', value=note, inline=False)
-                )
-
-    def ending(self):
-        """End of the help page, and info about the bot."""
-        bot = self.context.bot
-        support = f'Go to the support server here!\n{bot.support_invite}'
-        useful_links = (
-            f'[Click me to invite me to your server!]({bot.invite_url})\n'
-            "[Check the code out here (it's fire!)](https://github.com/Ikusaba-san/Chiaki-Nanami)\n"
-        )
-
-        feedback = f'Use `{self.context.prefix}feedback your message`!'
-
-        return (discord.Embed(colour=self.colour)
-                .set_thumbnail(url=bot.user.avatar_url)
-                .set_author(name="You've reached the last page!")
-                .add_field(name='For more help', value=support, inline=False)
-                .add_field(name='To suggest any new features or bug fixes', value=feedback, inline=False)
-                .add_field(name='And for some other useful links...', value=useful_links, inline=False)
                 )
 
     @page('\N{BLACK SQUARE FOR STOP}')
