@@ -164,6 +164,12 @@ class Board:
         """
         return cls(clues=17)
 
+    # difficulty aliases
+    easy = beginner
+    medium = intermediate
+    hard = expert
+    extreme = minimum
+
 
 class LockedMessage:
     """Proxy message object to prevent concurrency issues when editing"""
