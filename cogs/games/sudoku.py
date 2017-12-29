@@ -1,9 +1,9 @@
 import asyncio
 import contextlib
+import enum
 import itertools
 import random
 import textwrap
-from collections import Counter
 
 import discord
 from discord.ext import commands
@@ -12,8 +12,10 @@ from more_itertools import flatten, grouper, sliced
 from core.cog import Cog
 from .manager import SessionManager
 from ..utils.paginator import BaseReactionPaginator, page
+from ..utils.misc import emoji_url
 
 
+SUDOKU_ICON = emoji_url('\N{INPUT SYMBOL FOR NUMBERS}')
 # Default Sudoku constants
 BLOCK_SIZE = 3
 BOARD_SIZE = 81
@@ -406,12 +408,66 @@ class Sudoku(Cog):
         super().__init__(bot)
         self.sudoku_sessions = SessionManager()
 
+    async def _get_difficulty(self, ctx):
+        reactions = ['1\u20e3', '2\u20e3', '3\u20e3', '4\u20e3']
+        is_valid = frozenset(reactions).__contains__
+        difficulties = ['easy', 'medium', 'hard', 'extreme']
+
+        description = 'Please choose a difficulty.\n'
+        description += '\n'.join(
+            f'{reaction} = {diff}'
+            for reaction, diff in zip(reactions, difficulties)
+        )
+
+        prompt = discord.Embed(colour=ctx.bot.colour)
+        prompt.set_author(name=f"Let's play Sudoku, {ctx.author.display_name}!", icon_url=SUDOKU_ICON)
+        prompt.description = '**Please choose a difficulty.**\n-----------------------\n'
+        prompt.description += '\n'.join(
+            f'{reaction} = {diff.title()}'
+            for reaction, diff in zip(reactions, difficulties)
+        )
+
+        message = await ctx.send(embed=prompt)
+
+        # TODO: I use this function a lot. Maybe I should make a
+        #       helper function...
+        async def put(message, emojis):
+            for e in emojis:
+                await message.add_reaction(e)
+
+        future = asyncio.ensure_future(put(message, reactions))
+
+        def check(reaction, user):
+            return (reaction.message.id == message.id
+                    and user == ctx.author
+                    and is_valid(reaction.emoji)
+                    )
+        try:
+            reaction, _ = await ctx.bot.wait_for('reaction_add', check=check, timeout=20)
+        except asyncio.TimeoutError:
+            await ctx.send('You took too long...')
+            return None
+        finally:
+            await message.delete()
+            if not future.done():
+                future.cancel()
+
+        index = int(reaction.emoji[0]) - 1
+        return getattr(Board, difficulties[index])()
+
     @commands.command()
-    async def sudoku(self, ctx, board='beginner'):
+    async def sudoku(self, ctx, difficulty=None):
         if self.sudoku_sessions.session_exists(ctx.author.id):
             return await ctx.send('Please finish your other Sudoku game first.')
 
-        board = getattr(Board, board)()
+        if difficulty is None:
+            board = await self._get_difficulty(ctx)
+        else:
+            board = getattr(Board, difficulty)()
+
+        if board is None:
+            return
+
         with self.sudoku_sessions.temp_session(ctx.author.id, SudokuSession(ctx, board)) as inst:
             await inst.run()
 
