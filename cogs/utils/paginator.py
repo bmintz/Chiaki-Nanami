@@ -2,11 +2,13 @@ import asyncio
 import contextlib
 import discord
 import functools
+import inspect
 import itertools
 import random
 
 from collections import OrderedDict
 from discord.ext import commands
+from more_itertools import unique_everseen
 
 from .misc import maybe_awaitable
 
@@ -78,6 +80,21 @@ _extra_remarks = [
     ]
 
 
+def _get_members(cls, predicate):
+    results = inspect.getmembers(cls, predicate)
+    names = {p[0] for p in results}
+
+    # This relies on 3.6 properly ordering dicts in class definitions.
+    unique_names = unique_everseen(itertools.chain.from_iterable(b.__dict__ for b in cls.__mro__))
+    # Avoid building the whole dict.
+    name_locations = {n: i for i, n in enumerate(unique_names) if n in names}
+
+    # inspect.getmembers returns the pairs in definition order. We don't want
+    # that. We need them in definition order.
+    results.sort(key=lambda pair: name_locations[pair[0]])
+    return results
+
+
 class BaseReactionPaginator:
     """Base class for all embed paginators.
 
@@ -113,35 +130,9 @@ class BaseReactionPaginator:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = OrderedDict()
-        _suppressed_methods = set()
-        # We can't use inspect.getmembers because it returns the members in
-        # lexographical order, rather than definition order.
-        for name, member in itertools.chain.from_iterable(b.__dict__.items() for b in cls.__mro__):
-            if name.startswith('_'):
-                continue
 
-            # Support for using functools.partialmethod as a means of simplifying pages.
-            is_callable = callable(member) or isinstance(member, functools.partialmethod)
-
-            # Support suppressing page methods by assigning them to None
-            if not (member is None or is_callable):
-                continue
-
-            # Let sub-classes override the current methods.
-            if name in cls._reaction_map.values():
-                continue
-
-            # Let subclasses suppress page methods.
-            if name in _suppressed_methods:
-                continue
-
-            if member is None:
-                _suppressed_methods.add(name)
-                continue
-
-            emoji = getattr(member, '__reaction_emoji__', None)
-            if emoji:
-                cls._reaction_map[emoji] = name
+        for name, member in _get_members(cls, lambda m: hasattr(m, '__reaction_emoji__')):
+            cls._reaction_map[member.__reaction_emoji__] = name
 
         # We need to move stop to the end (assuming it exists).
         # Otherwise it will show up somewhere in the middle
@@ -787,6 +778,7 @@ class GeneralHelpPaginator(ListPaginator):
                 )
 
     # Needed to table_of_contents will set the _index properly
+    @page('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
     def first(self):
         """Table of contents"""
         return self[0]
