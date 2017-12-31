@@ -198,6 +198,17 @@ class Board:
     hard = expert
     extreme = minimum
 
+    @property
+    def difficulty(self):
+        num_clues = len(self._clues)
+        ranges = [(40, 45), (27, 36), (19, 22), (0, 17)]
+
+        for i, (low, high) in enumerate(ranges, 1):
+            if low <= num_clues <= high:
+                return i
+
+        return -1
+
 
 class LockedMessage:
     """Proxy message object to prevent concurrency issues when editing"""
@@ -462,9 +473,11 @@ class SudokuSession:
         self._controller._message = LockedMessage(self._controller._message)
         wait_for = self._ctx.bot.wait_for
 
+        timeout = 300 * (self._board.difficulty + 1) / 2
+
         while True:
             try:
-                message = await wait_for('message', timeout=120, check=self.check)
+                message = await wait_for('message', timeout=timeout, check=self.check)
             except asyncio.TimeoutError:
                 if not self._controller.in_game():
                     continue
