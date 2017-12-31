@@ -1,19 +1,32 @@
 import asyncio
-import discord
-import enum
+import contextlib
 import itertools
 import random
 import textwrap
 
-from contextlib import suppress
+import discord
 from discord.ext import commands
-from more_itertools import grouper, interleave, iter_except
-
-from .manager import SessionManager
-
-from ..utils.paginator import BaseReactionPaginator, page
+from more_itertools import flatten, grouper, sliced
 
 from core.cog import Cog
+from .manager import SessionManager
+from ..utils.paginator import BaseReactionPaginator, page
+from ..utils.misc import emoji_url
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS saved_sudoku_games (
+        user_id BIGINT PRIMARY KEY,
+        board SMALLINT[9][9] NOT NULL,  -- size is not enforced but w/e
+        clues SMALLINT[] NOT NULL
+    );
+"""
+
+SUDOKU_ICON = emoji_url('\N{INPUT SYMBOL FOR NUMBERS}')
+# Default Sudoku constants
+BLOCK_SIZE = 3
+BOARD_SIZE = 81
+EMPTY = 0
+
 
 # Sudoku board generator by Gareth Rees
 # This works best when m = 3.
@@ -27,13 +40,12 @@ def _make_board(m=3):
 
     def search(c=0):
         i, j = divmod(c, n)
-        i0, j0 = i - i % 3, j - j % 3 # Origin of mxm block
-        numbers = list(range(1, n + 1))
-        random.shuffle(numbers)
+        i0, j0 = i - i % 3, j - j % 3  # Origin of mxm block
+        numbers = random.sample(range(1, n + 1), n)
         for x in numbers:
-            if (x not in board[i]                     # row
-                and all(row[j] != x for row in board) # column
-                and all(x not in row[j0:j0+m]         # block
+            if (x not in board[i]                      # row
+                and all(row[j] != x for row in board)  # column
+                and all(x not in row[j0:j0+m]          # block
                         for row in board[i0:i])):
                 board[i][j] = x
                 if c + 1 >= nn or search(c + 1):
@@ -45,99 +57,16 @@ def _make_board(m=3):
 
     return search()
 
-# Default Sudoku constants
-BLOCK_SIZE = 3
-BOARD_SIZE = 81
 
-class Board:
-    def __init__(self, holes):
-        self._solved = _make_board()
-        ss = BLOCK_SIZE * BLOCK_SIZE
+def _get_squares(board):
+    size = len(board[0])
+    subsize = int(size ** 0.5)
+    for slice_ in sliced(board, subsize):
+        yield from zip(*(sliced(line, subsize) for line in slice_))
 
-        # put holes in the board.
-        self._board = [row[:] for row in self._solved]
-        coords = list(itertools.product(range(ss), range(ss)))
-        random.shuffle(coords)
-        it = iter(coords)
-        for x, y in itertools.islice(it, holes):
-            self._board[y][x] = None
 
-        self._pre_placed_numbers = set(it)
-        self._placed_numbers = set()
-        # for cells where the solver puts multiple numbers in.
-        self.stored_numbers = {}
-
-    def __getitem__(self, xy):
-        x, y = xy
-        return self._board[y][x]
-
-    def __setitem__(self, xy, value):
-        if xy in self._pre_placed_numbers:
-            raise ValueError("cannot place a number there")
-
-        x, y = xy
-        self._board[y][x] = value
-
-        if value != 0:
-            self.stored_numbers.pop(xy, None)
-        self._placed_numbers.add(xy)
-
-    def __str__(self):
-        spacer = "++---+---+---++---+---+---++---+---+---++"
-        size = len(self._board[0])
-        spacers = (spacer if (i+1) % 3 else spacer.replace('-','=') for i in range(size))
-        fmt = "|| {} | {} | {} || {} | {} | {} || {} | {} | {} ||"
-
-        formats = (fmt.format(*(cell or ' ' for cell in line)) for line in self._board)
-        return spacer.replace('-','=') + '\n' + '\n'.join(interleave(formats, spacers))
-
-    def remove(self, xy, number):
-        self.stored_numbers[xy].remove(number)
-        if not self.stored_numbers[xy]:
-            del self.stored_numbers[xy]
-            self[xy] = None
-
-    def store(self, xy, number):
-        self[xy] = 0
-        numbers = self.stored_numbers.setdefault(xy, [])
-        if number in numbers:
-            return
-
-        numbers.append(number)
-
-    def clear(self):
-        print(self._placed_numbers)
-        for x, y in iter_except(self._placed_numbers.pop, KeyError):
-            self._board[y][x] = None
-        self.stored_numbers.clear()
-
-    def is_full(self):
-        return None not in itertools.chain.from_iterable(self._board)
-
-    def is_correct(self):
-        return self._board == self._solved
-
-    @classmethod
-    def beginner(cls):
-        """Returns a sudoku board suitable for beginners"""
-        return cls(holes=36)
-
-    @classmethod
-    def intermediate(cls):
-        """Returns a sudoku board suitable for intermediate players"""
-        return cls(holes=random.randint(45, 54))
-
-    @classmethod
-    def expert(cls):
-        """Returns a sudoku board suitable for experts"""
-        return cls(holes=random.randint(59, 62))
-
-    @classmethod
-    def minimum(cls):
-        """Returns a sudoku board with the minimum amount of clues needed
-        to achieve a unique solution.
-        """
-        return cls(holes=BOARD_SIZE - 17)
+def _get_coords(size):
+    return itertools.product(range(size), repeat=2)
 
 
 _markers = [chr(i) for i in range(0x1f1e6, 0x1f1ef)]
@@ -145,233 +74,550 @@ _top_row = '  '.join(map(' '.join, grouper(3, _markers)))
 _top_row = '\N{SOUTH EAST ARROW}  ' + _top_row
 _letters = 'abcdefghi'
 
-class UnicodeBoard(Board):
+
+class Board:
+    __slots__ = ('_board', '_clues', 'new', 'dirty')
+
+    def __init__(self, clues):
+        self.new = True
+        self.dirty = True  # So we can save this right away
+        self._board = _make_board()
+
+        # put holes in the board.
+        coords = list(_get_coords(BLOCK_SIZE * BLOCK_SIZE))
+        random.shuffle(coords)
+        it = iter(coords)
+
+        # slice the iterator first to get the "clues"
+        self._clues = set(itertools.islice(it, clues))
+
+        # Fill the rest
+        for p in it:
+            self[p] = EMPTY
+
+    def __getitem__(self, xy):
+        x, y = xy
+        return self._board[y][x]
+
+    def __setitem__(self, xy, value):
+        if xy in self._clues:
+            raise ValueError("cannot place a number in a pre-placed clue")
+
+        x, y = xy
+        self._board[y][x] = value
+        self.dirty = True
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(clues={len(self._clues)!r})'
+
+    # TODO: Use different emojis to represent the clues. This will be hard
+    # without using the config file...
     def __str__(self):
         fmt = "{0}  {1} {2} {3}  {4} {5} {6}  {7} {8} {9}"
 
         def draw_cell(cell):
-            return (
-                f'{cell}\u20e3' if cell else
-                '\N{BLACK LARGE SQUARE}' if cell is None else
-                '\N{INPUT SYMBOL FOR NUMBERS}'
-            )
+            return f'{cell}\u20e3' if cell else '\N{BLACK LARGE SQUARE}'
 
-        return '\n'.join(
+        return _top_row + '\n' + '\n'.join(
             fmt.format(_markers[i], *map(draw_cell, line), '\N{WHITE SMALL SQUARE}')
             + '\n' * (((i + 1) % 3 == 0))
             for i, line in enumerate(self._board)
         )
 
+    def validate(self):
+        # If the board is not full then it's not valid.
+        if EMPTY in flatten(self._board):
+            raise ValueError('Fill the board first.')
 
-class Level(enum.Enum):
-    beginner = enum.auto()
-    intermediate = enum.auto()
-    expert = enum.auto()
-    minimum = enum.auto()
+        required_nums = set(range(1, len(self._board[0]) + 1))
 
-    def __str__(self):
-        return self.name.title()
+        def check(lines, header, seq=_letters.upper()):
+            lines = enumerate(map(set, lines))
+            if all(line == required_nums for _, line in lines):
+                return
+
+            # If this is exhausted then the all clause would've been True
+            # and thus this won't be executed.
+            num, _ = next(lines, (10, None))
+            raise ValueError(f'{header} {seq[num - 1]} is invalid')
+
+        # Check rows
+        check(self._board, 'Row')
+        # Check columns
+        check(zip(*self._board), 'Column')
+        # Check boxes
+        check(map(flatten, _get_squares(self._board)), 'Box', range(1, len(self._board[0]) + 1))
+
+    def clear(self):
+        non_clues = itertools.filterfalse(self._clues.__contains__, _get_coords(len(self._board)))
+        for p in non_clues:
+            self[p] = EMPTY
+
+    def to_data(self):
+        size = len(self._board[0])
+        return self._board, [x * size + y for x, y in self._clues]
 
     @classmethod
-    async def convert(cls, ctx, arg):
-        lowered = arg.lower()
+    def from_data(cls, data):
+        # We are bypassing __init__ here since it doesn't apply here.
+        size = BLOCK_SIZE * BLOCK_SIZE
+        self = cls.__new__(cls)
+
+        self._board = data['board']
+        self._clues = {divmod(clue, size) for clue in data['clues']}
+        self.new = False
+        self.dirty = False  # We don't need to save a game we just loaded.
+
+        return self
+
+    @classmethod
+    def beginner(cls):
+        """Returns a sudoku board suitable for beginners"""
+        return cls(clues=random.randint(40, 45))
+
+    @classmethod
+    def intermediate(cls):
+        """Returns a sudoku board suitable for intermediate players"""
+        return cls(clues=random.randint(27, 36))
+
+    @classmethod
+    def expert(cls):
+        """Returns a sudoku board suitable for experts"""
+        return cls(clues=random.randint(19, 22))
+
+    @classmethod
+    def minimum(cls):
+        """Returns a sudoku board with the minimum amount of clues needed
+        to achieve a unique solution.
+        """
+        return cls(clues=17)
+
+    # difficulty aliases
+    easy = beginner
+    medium = intermediate
+    hard = expert
+    extreme = minimum
+
+    @property
+    def difficulty(self):
+        num_clues = len(self._clues)
+        ranges = [(40, 45), (27, 36), (19, 22), (0, 17)]
+
+        for i, (low, high) in enumerate(ranges, 1):
+            if low <= num_clues <= high:
+                return i
+
+        return -1
+
+
+class LockedMessage:
+    """Proxy message object to prevent concurrency issues when editing"""
+    __slots__ = ('_message', '_lock')
+
+    def __init__(self, message):
+        self._message = message
+        self._lock = asyncio.Lock()
+
+    def __getattr__(self, attr):
+        return getattr(self._message, attr)
+
+    async def edit(self, **kwargs):
+        async with self._lock:
+            await self._message.edit(**kwargs)
+
+
+# Controller States I guess...
+IN_GAME = 0
+ON_HELP = 1
+ON_SAVE = 2
+
+
+class Controller(BaseReactionPaginator):
+    def __init__(self, ctx, game):
+        super().__init__(ctx)
+        self._game = game
+        self._future = ctx.bot.loop.create_future()
+        self._future.set_result(None)  # We just need an already done future.
+        self._state = IN_GAME
+
+    @property
+    def display(self):
+        return self._game._display
+
+    def default(self):
+        return self.display
+
+    def in_game(self):
+        return self._state == IN_GAME
+
+    def edit_message(self, colour, header):
+        if not self._future.done():
+            self._future.cancel()
+
+        board = self._game._board
+        d = self.display
+        d.description = f'**{header}**\n{board}'
+        d.colour = colour
+
+        async def wait():
+            await asyncio.sleep(3)
+            d.colour = self.context.bot.colour
+            d.description = str(board)
+            await self._message.edit(embed=self.display)
+
+        self._future = asyncio.ensure_future(wait())
+
+    @page('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
+    def restart(self):
+        """Restart"""
+        if not self.in_game():
+            return None
+
+        board = self._game._board
+        board.clear()
+        self.display.description = str(board)
+        return self.display
+
+    @page('\N{WHITE HEAVY CHECK MARK}')
+    def validate(self):
+        """Check"""
+        if not self.in_game():
+            return None
+
+        board = self._game._board
         try:
-            return cls[lowered]
-        except KeyError:
-            raise commands.BadArgument(f'No level called {arg}.') from None
-
-
-class State(enum.Enum):
-    default = enum.auto()
-    on_help = enum.auto()
-
-class SudokuSession(BaseReactionPaginator):
-    def __init__(self, ctx, board, level):
-        self.context = ctx
-        self.board = board
-        self._message = None
-        self._header = f'Sudoku - {level}'
-        self._state = State.default
-        self._completed = False
-        self._runner = None
-        self._screen = (discord.Embed()
-                        .set_author(name=self._header)
-                        .add_field(name='Player', value=str(ctx.author))
-                        .add_field(name='\u200b', value='Stuck? Click the \N{INFORMATION SOURCE} for help', inline=False)
-                        )
-
-    def check_message(self, message):
-        return (self._state == State.default
-                and message.channel == self.ctx.channel
-                and message.author == self.ctx.author)
-
-    @staticmethod
-    def parse_message(string):
-        x, y, number, = string.lower().split()
-
-        if number == 'clear':
-            number = None
+            board.validate()
+        except ValueError as e:
+            self.edit_message(0xF44336, f'{e}\n')
         else:
-            number = int(number)
-            if not 1 <= number <= 9:
-                raise ValueError("number must be between 1 and 9")
+            d = self.display
+            d.description = f'**Sudoku Complete!**\n\n{self._game._board}'
+            d.colour = 0x4CAF50
+            self.stop()
 
-        return _letters.index(x), _letters.index(y), number
+        return self.display
 
-    def edit_screen(self):
-        self._screen.description = f'{_top_row}\n{self.board}'
+    @page('\N{INFORMATION SOURCE}')
+    def info(self):
+        """Help"""
+        self._state = ON_HELP
+
+        help_text = textwrap.dedent('''
+            The goal is to fill each space with a number
+            from 1 to 9, such that each row, column, and
+            3 x 3 box contains each number exactly **once**.
+        ''')
+
+        input_field = textwrap.dedent('''
+            Send a message in this format:
+            ```
+            row column number
+            ```
+            Examples: **`a b 2`**, **`B A 5`**
+            \u200b
+            Use `A-I` for `row` and `column`.
+            Use `1-9` for the number.
+
+            To check your board, click \N{WHITE HEAVY CHECK MARK}.
+            You must fill the whole board first.
+            \u200b
+            If the board is correctly filled,
+            you've completed the game!
+            \u200b
+        ''')
+
+        return (discord.Embed(colour=self.context.bot.colour, description=help_text)
+                .set_author(name='Sudoku Help!')
+                .add_field(name='How to play', value=input_field)
+                .add_field(name='Buttons', value=self.reaction_help, inline=False)
+                )
+
+    @page('\N{INPUT SYMBOL FOR NUMBERS}')
+    def resume(self):
+        """Resume game"""
+        if self.in_game():
+            return None
+
+        self._state = IN_GAME
+        return self.display
+
+    async def _confirm(self, prompt, *, timeout=None):
+        ctx = self.context
+        choices = {'y', 'yes', 'n', 'no'}
+
+        def check(m):
+            return (m.channel == self._message.channel
+                    and m.author == ctx.author
+                    and m.content.lower() in choices
+                    )
+
+        d = self.display
+        d.description = f'**{prompt}**\n(Type `yes` or `no`)\n\u200b\n{self._game._board}'
+
+        d.colour = 0xF44336
+        await self._message.edit(embed=d)
+
+        try:
+            message = await ctx.bot.wait_for('message', check=check, timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+
+        # XXX: This is LBYL to avoid excessive requests. Should I use EAFP anyway?
+        if ctx.me.permissions_in(ctx.channel).manage_messages:
+            await message.delete()
+
+        return message.content.lower() in {'yes', 'y'}
+
+    async def _confirm_save(self):
+        self._state = ON_SAVE
+        board = self._game._board
+
+        if not board.new:
+            return True
+
+        ctx = self.context
+
+        query = 'SELECT 1 FROM saved_sudoku_games WHERE user_id = $1;'
+        await ctx.acquire()
+        row = await ctx.db.fetchrow(query, ctx.author.id)
+        await ctx.release()
+
+        if not row:
+            return True
+
+        return await self._confirm('A save game already exists. Overwrite it?', timeout=25)
+
+    @page('\N{FLOPPY DISK}')
+    async def save(self):
+        """Save game"""
+        if not self.in_game():
+            return None
+
+        if not self._game._board.dirty:
+            # We don't need to save a game if we didn't make any changes.
+            # So let's save us some requests and DB acquiring.
+            return None
+
+        try:
+            if not await self._confirm_save():
+                d = self.display
+                d.description = str(self._game._board)
+                d.colour = self.colour
+                return d
+
+            await self._game.save()
+            self.edit_message(0x3F51B5, 'Game saved!\n')
+            return self.display
+        finally:
+            self._state = IN_GAME
+
+    @page('\N{BLACK SQUARE FOR STOP}')
+    async def stop(self):
+        """Quit"""
+        super().stop()
+
+        if not self._future.done():
+            self._future.cancel()
+
+        # Description will be edited when we do the two prompts.
+        old_description = self._current.description
+
+        if self._game._board.dirty:
+            # We don't want them to hang the game.
+            self._state = ON_SAVE
+            save_changes = await self._confirm("There are unsaved changes. Save game?", timeout=25)
+            if save_changes and await self._confirm_save():
+                await self._game.save()
+
+        self._current.colour = 0x607D8B
+        self._current.description = old_description
+        return self._current
+
+
+def _parse_message(string):
+    x, y, number, = string.lower().split()
+
+    number = int(number)
+    if not 1 <= number <= 9:
+        raise ValueError("number must be between 1 and 9")
+
+    return _letters.index(x), _letters.index(y), number
+
+
+class SudokuSession:
+    __slots__ = ('_board', '_controller', '_ctx', '_display')
+
+    def __init__(self, ctx, board):
+        self._board = board
+        self._controller = Controller(ctx, self)
+        self._ctx = ctx
+
+        a = ctx.author
+        self._display = (discord.Embed(colour=ctx.bot.colour, description=str(self._board))
+                         .set_author(name=f'Sudoku: {a.display_name}', icon_url=a.avatar_url)
+                         .add_field(name='\u200b', value='Stuck? Click \N{INFORMATION SOURCE} for help', inline=False)
+                         )
+
+    def check(self, message):
+        return (self._controller.in_game()
+                and message.channel == self._ctx.channel
+                and message.author == self._ctx.author)
 
     async def _loop(self):
-        self.edit_screen()
-        self._message = await self.ctx.send(embed=self._screen)
-        await self.add_buttons()
+        # TODO: Set an event and add a wait_until_ready method on the paginator
+        while not self._controller._message:
+            await asyncio.sleep(0)
+
+        # Wrap message in a lock so we don't have the messages and the reactions
+        # making it go all wonky.
+        self._controller._message = LockedMessage(self._controller._message)
+        wait_for = self._ctx.bot.wait_for
+
+        timeout = 300 * (self._board.difficulty + 1) / 2
 
         while True:
             try:
-                message = await self.ctx.bot.wait_for('message', timeout=120, check=self.check_message)
+                message = await wait_for('message', timeout=timeout, check=self.check)
             except asyncio.TimeoutError:
-                if self._state == State.default:
-                    raise
-                continue
+                if not self._controller.in_game():
+                    continue
+
+                await self._ctx.send(f'{self._ctx.author.mention} You took too long!')
+                break
 
             try:
-                x, y, number = self.parse_message(message.content)
+                x, y, number = _parse_message(message.content)
             except ValueError:
                 continue
 
             try:
-                self.board[x, y] = number
+                self._board[x, y] = number
             except (IndexError, ValueError):
                 continue
 
-            with suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await message.delete()
 
-            self.edit_screen()
-            await self._message.edit(embed=self._screen)
+            self._display.description = str(self._board)
+            await self._controller._message.edit(embed=self._display)
+
+    async def save(self):
+        ctx = self._ctx
+        args = self._board.to_data()
+
+        query = """INSERT INTO saved_sudoku_games (user_id, board, clues)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (user_id)
+                   DO UPDATE SET board=$2, clues=$3;
+                """
+
+        await ctx.acquire()
+        await ctx.db.execute(query, ctx.author.id, *args)
+        await ctx.release()
+
+        self._board.new = False
+        self._board.dirty = False  # We saved the game, no new changes to save
 
     async def run(self):
-        try:
-            with self.ctx.bot.temp_listener(self.on_reaction_add):
-                self._runner = asyncio.ensure_future(self._loop())
-                await self._runner
-        finally:
-            if not self._completed:
-                self._screen = self._message.embeds[0]
-                self._screen.colour = 0
+        coros = [
+           self._loop(),
+           self._controller.interact(timeout=None, delete_after=False),
+        ]
 
-            await self._message.edit(embed=self._screen)
-            await self._message.clear_reactions()
+        await self._ctx.release()
+        done, pending = await asyncio.wait(coros, return_when=asyncio.FIRST_COMPLETED)
 
-    @page('\N{WHITE HEAVY CHECK MARK}')
-    async def check(self):
-        """Check to see if your the board you have is correct."""
-        if not self.board.is_full():
-            self._screen.set_author(name="This board isn't even remotely done!")
-            self._screen.colour = 0xFF0000
-        elif self.board.is_correct():
-            self._screen.set_author(name="Sudoku complete!")
-            self._completed = True
-            self._runner.cancel()
-        else:
-            self._screen.set_author(name="Sorry, it's not correct :(")
-            self._screen.colour = 0xFF0000
+        for p in pending:
+            p.cancel()
 
-        await self._message.edit(embed=self._screen)
-        await asyncio.sleep(10)
-        self._screen.set_author(name=self._header)
-        self._screen.colour = self.ctx.bot.colour
-        await self._message.edit(embed=self._screen)
+        # The message has to be deleted in order to mitigate lag from the emojis
+        # in the embed.
+        async def task():
+            await asyncio.sleep(5)
+            with contextlib.suppress(discord.HTTPException):
+                await self._controller._message.delete()
 
-    @page('\N{INPUT SYMBOL FOR NUMBERS}')
-    async def default(self):
-        """Go back to the game"""
-        self._state = State.default
-        await self._message.edit(embed=self._screen)
+        self._ctx.bot.loop.create_task(task())
 
-    @page('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
-    async def reset(self):
-        """Reset the board. In case you badly mess up or something."""
-        self.board.clear()
-        self.edit_screen()
-        await self._message.edit(embed=self._screen)
-
-    @page('\N{INFORMATION SOURCE}')
-    async def help_page(self):
-        """Show this page (you knew that already)"""
-        self._state = State.on_help
-        help_text = textwrap.dedent('''
-        The objective is to fill a 9×9 grid with digits so that each column,
-        each row, and each of the nine 3×3 subgrids that compose the grid
-        (also called "boxes", "blocks", or "regions") contains all of the
-        digits from 1 to 9.
-
-        This basically means no row, column, or block should have more than
-        one of the same number.
-        \u200b
-        ''')
-
-        input_field = textwrap.dedent('''
-        To make a move, send a message in this format:
-        ```
-        <row> <column> <number>
-        ```
-        `row` and `column` can be from `A-I`. While the number must be from `1-9`
-
-        When you think you're done, click the \N{WHITE HEAVY CHECK MARK} to check your board.
-        Keep in mind this will only work once every number has been put in.
-        \u200b
-        ''')
-
-        embed = (discord.Embed(colour=self.ctx.bot.colour, description=help_text)
-                 .set_author(name='Welcome to Sudoku!')
-                 .add_field(name='How to play', value=input_field)
-                 .add_field(name='Reaction Button Reference', value=self.reaction_help)
-                 )
-
-        await self._message.edit(embed=embed)
-
-    @page('\N{BLACK SQUARE FOR STOP}')
-    async def stop(self):
-        """Stop the game"""
-        self._runner.cancel()
-
-    @property
-    def context(self):
-        return self.ctx
-
-    @context.setter
-    def context(self, value):
-        self.ctx = value
-
-    async def on_reaction_add(self, reaction, user):
-        if self._check_reaction(reaction, user):
-            await getattr(self, self._reaction_map[reaction.emoji])()
+        await done.pop()
 
 
 class Sudoku(Cog):
-    def __init__(self):
-        self.manager = SessionManager()
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.sudoku_sessions = SessionManager()
+
+    async def _get_difficulty(self, ctx):
+        # Get the saved board if it exists
+        reactions = ['1\u20e3', '2\u20e3', '3\u20e3', '4\u20e3']
+        difficulties = ['easy', 'medium', 'hard', 'extreme']
+
+        # Check if the user has a game saved already
+        query = 'SELECT * FROM saved_sudoku_games WHERE user_id = $1;'
+        board = await ctx.db.fetchrow(query, ctx.author.id)
+        if board is not None:
+            reactions.append('\U0001f4be')
+            difficulties.append('resume game')
+            board = Board.from_data(board)
+
+        is_valid = frozenset(reactions).__contains__
+
+        prompt = discord.Embed(colour=ctx.bot.colour)
+        prompt.set_author(name=f"Let's play Sudoku, {ctx.author.display_name}!", icon_url=SUDOKU_ICON)
+        prompt.description = '**Please choose a difficulty.**\n-----------------------\n'
+        prompt.description += '\n'.join(
+            f'{reaction} = {diff.title()}'
+            for reaction, diff in zip(reactions, difficulties)
+        )
+
+        message = await ctx.send(embed=prompt)
+
+        # TODO: I use this function a lot. Maybe I should make a
+        #       helper function...
+        async def put(message, emojis):
+            for e in emojis:
+                await message.add_reaction(e)
+
+        future = asyncio.ensure_future(put(message, reactions))
+
+        def check(reaction, user):
+            return (reaction.message.id == message.id
+                    and user == ctx.author
+                    and is_valid(reaction.emoji)
+                    )
+
+        try:
+            reaction, _ = await ctx.bot.wait_for('reaction_add', check=check, timeout=20)
+        except asyncio.TimeoutError:
+            await ctx.send('You took too long...')
+            return None
+        finally:
+            await message.delete()
+            if not future.done():
+                future.cancel()
+
+        if reaction.emoji[-1] != '\u20e3':
+            return board
+
+        index = int(reaction.emoji[0]) - 1
+        return getattr(Board, difficulties[index])()
 
     @commands.command()
-    async def sudoku(self, ctx, difficulty: Level = Level.beginner):
-        """Starts game of Sudoku"""
-        if self.manager.session_exists(ctx.author):
-            return await ctx.send('no')
+    async def sudoku(self, ctx, difficulty=None):
+        if self.sudoku_sessions.session_exists(ctx.author.id):
+            return await ctx.send('Please finish your other Sudoku game first.')
 
-        board = getattr(UnicodeBoard, difficulty.name.lower())()
-        with self.manager.temp_session(ctx.author, SudokuSession(ctx, board, difficulty)) as inst:
+        if difficulty is None:
+            board = await self._get_difficulty(ctx)
+        else:
+            board = getattr(Board, difficulty)()
+
+        if board is None:
+            return
+
+        with self.sudoku_sessions.temp_session(ctx.author.id, SudokuSession(ctx, board)) as inst:
             await inst.run()
-
-    async def sudoku_load(self, ctx):
-        pass
-
-    @sudoku.error
-    async def sudoku_error(self, ctx, error):
-        cause = error.__cause__
-        if isinstance(cause, asyncio.TimeoutError):
-            await ctx.send(f'{ctx.author.mention} You took too long!')
 
 
 def setup(bot):
-    bot.add_cog(Sudoku())
+    bot.add_cog(Sudoku(bot))
