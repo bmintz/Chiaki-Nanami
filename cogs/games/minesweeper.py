@@ -13,6 +13,7 @@ import discord
 from discord.ext import commands
 
 from core.cog import Cog
+from ..utils.formats import pluralize
 from ..utils.misc import emoji_url, REGIONAL_INDICATORS
 from ..utils.paginator import BaseReactionPaginator, page
 from ..utils.time import duration_units
@@ -289,61 +290,51 @@ class _MinesweeperHelp(BaseReactionPaginator):
 
     @page('\N{INFORMATION SOURCE}')
     def default(self):
-        """How to navigate this help page (this page)"""
-        desc = 'Basically the goal is to reveal all of the board and NOT get hit with a mine!'
-        instructions = 'To navigate through this help page, click one of the reactions below'
+        """Reactions"""
+        desc = 'The goal is to clear the board without hitting a mine.'
+        instructions = 'Click one of the reactions below'
 
         return (discord.Embed(colour=self.colour, description=desc)
-                .set_author(name='Welcome to Minesweeper!')
+                .set_author(name='Minesweeper Help')
                 .add_field(name=instructions, value=self.reaction_help)
                 )
 
     @page('\N{VIDEO GAME}')
     def controls(self):
-        """Controls for playing Minesweeper"""
+        """Controls"""
         text = textwrap.dedent(f'''
-        Basically the goal is to reveal all of the board and NOT get hit with a mine!
-
-        To make a move, send a message in this format:
+        **Type in this format:**
         ```
-        <column> <row> [f|flag|u|unsure]
+        column row
         ```
-        Column must be from **A-{ascii_lowercase[self._game._board.width - 1].upper()}**
-        And row must be from **A-{ascii_lowercase[self._game._board.height - 1].upper()}**
-        Typing `f` or `flag` will mark the tile with a flag.
-        Typing `u` or `unsure` will mark the tile as unsure.
-        Typing nothing, well you know what it will do.
-
-        You **do not** need to include the `<>` or `[]`.
-
-        Note that you can only input it if you're in this actual game.
-        (ie typing anything in this screen won't do anything.)
+        Use `A-{ascii_uppercase[self._game._board.width - 1]}` for the column
+        and `A-{ascii_uppercase[self._game._board.height - 1]}` for the row.
         \u200b
+        To flag a tile, type `f` or `flag` after the row.
+        If you're unsure about a tile, type `u` or `unsure` after the row.
         ''')
         return (discord.Embed(colour=self.colour, description=text)
-                .set_author(name='How to play Minesweeper')
-                .add_field(name='Reactions', value=self._game._controller.reaction_help)
+                .set_author(name='Instructions')
+                .add_field(name='In-game Reactions', value=self._game._controller.reaction_help)
                 )
 
     @staticmethod
     def _possible_spaces():
         number = random.randint(1, 9)
         return textwrap.dedent(f'''
-        {Tile.shown} - Empty tile, reveals other empty or numbered tiles near it
-
-        {Tile.numbered(number)} - Displays the number of mines surrounding it.
-        This one shows that they are {number} mines around it.
-
-        {Tile.boom} - BOOM! Selecting a mine makes it explode, causing all other mines to explode
-        and thus ending the game. Avoid mines at any costs!
+        {Tile.shown} = Empty tile, reveals numbers or other empties around it.
+        {Tile.numbered(number)} = Number of mines around it. This one has {pluralize(mine=number)}.
+        {Tile.boom} = BOOM! Hitting a mine will instantly end the game.
+        {Tile.flag} = A flagged tile means it *might* be a mine.
+        {Tile.unsure} = It's either a mine or not. No one's sure.
         \u200b
         ''')
 
     @page('\N{COLLISION SYMBOL}')
     def possible_spaces(self):
-        """Things you might hit when you select a tile"""
+        """Tiles"""
         description = (
-            'When you select a tile, chances are you will hit one of these 3 things.\n'
+            'There are 5 types of tiles.\n'
             + self._possible_spaces()
         )
 
@@ -353,7 +344,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
 
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
-        """Closes this help page"""
+        """Exit"""
         await self._game.edit(self.colour, header=self._game._header)
         self._stopped = True
         return super().stop()
@@ -385,7 +376,7 @@ class _Controller(BaseReactionPaginator):
 
     @page('\N{BLACK SQUARE FOR STOP}')
     def stop(self):
-        """Stops the game"""
+        """Quit"""
         # In case the user has the help page open when canceling it
         # (this shouldn't technically happen but this is here just in case.)
         if not self._help_future.done():
@@ -648,6 +639,7 @@ class Minesweeper(Cog):
     @commands.group(aliases=['msw'], invoke_without_command=True)
     @not_playing_minesweeper()
     async def minesweeper(self, ctx, level: Level = Level.beginner):
+        """Starts a game of Minesweeper"""
         with self._create_session(ctx):
             if level is Level.custom:
                 ctx.command = self.minesweeper_custom
@@ -659,6 +651,7 @@ class Minesweeper(Cog):
     @minesweeper.command(name='custom')
     @not_playing_minesweeper()
     async def minesweeper_custom(self, ctx, width: int, height: int, mines: int):
+        """Starts a custom game of Minesweeper"""
         with self._create_session(ctx):
             try:
                 board = Board(width, height, mines)
