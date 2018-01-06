@@ -329,7 +329,6 @@ class _MinesweeperHelp(BaseReactionPaginator):
         {Tile.boom} = BOOM! Hitting a mine will instantly end the game.
         {Tile.flag} = A flagged tile means it *might* be a mine.
         {Tile.unsure} = It's either a mine or not. No one's sure.
-        (The last two tiles can only )
         \u200b
         ''')
 
