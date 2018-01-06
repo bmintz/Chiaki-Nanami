@@ -40,9 +40,11 @@ class HitMine(Exception):
         x, y = self.point
         return f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;'
 
-class AlreadyPlaying(commands.CheckFailure):
+class BoardCancelled(Exception):
     pass
 
+class AlreadyPlaying(commands.CheckFailure):
+    pass
 
 # Some icon constants
 SUCCESS_ICON = emoji_url('\N{SMILING FACE WITH SUNGLASSES}')
@@ -327,6 +329,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         {Tile.boom} = BOOM! Hitting a mine will instantly end the game.
         {Tile.flag} = A flagged tile means it *might* be a mine.
         {Tile.unsure} = It's either a mine or not. No one's sure.
+        (The last two tiles can only )
         \u200b
         ''')
 
@@ -548,7 +551,7 @@ class _Leaderboard(BaseReactionPaginator):
 
 def not_playing_minesweeper():
     def predicate(ctx):
-        channel_id = ctx.cog.minesweeper_sessions.get(ctx.author.id)
+        channel_id = ctx.cog.sessions.get(ctx.author.id)
         if channel_id:
             raise AlreadyPlaying(f'Please finish your game in <#{channel_id}> first.')
         return True
@@ -558,7 +561,7 @@ def not_playing_minesweeper():
 class Minesweeper(Cog):
     def __init__(self, bot):
         super().__init__(bot)
-        self.minesweeper_sessions = {}
+        self.sessions = {}
 
     async def __error(self, ctx, error):
         if isinstance(error, AlreadyPlaying):
@@ -566,11 +569,11 @@ class Minesweeper(Cog):
 
     @contextlib.contextmanager
     def _create_session(self, ctx):
-        self.minesweeper_sessions[ctx.author.id] = ctx.channel.id
+        self.sessions[ctx.author.id] = ctx.channel.id
         try:
             yield
         finally:
-            self.minesweeper_sessions.pop(ctx.author.id, None)
+            self.sessions.pop(ctx.author.id, None)
 
     async def _get_record_text(self, user_id, level, time, *, connection):
         # Check if it's the world record
@@ -625,6 +628,186 @@ class Minesweeper(Cog):
             time,
         )
 
+    async def _get_custom_board(self, ctx, message):
+        # Shorthands
+        wait_for = ctx.bot.wait_for
+        create_task = asyncio.ensure_future
+
+        confirm = ctx.bot.emoji_config.confirm
+        str_confirm = str(confirm)
+
+        # haaaaaaack
+        cem = confirm if isinstance(confirm, discord.Emoji) else str_confirm
+        await message.add_reaction(cem)
+        del cem
+
+        valid_reactions = [str(confirm), '\N{BLACK SQUARE FOR STOP}']
+        is_valid = frozenset(valid_reactions).__contains__
+
+        description_format = (
+            'Please type a board.\n'
+            '```\n'
+            '{0} x {1} ({2} mines)'
+            '```\n'
+            '{error}'
+        )
+
+        examples = '`10 10 99`, `10 10 90`, `5 5 1`, `12 12 100`'
+
+        args = (0, 0, 0)
+        board = None
+        error = ''
+        embed = (discord.Embed(colour=ctx.bot.colour)
+                 .set_author(name='Custom Minesweeper')
+                 .add_field(name='Examples', value=examples)
+                 )
+
+        def message_check(m):
+            nonlocal args
+            if not (m.channel == ctx.channel and m.author == ctx.author):
+                return
+
+            try:
+                width, height, mines = map(int, m.content.split(None, 3))
+                args = width, height, mines
+            except ValueError:
+                return
+
+            return True
+
+        def message_future():
+            return create_task(wait_for('message', check=message_check))
+
+        def reaction_check(reaction, user):
+            if not (reaction.message.id == message.id and user == ctx.author):
+                return False
+
+            emoji = str(reaction.emoji)
+            if emoji == str_confirm and error:
+                return False
+
+            return is_valid(emoji)
+
+        def reaction_future():
+            return create_task(wait_for('reaction_add', check=reaction_check))
+
+        # XXX: Future.add_done_callback?
+        def reset_future(fut):
+            # We do this so we don't need to cancel both futures when we reset one.
+            future_makers = [message_future, reaction_future]
+            index = futures.index(fut)
+            futures[index] = future_makers[index]()
+
+        futures = [message_future(), reaction_future()]
+
+        try:
+            while True:
+                description = description_format.format(
+                    *args,
+                    error=f'**{error}**' if error else f'**Click {confirm} to play.**' if board else '',
+                )
+                # Only edit if there's actually a change, to save HTTP requests.
+                if description != embed.description:
+                    embed.colour = 0xf44336 if error else ctx.bot.colour
+                    embed.description = description
+                    await message.edit(embed=embed)
+
+                done, pending = await asyncio.wait(
+                    futures,
+                    timeout=60,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                if not done:
+                    raise asyncio.TimeoutError
+
+                done_future = done.pop()
+                result = done_future.result()
+
+                # Did we add a reaction?
+                if not isinstance(result, discord.Message):
+                    emoji = str(result[0].emoji)
+                    if emoji != str(confirm):
+                        raise BoardCancelled
+
+                    if board:
+                        return board
+                    error = 'Enter a board first.'
+
+                    reset_future(done_future)
+                    continue
+
+                if ctx.me.permissions_in(ctx.channel).manage_messages:
+                    # Save Discord the HTTP request
+                    await result.delete()
+
+                try:
+                    board = Board(*args)
+                except ValueError as e:
+                    error = e
+                else:
+                    error = None
+                reset_future(done_future)
+        finally:
+            for f in futures:
+                if not f.done():
+                    f.cancel()
+
+    async def _get_world_records(self, *, connection):
+        query = 'SELECT level, MIN(time) FROM minesweeper_games WHERE won GROUP BY level;'
+
+        wrs = [0] * len(Level)
+        for level, wr in await connection.fetch(query):
+            wrs[level - 1] = wr
+        wrs[-1] = 0  # don't include custom mode as a WR
+        return wrs
+
+    async def _get_board(self, ctx):
+        emojis = [f'{l.value}\u20e3' for l in Level] + ['\N{BLACK SQUARE FOR STOP}']
+        is_valid = frozenset(emojis).__contains__
+
+        names = [l.name.title() for l in Level] + ['Exit']
+        wrs = await self._get_world_records(connection=ctx.db) + [0]
+        # We don't need the database for a while. Let's release while we still can.
+        await ctx.release()
+
+        description = '\n'.join(
+            f'{em} = {level} {f"(WR: {wr:.2f}s)" if wr else ""}'
+            for em, level, wr in zip(emojis, names, wrs)
+        )
+        description = f'**Choose a level below.**\n{"-" * 20}\n{description}'
+
+        async def put(msg, ems):
+            for e in ems:
+                await msg.add_reaction(e)
+
+        embed = discord.Embed(colour=ctx.bot.colour, description=description)
+        embed.set_author(name="Let's play Minesweeper!")
+
+        message = await ctx.send(embed=embed)
+        future = asyncio.ensure_future(put(message, emojis))
+
+        def check(reaction, user):
+            return (reaction.message.id == message.id
+                    and user == ctx.author
+                    and is_valid(reaction.emoji))
+
+        try:
+            reaction, _ = await ctx.bot.wait_for('reaction_add', timeout=60, check=check)
+            emoji = reaction.emoji
+            if emoji == emojis[-1]:
+                raise BoardCancelled
+            elif emoji == emojis[-2]:
+                return Level.custom, await self._get_custom_board(ctx, message)
+
+            index = int(emoji[0]) - 1
+            return Level(index + 1), getattr(Board, names[index].lower())()
+        finally:
+            with contextlib.suppress(discord.HTTPException):
+                await message.delete()
+
+            if not future.done():
+                future.cancel()
+
     async def _do_minesweeper(self, ctx, level, board, *, record=True):
         await ctx.release()
         won, time = await MinesweeperSession(ctx, level, board).run()
@@ -638,14 +821,21 @@ class Minesweeper(Cog):
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     @not_playing_minesweeper()
-    async def minesweeper(self, ctx, level: Level = Level.beginner):
+    async def minesweeper(self, ctx, level: Level = None):
         """Starts a game of Minesweeper"""
         with self._create_session(ctx):
             if level is Level.custom:
                 ctx.command = self.minesweeper_custom
                 return await ctx.reinvoke()
 
-            board = getattr(Board, level.name)()
+            if level is None:
+                try:
+                    level, board = await self._get_board(ctx)
+                except (asyncio.TimeoutError, BoardCancelled):
+                    return
+            else:
+                board = getattr(Board, level.name)()
+
             await self._do_minesweeper(ctx, level, board)
 
     @minesweeper.command(name='custom')
