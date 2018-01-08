@@ -5,6 +5,7 @@ import itertools
 import json
 import os
 import random
+import time
 from difflib import SequenceMatcher
 from html import unescape
 
@@ -174,6 +175,9 @@ class DefaultTriviaSession(BaseTriviaSession):
     # How many questions to fetch from the API
     AMOUNT = 50
 
+    # How long it takes since the token was last used before it expires
+    TOKEN_EXPIRY_TIME = 60 * 60 * 6
+
     # These are local to the class and are not meant to be used publicly.
     # However they're global as all trivia games will be using the same type
     # of questions.
@@ -191,6 +195,10 @@ class DefaultTriviaSession(BaseTriviaSession):
 
     # This is needed to check if we exhausted all possible questions.
     __exhausted = False
+
+    # This is needed to check if the token has expired. The token gets deleted
+    # after 6 hours of inactivity.
+    __last_used = time.monotonic()
 
     def __init__(self, ctx):
         super().__init__(ctx)
@@ -215,6 +223,22 @@ class DefaultTriviaSession(BaseTriviaSession):
 
         assert response['response_code'] == 0
         cls.__token = response['token']
+        cls.__last_used = time.monotonic()
+
+    @classmethod
+    def to_args(cls):
+        if not cls.__token:
+            return None
+
+        now = time.monotonic()
+        if now - cls.__last_used >= cls.TOKEN_EXPIRY_TIME:
+            return None
+
+        return cls.__token, cls.__cache, cls.__last_used
+
+    @classmethod
+    def refresh(cls, args):
+        cls.__token, cls.__cache, cls.__last_used = args
 
     async def __get(self):
         if self.__token is None:
@@ -223,6 +247,7 @@ class DefaultTriviaSession(BaseTriviaSession):
         params = dict(amount=self.AMOUNT, token=self.__token)
         async with self._session.get(self.BASE, params=params) as r:
             response = await r.json()
+            self.__last_used = time.monotonic()
 
         if response['response_code'] == 3:
             # The token has expired. We need to regenerate it
@@ -366,11 +391,33 @@ class Trivia(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.sessions = {}
+
         try:
             with open('data/diepio_guilds.txt') as f:
                 self.diepio_guilds = set(map(int, map(str.strip, f)))
         except FileNotFoundError:
             self.diepio_guilds = set()
+
+        self.bot.loop.create_task(self._init_default_trivia())
+
+    async def _init_default_trivia(self):
+        if not hasattr(self.bot, '__cached_trivia_args__'):
+            await DefaultTriviaSession.initialize()
+            return
+
+        args = self.bot.__cached_trivia_args__
+        now = time.monotonic()
+        if now - args[-1] >= DefaultTriviaSession.TOKEN_EXPIRY_TIME:
+            await DefaultTriviaSession.initialize()
+            return
+
+        DefaultTriviaSession.refresh(args)
+        del self.bot.__cached_trivia_args__
+
+    def __unload(self):
+        args = DefaultTriviaSession.to_args()
+        if args:
+            self.bot.__cached_trivia_args__ = args
 
     @contextlib.contextmanager
     def _create_session(self, ctx, session):
