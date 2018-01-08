@@ -245,6 +245,9 @@ class DefaultTriviaSession(BaseTriviaSession):
         return questions
 
     async def _get_question(self):
+        # Because we're getting a new question we need to refresh the answerer cache.
+        self._answerers.clear()
+
         if not self._pending:
             if self.__exhausted:
                 # We don't need a lock for this because we don't modify
@@ -266,6 +269,11 @@ class DefaultTriviaSession(BaseTriviaSession):
         if message.author.bot:
             return False
 
+        author_id = message.author.id
+        # Prevent just simply spamming the answer to win.
+        if author_id in self._answerers:
+            return False
+
         if not message.content.isdigit():
             # Do not allow negative numbers because they're not gonna be
             # listed in the answers. We don't wanna confuse users here.
@@ -280,6 +288,8 @@ class DefaultTriviaSession(BaseTriviaSession):
 
         # We only want people who actually try.
         self._answer_waiter.set()
+        self._answerers.add(author_id)
+        # TODO: Delete answers if bot has perms?
         return choice == self._current_question.answer
 
     def _question_embed(self, number):
