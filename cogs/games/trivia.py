@@ -2,7 +2,10 @@ import asyncio
 import collections
 import contextlib
 import itertools
+import json
+import os
 import random
+from difflib import SequenceMatcher
 from html import unescape
 
 import aiohttp
@@ -304,10 +307,60 @@ class DefaultTriviaSession(BaseTriviaSession):
                 )
 
 
+Question = collections.namedtuple('Question', 'question answer')
+TANK_ICON = 'https://vignette.wikia.nocookie.net/diepio/images/f/f2/Tank_Screenshot2.png'
+
+
+class DiepioTriviaSession(BaseTriviaSession):
+    try:
+        with open(os.path.join('.', 'data', 'games', 'trivia', 'diepio.json')) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        _questions = []
+    else:
+        # Supporting old cruft from when I wanted to do various built-in categories
+        _questions = [Question(**d) for d in data['questions']]
+
+    async def _get_question(self):
+        return random.choice(self._questions)
+
+    def _check(self, message):
+        if message.channel != self._ctx.channel:
+            return False
+
+        # Prevent other bots from accidentally answering the question
+        # This issue has happened numberous times with other bots.
+        if message.author.bot:
+            return False
+
+        self._answer_waiter.set()
+        sm = SequenceMatcher(None, message.content.lower(), self._current_question.answer.lower())
+        return sm.ratio() >= .85
+
+    def _question_embed(self, number):
+        question = self._current_question.question
+
+        leader = self.leader
+        leader_text = (
+            f'{self._ctx.bot.get_user(leader[0])} with {leader[1]} points'
+            if leader else None
+        )
+
+        return (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
+                .set_author(name=f'Question #{number}', icon_url=TANK_ICON, url='http://diep.io')
+                .set_footer(text=f'Leader: {leader_text}')
+                )
+
+
 class Trivia(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.sessions = {}
+        try:
+            with open('data/diepio_guilds.txt') as f:
+                self.diepio_guilds = set(map(int, map(str.strip, f)))
+        except FileNotFoundError:
+            self.diepio_guilds = set()
 
     @contextlib.contextmanager
     def _create_session(self, ctx, session):
@@ -318,16 +371,19 @@ class Trivia(Cog):
         finally:
             del self.sessions[key]
 
-    @commands.group(invoke_without_command=True)
-    async def trivia(self, ctx):
+    async def _trivia(self, ctx, cls):
         if ctx.channel.id in self.sessions:
             return await ctx.send(
                 "A trivia game's in progress right now. Join in and have some fun!"
             )
 
-        session = DefaultTriviaSession(ctx)
+        session = cls(ctx)
         with self._create_session(ctx, session):
             await session.run()
+
+    @commands.group(invoke_without_command=True)
+    async def trivia(self, ctx):
+        await self._trivia(ctx, DefaultTriviaSession)
 
     @trivia.command(name='stop', aliases=['quit'])
     async def trivia_stop(self, ctx):
@@ -337,6 +393,12 @@ class Trivia(Cog):
             await ctx.send("There's no trivia game to stop.")
         else:
             inst.stop()
+
+    if DiepioTriviaSession._questions:
+        @commands.check(lambda ctx: ctx.guild.id in ctx.cog.diepio_guilds)
+        @trivia.command(name='diepio', hidden=True)
+        async def trivia_diepio(self, ctx):
+            await self._trivia(ctx, DiepioTriviaSession)
 
 
 def setup(bot):
