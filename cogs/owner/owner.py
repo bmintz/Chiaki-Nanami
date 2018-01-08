@@ -141,7 +141,7 @@ class Owner(Cog, hidden=True):
         # this cog as a base for their other cog, and since this one is kinda
         # odd and unnecessary for most people, I will make it easy to remove
         # for those people.
-        from .utils.formats import pluralize
+        from ..utils.formats import pluralize
         import time
 
         query = self.cleanup_code(query)
