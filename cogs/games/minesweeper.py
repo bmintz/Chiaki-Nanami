@@ -635,11 +635,6 @@ class Minesweeper(Cog):
         confirm = ctx.bot.emoji_config.confirm
         str_confirm = str(confirm)
 
-        # haaaaaaack
-        cem = confirm if isinstance(confirm, discord.Emoji) else str_confirm
-        await message.add_reaction(cem)
-        del cem
-
         valid_reactions = [str(confirm), '\N{BLACK SQUARE FOR STOP}']
         is_valid = frozenset(valid_reactions).__contains__
 
@@ -660,6 +655,42 @@ class Minesweeper(Cog):
                  .set_author(name='Custom Minesweeper')
                  .add_field(name='Examples', value=examples)
                  )
+
+        # Prime the embed straight away to avoid an extra edit HTTP request
+        embed.description = description_format.format(
+            *args,
+            error=f'**{error}**' if error else '',
+        )
+
+        try:
+            # To clean up the numbers from the last message.
+            await message.clear_reactions()
+        except discord.HTTPException:
+            # If we can't do this then we're either in a DM channel or Chiaki
+            # doesn't have Manage Messages. In this case, we don't have much of
+            # a choice aside from deleting and then re-sending the messages,
+            # because the only alternative is to clear out all the numbers
+            # individually by calling message.remove_reactions and that would
+            # take a full second.
+            await message.delete()
+            message = await ctx.send(embed=embed)
+
+            # Hack to make sure the old message doesn't get deleted again
+            ctx.__msw_old_menu_deleted__ = True
+        else:
+            # The clear succeeded, which means we can edit it and change screens.
+            await message.edit(embed=embed)
+
+            # This is needed to distinguish between the message being edited and
+            # the message being deleted and re-sent
+            ctx.__msw_old_menu_deleted__ = False
+
+        # XXX: Refactor
+        async def put():
+            cem = confirm if isinstance(confirm, discord.Emoji) else str_confirm
+            await message.add_reaction(cem)
+            await message.add_reaction('\N{BLACK SQUARE FOR STOP}')
+        put_future = asyncio.ensure_future(put())
 
         def message_check(m):
             nonlocal args
@@ -747,9 +778,17 @@ class Minesweeper(Cog):
                     error = None
                 reset_future(done_future)
         finally:
-            for f in futures:
+            for f in [*futures, put_future]:
                 if not f.done():
                     f.cancel()
+
+            # If clearing the reactions failed, then the old message would be
+            # deleted and a new one would be sent in its place. The problem is
+            # that we need to delete this message too when the user exits the
+            # menu anyway. However, this would get deleted again in _get_board,
+            # so we need to avoid that.
+            if ctx.__msw_old_menu_deleted__:
+                await message.delete()
 
     async def _get_world_records(self, *, connection):
         query = 'SELECT level, MIN(time) FROM minesweeper_games WHERE won GROUP BY level;'
@@ -801,8 +840,15 @@ class Minesweeper(Cog):
             index = int(emoji[0]) - 1
             return Level(index + 1), getattr(Board, names[index].lower())()
         finally:
-            with contextlib.suppress(discord.HTTPException):
-                await message.delete()
+            # This attribute might not always be set. e.g if we didn't
+            # choose custom mode.
+            if not getattr(ctx, '__msw_old_menu_deleted__', None):
+                with contextlib.suppress(discord.HTTPException):
+                    await message.delete()
+
+            if hasattr(ctx, '__msw_old_menu_deleted__'):
+                # We don't need this attribute anymore.
+                del ctx.__msw_old_menu_deleted__
 
             if not future.done():
                 future.cancel()
