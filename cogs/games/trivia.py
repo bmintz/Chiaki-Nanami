@@ -1,257 +1,263 @@
 import asyncio
 import collections
 import contextlib
-import discord
-import enum
-import functools
-import glob
-import io
 import itertools
-import json
-import logging
-import os
 import random
-
-from difflib import SequenceMatcher
-from discord.ext import commands
 from html import unescape
 
-from . import manager
-
-from ..utils.misc import base_filename, emoji_url
+import aiohttp
+import discord
+from discord.ext import commands
 
 from core.cog import Cog
+from ..utils.formats import pluralize
+from ..utils.misc import emoji_url
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS trivia_categories (
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        name TEXT NOT NULL
-        description TEXT NULL,
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS trivia_categories_uniq_idx
-    ON trivia_categories (LOWER(name), guild_id);
 
-    CREATE TABLE IF NOT EXISTS trivia_questions (
-        id SERIAL PRIMARY KEY,
-        category_id INTEGER REFERENCES trivia_categories ON DELETE CASCADE,
-        question TEXT NOT NULL,
-        answer TEXT NOT NULL,
-        image TEXT NULL
-    );
-    CREATE INDEX IF NOT EXISTS trivia_questions_category_id_idx ON trivia_questions (category_id);
-"""
+class StopTrivia(Exception):
+    pass
 
-_logger = logging.getLogger(__name__)
 
+POINTS_TO_WIN = 10
+TRIVIA_ANSWER_TIMEOUT = 60
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
 
-_CustomCategory = collections.namedtuple('_CustomCategory', 'id name description')
-class Category(commands.Converter):
-    _default_categories = {}
-
-    async def convert(self, ctx, arg):
-        lowered = arg.lower()
-        with contextlib.suppress(KeyError):
-            return self._default_categories[lowered]
-
-        query = """SELECT id, name, description FROM trivia_categories
-                   WHERE guild_id = $1 AND name = $2;
-                """
-        row = await ctx.db.fetchrow(query, ctx.guild.id, lowered)
-
-        if row is None:
-            raise commands.BadArgument(f"Category {lowered} doesn't exist... :(")
-        return _CustomCategory(**row)
-
-
-# Helper classes for DefaultTrivia, because we don't want to lug all those dicts around.
-_QuestionTuple = collections.namedtuple('_QuestionTuple', 'question answer image')
-_QuestionTuple.__new__.__defaults__ = (None, )
-_CategoryTuple = collections.namedtuple('_DefaultCategoryTuple', 'name description questions')
-_CategoryTuple.__new__.__defaults__ = (None, None, )
-
-
 class BaseTriviaSession:
-    """A base class for all Trivia games.
-
-    Subclasses must implement the next_question method.
-    """
-    def __init__(self, ctx, category):
-        self.ctx = ctx
-        self.category = category
+    def __init__(self, ctx):
+        self._ctx = ctx
+        self._score_board = collections.Counter()
+        self._answer_waiter = asyncio.Event()
+        self._stop_trivia = asyncio.Event()
         self._current_question = None
-        self._answered = asyncio.Event()
-        self._scoreboard = collections.Counter()
 
-    def _check_answer(self, message):
-        if message.channel != self.ctx.channel:
-            return False
-        # Prevent other bots from accidentally answering the question
-        # This issue has happened numberous times with other bots.
-        if message.author.bot:
-            return False
+    # These methods must be overridden by subclasses
 
-        self._answered.set()
-        sm = SequenceMatcher(None, message.content.lower(), self._current_question.answer.lower())
-        return sm.ratio() >= .85
+    async def _get_question(self):
+        raise NotImplementedError
 
-    async def _show_question(self, n):
-        leader = self.leader
-        leader_text = f'{leader[0]} with {leader[1]} points' if leader else None
-        description = self.category.description or discord.Embed.Empty
+    def _check(self, message):
+        raise NotImplementedError
 
-        embed = (discord.Embed(description=description, colour=random.randint(0, 0xFFFFFF))
-                 .set_author(name=self.category.name or 'Trivia')
-                 .add_field(name=f'Question #{n}', value=self._current_question.question)
-                 .set_footer(text=f'Current leader: {leader_text}')
-                 )
+    def _question_embed(self, number):
+        raise NotImplementedError
 
-        await self.ctx.send(embed=embed)
+    # End of the abstract methods
 
-    async def _show_timeout(self):
+    def _timeout_embed(self):
         answer = self._current_question.answer
-        embed = (discord.Embed(description=f'The answer was **{answer}**', colour=0xFF0000)
-                 .set_author(name='Times up!', icon_url=TIMEOUT_ICON)
-                 .set_footer(text='No one got any points :(')
-                 )
+        return (discord.Embed(description=f'The answer was **{answer}**', colour=0xFF0000)
+                .set_author(name='Times up!', icon_url=TIMEOUT_ICON)
+                .set_footer(text='No one got any points :(')
+                )
 
-        await self.ctx.send(embed=embed)
-
-    async def _show_answer(self, answerer, action):
+    def _answer_embed(self, user):
+        score = self._score_board[user.id]
+        action = 'wins the game' if score >= POINTS_TO_WIN else 'got it'
         description = f'The answer was **{self._current_question.answer}**.'
 
-        embed = (discord.Embed(colour=0x00FF00, description=description)
-                 .set_author(name=f'{answerer} {action}!')
-                 .set_thumbnail(url=answerer.avatar_url)
-                 .set_footer(text=f'{answerer} now has {self._scoreboard[answerer]} points.')
-                 )
-
-        await self.ctx.send(embed=embed)
+        return (discord.Embed(colour=0x00FF00, description=description)
+                .set_author(name=f'{user} {action}!')
+                .set_thumbnail(url=user.avatar_url)
+                .set_footer(text=f'{user} now has {score} points.')
+                )
 
     async def _loop(self):
-        get_answer = functools.partial(self.ctx.bot.wait_for, 'message',
-                                       timeout=20, check=self._check_answer)
+        wait_for = self._ctx.bot.wait_for
+        send = self._ctx.send
 
         for q in itertools.count(1):
-            self._current_question = await self.next_question()
-            await self._show_question(q)
+            self._current_question = await self._get_question()
+            await send(embed=self._question_embed(q))
 
             try:
-                message = await get_answer()
+                message = await wait_for('message', timeout=20, check=self._check)
             except asyncio.TimeoutError:
-                await self._show_timeout()
+                await send(embed=self._timeout_embed())
             else:
                 user = message.author
-                self._scoreboard[user] += 1
-                if self._scoreboard[user] >= 10:
-                    await self._show_answer(user, 'wins the game')
-                    return user
+                self._score_board[user.id] += 1
+                await send(embed=self._answer_embed(user))
 
-                await self._show_answer(user, 'got it')
-
+                if self._score_board[user.id] >= 10:
+                    break
             finally:
                 await asyncio.sleep(random.uniform(1.5, 3))
 
+    async def _wait_for_answer(self):
+        while True:
+            await asyncio.wait_for(self._answer_waiter.wait(), timeout=TRIVIA_ANSWER_TIMEOUT)
+            self._answer_waiter.clear()
+
+    async def _wait_until_stopped(self):
+        await self._stop_trivia.wait()
+        raise StopTrivia
+
     async def run(self):
-        self._runner = asyncio.ensure_future(self._loop())
-        return await self._runner
+        tasks = [
+            self._loop(),
+            self._wait_for_answer(),
+            self._wait_until_stopped(),
+        ]
+
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for p in pending:
+            p.cancel()
+
+        content = None
+        colour = 0
+
+        try:
+            done.pop().result()
+        except StopTrivia:
+            colour = 0xF44336
+            content = 'Trivia stopped.'
+        except asyncio.TimeoutError:
+            colour = 0x607D8B
+            content = 'No one is here...'
+        finally:
+            embed = self.leaderboard_embed()
+            if colour:
+                embed.colour = colour
+            await self._ctx.send(content=content, embed=embed)
+
+    def leaderboard_embed(self):
+        if self._score_board:
+            description = '\n'.join(
+                f'<@!{user_id}> has {pluralize(point=points)}'
+                for user_id, points in self.leaderboard)
+        else:
+            description = 'No one got any points... :('
+
+        return (discord.Embed(colour=0x4CAF50, description=description)
+                .set_author(name='Trivia Leaderboard')
+                )
 
     def stop(self):
-        self._runner.cancel()
+        self._stop_trivia.set()
+
+    @property
+    def leaderboard(self):
+        return self._score_board.most_common()
 
     @property
     def leader(self):
         leaderboard = self.leaderboard
         return leaderboard[0] if leaderboard else None
 
-    @property
-    def leaderboard(self):
-        return self._scoreboard.most_common()
 
-    async def next_question(self):
-        raise NotImplementedError
-
-
-class DefaultTriviaSession(BaseTriviaSession):
-    async def next_question(self):
-        return random.choice(self.category.questions)
-
-
-class CustomTriviaSession(BaseTriviaSession):
-    """Trivia Game using custom categories. A DB is used here."""
-    async def next_question(self):
-        query = """SELECT question, answer, image
-                   FROM trivia_questions
-                   WHERE category_id=$1
-                   OFFSET FLOOR(RANDOM() * (
-                        SELECT COUNT(*)
-                        FROM trivia_questions
-                        WHERE category_id=$1
-                   ))
-                   LIMIT 1
-                """
-        return _QuestionTuple(**await self.ctx.db.fetchrow(query, self.category.id))
-
-
-_otdb_category = _CategoryTuple(name='Trivia - OTDB',
-                                description='[Check out their site here!](https://opentdb.com)')
-
-
-class _OTDBQuestion(collections.namedtuple('_OTDBQuestion', 'category type question answer incorrect')):
-    @property
-    def answers(self):
-        return [self.answer, *self.incorrect]
+class OTDBQuestion(collections.namedtuple('_OTDBQ', 'category type question answer incorrect')):
+    __slots__ = ()
 
     @property
     def choices(self):
-        a = self.answers
+        a = [self.answer, *self.incorrect]
         return random.sample(a, len(a))
 
     @classmethod
-    def from_data(cls, question):
+    def from_data(cls, data):
         return cls(
-            category=question['category'],
-            type=question['type'],
-            question=unescape(question['question']),
-            answer=unescape(question['correct_answer']),
-            incorrect=tuple(map(unescape, question['incorrect_answers'])),
+            category=data['category'],
+            type=data['type'],
+            question=unescape(data['question']),
+            answer=unescape(data['correct_answer']),
+            incorrect=tuple(map(unescape, data['incorrect_answers'])),
         )
 
-# How many times should the cache be used before making an API request
-# to get more questions, the lower this number, the more likely it will
-# make an HTTP request. Set to 0 to always use the API
-#
-# Note that the toggler is only called when the trivia session doesn't
-# have any questions in the queue, so be careful when making this really
-# high. Otherwise the question cache might never be filled.
-TIMES_TO_USE_CACHE = 2
+class DefaultTriviaSession(BaseTriviaSession):
+    BASE = 'https://opentdb.com/api.php'
+    TOKEN_BASE = 'https://opentdb.com/api_token.php'
 
-# The size the cache should be before a new session primes a new session
-# using the cache rather than using the global toggler.
-MIN_CACHE_SIZE = 1000
+    # How many questions to fetch from the API
+    AMOUNT = 50
 
+    # These are local to the class and are not meant to be used publicly.
+    # However they're global as all trivia games will be using the same type
+    # of questions.
+    _session = aiohttp.ClientSession()
 
-class OTDBTriviaSession(BaseTriviaSession):
-    # Global toggler for whether to use the cache or not
-    _toggle_using_cache = itertools.cycle([False] + [True] * TIMES_TO_USE_CACHE).__next__
-    _question_cache = set()
+    # The API token used for OTDB. This will ensure that we don't get the
+    # same question twice.
+    __token = None
 
-    def __init__(self, ctx, category=None):
-        super().__init__(ctx, _otdb_category)
-        self._pending = collections.deque(maxlen=50)
+    # A lock is needed here because we're messing with class-global state.
+    __lock = asyncio.Lock()
 
-        if len(self._question_cache) >= MIN_CACHE_SIZE:
-            # Only prime 10 questions, because it's rare for a trivia game to go 
-            # longer than that. So pre-filling the pending queue with any more
-            # questions would just be a waste.
-            self._pending.extend(random.sample(self._question_cache, 10))
+    # A cache is required to make sure we have a fallback for when we exhaust all questions.
+    __cache = set()
 
-    def _check_answer(self, message):
-        # There must break early.
-        if message.channel != self.ctx.channel:
+    # This is needed to check if we exhausted all possible questions.
+    __exhausted = False
+
+    def __init__(self, ctx):
+        super().__init__(ctx)
+
+        self._choices = None
+        self._pending = []
+        self._answerers = set()
+
+        if len(self.__cache) >= 500:
+            # We should probably pre-fill this because most trivia games
+            # don't last very long. So we don't need to make an HTTP request
+            # when we don't have to.
+            self._pending.extend(random.sample(self._cache, 15))
+
+    @classmethod
+    async def initialize(cls):
+        if cls.__token is not None:
+            return
+
+        async with cls._session.get(cls.TOKEN_BASE, params=dict(command='request')) as r:
+            response = await r.json()
+
+        assert response['response_code'] == 0
+        cls.__token = response['token']
+
+    async def __get(self):
+        if self.__token is None:
+            await self.initialize()
+
+        params = dict(amount=self.AMOUNT, token=self.__token)
+        async with self._session.get(self.BASE, params=params) as r:
+            response = await r.json()
+
+        if response['response_code'] == 3:
+            # The token has expired. We need to regenerate it
+            await self.initialize()
+            # We don't need the cache because we're going to get dupes anyway.
+            self.__cache.clear()
+            # recurrrrsion cuz why not
+            return await self.__get()
+
+        if response['response_code'] == 4:
+            # We've exhausted all possible questions. At this point we have
+            # to exclusively use the cache.
+            self.__exhausted = True
+            self.__token = None  # This token isn't good anymore.
+            assert self.__cache, 'cache is empty even though questions have been exhausted'
+            return random.sample(self.__cache, self.AMOUNT)
+
+        questions = tuple(map(OTDBQuestion.from_data, response['results']))
+        self.__cache.update(questions)
+        return questions
+
+    async def _get_question(self):
+        if not self._pending:
+            if self.__exhausted:
+                # We don't need a lock for this because we don't modify
+                # the cache.
+                questions = random.sample(self.__cache, self.AMOUNT)
+            else:
+                async with self.__lock:
+                    questions = await self.__get()
+            self._pending.extend(questions)
+
+        return self._pending.pop()
+
+    def _check(self, message):
+        if message.channel != self._ctx.channel:
             return False
+
         # Prevent other bots from accidentally answering the question
         # This issue has happened numberous times with other bots.
         if message.author.bot:
@@ -260,261 +266,81 @@ class OTDBTriviaSession(BaseTriviaSession):
         if not message.content.isdigit():
             # Do not allow negative numbers because they're not gonna be
             # listed in the answers. We don't wanna confuse users here.
-            return super()._check_answer(message)
+            return False
 
         number = int(message.content)
 
         try:
             choice = self._choices[number - 1]
         except IndexError:
-            return super()._check_answer(message)
+            return False
 
+        # We only want people who actually try.
+        self._answer_waiter.set()
         return choice == self._current_question.answer
 
-    async def _show_question(self, n):
+    def _question_embed(self, number):
         question = self._current_question
+        # This has to be cached because OTDBQuestion.choices scrambles them each time.
         self._choices = question.choices
 
         leader = self.leader
-        leader_text = f'{leader[0]} with {leader[1]} points' if leader else None
-        description = self.category.description
-
-        is_tf = question.type == 'boolean'
-        tf_header = '**True or False**\n' * is_tf
-        question_field = f'{tf_header}{question.question}'
-        possible_answers = '\n'.join(itertools.starmap('{0}. {1}'.format, enumerate(self._choices, 1)))
-
-        embed = (discord.Embed(description=description, colour=random.randint(0, 0xFFFFFF))
-                 .set_author(name=self.category.name)
-                 .add_field(name='Category', value=question.category, inline=False)
-                 .add_field(name=f'Question #{n}', value=question_field, inline=False)
-                 .set_footer(text=f'Current leader: {leader_text}')
-                 )
-        if not is_tf:
-            embed.add_field(name='Possible answers', value=possible_answers, inline=True)
-
-        await self.ctx.send(embed=embed)
-
-    async def next_question(self):
-        try:
-            question = self._pending.pop()
-        except IndexError:
-            # Make sure the global cache is non-empty, because if the toggler
-            # is True and there are no questions in the cache, then the pop
-            # at the bottom will error out. And the trivia would end mysteriously.
-            if self._toggle_using_cache() and self._question_cache:
-                results = random.sample(self._question_cache, 50)
-            else:
-                async with self.ctx.bot.session.get('https://opentdb.com/api.php?amount=50') as resp:
-                    data = await resp.json()
-
-                results = list(map(_OTDBQuestion.from_data, data['results']))
-                self._question_cache.update(results)
-
-            self._pending.extend(results)
-
-            question = self._pending.pop()
-
-        return question
-
-
-class RandomQuestionType(enum.Enum):
-    DEFAULT = enum.auto()
-    CUSTOM = enum.auto()
-    OTDB = enum.auto()
-
-
-RQT_CHOICES = list(RandomQuestionType)
-RQT_NO_CUSTOM = [RandomQuestionType.DEFAULT, RandomQuestionType.OTDB]
-
-
-class RandomTriviaSession(OTDBTriviaSession):
-    """Trivia Game using ALL categories, both custom, default AND OTDB."""
-    _toggle_using_cache = OTDBTriviaSession._toggle_using_cache
-    _question_cache = OTDBTriviaSession._question_cache
-
-    def _check_answer(self, message):
-        if self._question_type == RandomQuestionType.OTDB:
-            return super()._check_answer(message)
-        return BaseTriviaSession._check_answer(self, message)
-
-    async def _show_question(self, n):
-        if self._question_type == RandomQuestionType.OTDB:
-            await super()._show_question(n)
-        else:
-            await BaseTriviaSession._show_question(self, n)
-
-    async def next_question(self):
-        self._question_type = qt = random.choice(RQT_CHOICES)
-
-        if qt == RandomQuestionType.CUSTOM:
-            # Try using custom categories first, we'll need to use
-            # default categories as a fallback in case the server
-            # doesn't have any custom categories.
-            query = """ SELECT id, name, description
-                        FROM trivia_categories
-                        WHERE guild_id=$1
-                        OFFSET FLOOR(RANDOM() * (
-                            SELECT COUNT(*)
-                            FROM trivia_categories
-                            WHERE guild_id=$1
-                        ))
-                        LIMIT 1
-                    """
-            try:
-                row = await self.ctx.db.fetch(query, self.ctx.guild.id)
-            except Exception:
-                # Table doesn't exist, ignore it.
-                self._question_type = qt = random.choice(RQT_NO_CUSTOM)
-                _logger.exception('Could not select a trivia question from PostgreSQL.')
-            else:
-                if row:
-                    self.category = _CustomCategory(**row)
-                    return await CustomTriviaSession.next_question(self)
-                else:
-                    self._question_type = qt = random.choice(RQT_NO_CUSTOM)
-
-        if qt == RandomQuestionType.DEFAULT and Category._default_categories:
-            self.category = random.choice(list(Category._default_categories.values()))
-            return await DefaultTriviaSession.next_question(self)
-        else:
-            self.category = _otdb_category
-            return await OTDBTriviaSession.next_question(self)
-
-def _process_json(d, *, name=''):
-    name = d.pop('name', name)
-    description = d.pop('description', None)
-    questions = tuple(_QuestionTuple(**q) for q in d['questions'])
-
-    return _CategoryTuple(name, description, questions)
-
-
-def _load_category_from_file(filename):
-    with open(filename) as f:
-        cat = json.load(f)
-        name = base_filename(filename)
-        return _process_json(cat, name=name)
-
-
-# ------------- The actual cog --------------------
-
-class Trivia(Cog):
-    FILE_PATH = os.path.join('.', 'data', 'games', 'trivia')
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.manager = manager.SessionManager()
-
-        self.bot.loop.create_task(self._load_default_categories())
-
-    async def _load_default_categories(self):
-        load_async = functools.partial(self.bot.loop.run_in_executor,
-                                       None, _load_category_from_file)
-        load_tasks = map(load_async, glob.iglob(f'{self.FILE_PATH}/*.json'))
-        categories = await asyncio.gather(*load_tasks)
-
-        Category._default_categories.update((c.name, c) for c in categories)
-        print('everything is ok now')
-
-    async def _run_trivia(self, ctx, category, cls):
-        with self.manager.temp_session(ctx.channel, cls(ctx, category)) as inst:
-            await inst.run()
-            await asyncio.sleep(1.5)
-
-    @commands.group(invoke_without_command=True)
-    async def trivia(self, ctx, *, category: Category = None):
-        """Starts a game of trivia. 
-
-        Specifying no category will choose from all categories.
-        This means it will choose from OTDB, the server's custom
-        categories, and the built-in categories.
-        """
-        cls = (
-            DefaultTriviaSession if isinstance(category, _CategoryTuple) 
-            else RandomTriviaSession if category is None 
-            else CustomTriviaSession
+        leader_text = (
+            f'{self._ctx.bot.get_user(leader[0])} with {leader[1]} points'
+            if leader else None
         )
 
-        await self._run_trivia(ctx, category, cls)
+        tf_header = '**True or False**\n' * (question.type == 'boolean')
+        question = f'{tf_header}{question.question}'
+        possible_answers = '\n'.join(
+            itertools.starmap('{0}. {1}'.format, enumerate(self._choices, 1))
+        )
 
-    @trivia.command(name='otdb')
-    async def trivia_otdb(self, ctx):
-        """Starts a game of trivia using the Open Trivia Database.
-        (https://opentdb.com/)
-        """
-        await self._run_trivia(ctx, None, OTDBTriviaSession)
+        return (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
+                .set_author(name=f'Question #{number}')
+                .add_field(name='Choices', value=possible_answers, inline=False)
+                .add_field(name='Leader', value=leader_text, inline=False)
+                .set_footer(text='Questions provided by opentdb.com')
+                )
 
-    @trivia.command(name='stop')
-    async def trivia_stop(self, ctx):
-        """Stops a game of trivia."""
-        game = self.manager.get_session(ctx.channel)
-        if game is None:
-            return await ctx.send("There is no trivia game to stop... :|")
 
-        game.stop()
-        await ctx.send("Trivia stopped...")
+class Trivia(Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.sessions = {}
 
-    # XXX: Due to possible issues and abuse, such as suggesting a 30-million
-    #      question category, I'm not sure if I should keep this.
-    @commands.group(name='triviacat', aliases=['tcat'], enabled=False)
-    async def trivia_category(self, ctx):
-        """Commands related to adding or removing custom trivia categories.
-
-        This **does not** start a trivia game. `{prefix}trivia` does that.
-        """
-
-    @trivia_category.command(name='add')
-    async def custom_trivia_add(self, ctx):
-        """Adds a custom trivia category.
-
-        This takes a JSON attachment.
-        The format of the file must be something like this:
-        ```js
-        {{
-            "name": "name of your trivia category. if this isn't specified it uses the filename.",
-            "description": "description",
-            "questions": [
-                {{
-                    "question": "this is a question",
-                    "answer": "my answer",
-                    "image": "optional link to an image"
-                }}
-            ]
-
-        }}
-        ```
-        """
+    @contextlib.contextmanager
+    def _create_session(self, ctx, session):
+        key = ctx.channel.id
+        self.sessions[key] = session
         try:
-            attachment = ctx.message.attachments[0]
-        except IndexError:
-            return await ctx.send('You need an attachment.')
+            yield
+        finally:
+            del self.sessions[key]
 
-        print(attachment)
+    @commands.group(invoke_without_command=True)
+    async def trivia(self, ctx):
+        if ctx.channel.id in self.sessions:
+            return await ctx.send(
+                "A trivia game's in progress right now. Join in and have some fun!"
+            )
 
-        with io.BytesIO() as file:
-            await attachment.save(file)
-            file.seek(0)
-            category = _process_json(json.load(file), name=attachment.filename)
+        session = DefaultTriviaSession(ctx)
+        with self._create_session(ctx, session):
+            await session.run()
 
-        query = """INSERT INTO trivia_categories (guild_id, name, description)
-                   VALUES ($1, $2, $3)
-                   RETURNING id;
-                """
-        id = (await ctx.db.fetchrow(query, ctx.guild.id, category.name, category.description))[0]
-
-        columns = ('category_id', 'question', 'answer', 'image')
-        to_insert = [(id, *q) for q in category.questions]
-
-        await ctx.db.copy_records_to_table('trivia_questions', columns=columns, records=to_insert)
-        await ctx.send('\N{OK HAND SIGN}')
-
-    @trivia_category.command(name='remove')
-    async def trivia_category_remove(self, ctx, name):
-        """Removes a custom trivia category."""
-        query = 'DELETE FROM trivia_categories WHERE guild_id = $1 AND LOWER(name) = $2;'
-        await ctx.db.execute(query, ctx.guild.id, name)
-        await ctx.send('\N{OK HAND SIGN}')
+    @trivia.command(name='stop', aliases=['quit'])
+    async def trivia_stop(self, ctx):
+        try:
+            inst = self.sessions[ctx.channel.id]
+        except KeyError:
+            await ctx.send("There's no trivia game to stop.")
+        else:
+            inst.stop()
 
 
 def setup(bot):
     bot.add_cog(Trivia(bot))
+
+def teardown(bot):
+    DefaultTriviaSession._session.close()
