@@ -113,9 +113,17 @@ class Board:
     @staticmethod
     def __validate(width, height, mines):
         if width * height >= 170:
-            raise ValueError("Please make the board smaller.")
+            raise ValueError("Please make the board smaller")
         if width * height < 9:
-            raise ValueError("Please make the board larger.")
+            raise ValueError("Please make the board larger")
+        if width > 17:
+            raise ValueError('Please make the board thinner')
+        if width < 3:
+            raise ValueError('Please make the board wider')
+        if height > 17:
+            raise ValueError('Please make the board shorter')
+        if height < 3:
+            raise ValueError('Please make the board taller')
         if mines >= width * height:
             raise ValueError(f'Too many mines. Maximum is {width * height - 1}.')
         if mines <= 0:
