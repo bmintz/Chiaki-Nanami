@@ -117,7 +117,7 @@ class Board:
         if width * height < 9:
             raise ValueError("Please make the board larger.")
         if mines >= width * height:
-            raise ValueError(f'Too many mines (expected max {width * height}, got {mines})')
+            raise ValueError(f'Too many mines. Maximum is {width * height - 1}.')
         if mines <= 0:
             raise ValueError("A least one mine is required")
 
