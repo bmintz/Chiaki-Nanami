@@ -51,6 +51,8 @@ SUCCESS_ICON = emoji_url('\N{SMILING FACE WITH SUNGLASSES}')
 GAME_OVER_ICON = emoji_url('\N{DIZZY FACE}')
 BOOM_ICON = emoji_url('\N{COLLISION SYMBOL}')
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
+# Credits to Sirea for providing the Minesweeper icon
+MINESWEEPER_ICON = 'http://www.sireasgallery.com/iconset/minesweeper/Mine2_256x256_32.png'
 
 
 class Level(enum.Enum):
@@ -305,7 +307,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         instructions = 'Click one of the reactions below'
 
         return (discord.Embed(colour=self.colour, description=desc)
-                .set_author(name='Minesweeper Help')
+                .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
                 .add_field(name=instructions, value=self.reaction_help)
                 )
 
@@ -324,7 +326,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         If you're unsure about a tile, type `u` or `unsure` after the row.
         ''')
         return (discord.Embed(colour=self.colour, description=text)
-                .set_author(name='Instructions')
+                .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
                 .add_field(name='In-game Reactions', value=self._game._controller.reaction_help)
                 )
 
@@ -349,7 +351,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         )
 
         return (discord.Embed(colour=self.colour, description=description)
-                .set_author(name='Tiles')
+                .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
                 )
 
     @page('\N{BLACK SQUARE FOR STOP}')
@@ -530,7 +532,7 @@ class _Leaderboard(BaseReactionPaginator):
         @page(emoji)
         async def get_fastest_times(self):
             embed = (discord.Embed(colour=self.colour, title=f'Minesweeper - {difficulty}')
-                     .set_author(name='Fastest times')
+                     .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)
                      )
 
             query = """SELECT user_id, time FROM minesweeper_games
@@ -660,7 +662,7 @@ class Minesweeper(Cog):
         board = None
         error = ''
         embed = (discord.Embed(colour=ctx.bot.colour)
-                 .set_author(name='Custom Minesweeper')
+                 .set_author(name='Custom Minesweeper', icon_url=MINESWEEPER_ICON)
                  .add_field(name='Examples', value=examples)
                  )
 
@@ -827,7 +829,7 @@ class Minesweeper(Cog):
                 await msg.add_reaction(e)
 
         embed = discord.Embed(colour=ctx.bot.colour, description=description)
-        embed.set_author(name="Let's play Minesweeper!")
+        embed.set_author(name="Let's play Minesweeper!", icon_url=MINESWEEPER_ICON)
 
         message = await ctx.send(embed=embed)
         future = asyncio.ensure_future(put(message, emojis))
