@@ -10,6 +10,7 @@ from . import errors
 from .bases import TwoPlayerGameCog
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
+from ..utils.misc import emoji_url
 
 SIZE = 9
 WIN_COMBINATIONS = [
@@ -70,6 +71,9 @@ class Board:
 Player = namedtuple('Player', 'user symbol')
 Stats = namedtuple('Stats', 'winner turns')
 
+# icons
+FOREFIT_ICON = emoji_url('\N{WAVING WHITE FLAG}')
+TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
 class TicTacToeSession:
     def __init__(self, ctx, opponent):
@@ -82,6 +86,7 @@ class TicTacToeSession:
 
         self._board = Board()
         self._stopped = False
+        self._timed_out = False
 
         self._game_screen = discord.Embed(colour=0x00FF00)
 
@@ -110,16 +115,39 @@ class TicTacToeSession:
 
     def _update_display(self):
         screen = self._game_screen
+        current = self.current
+        user = current.user
+        winner = self.winner
 
+        # How can I make this cleaner...
         formats = [
             f'{p.symbol} = {escape_markdown(str(p.user))}'
             for p in self._players
         ]
-        formats[self._turn] = f'**{formats[self._turn]}**'
+
+        if not winner:
+            formats[self._turn] = f'**{formats[self._turn]}**'
+        else:
+            self._board.mark()
+
         joined = '\n'.join(formats)
 
         screen.description = f'{self._board}\n\u200b\n{joined}'
-        screen.set_author(name='Tic-Tac-toe', icon_url=self.current.user.avatar_url)
+
+        if winner:
+            user = winner.user
+            screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
+        elif self._stopped:
+            screen.colour = 0
+            screen.set_author(name=f'{user} forefited...', icon_url=FOREFIT_ICON)
+        elif self._timed_out:
+            screen.colour = 0
+            screen.set_author(name=f'{user} ran out of time...', icon_url=TIMEOUT_ICON)
+        elif self._board.is_full():
+            screen.colour = 0
+            screen.set_author(name="It's a tie!")
+        else:
+            screen.set_author(name='Tic-Tac-Toe', icon_url=user.avatar_url)
 
     async def _loop(self):
         for counter in itertools.count(1):
@@ -131,6 +159,7 @@ class TicTacToeSession:
                 try:
                     spot = await self.get_input()
                 except (asyncio.TimeoutError, errors.RageQuit):
+                    self._timed_out = True
                     return Stats(self._players[not self._turn], counter)
 
                 self._board.place(spot, tile)
@@ -145,12 +174,7 @@ class TicTacToeSession:
         try:
             return await self._loop()
         finally:
-            if self.winner:
-                self._board.mark()
-
             self._update_display()
-            self._game_screen.set_author(name='Game ended.')
-            self._game_screen.colour = 0
             await self.ctx.send(embed=self._game_screen)
 
     @property
