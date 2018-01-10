@@ -721,7 +721,6 @@ class Minesweeper(Cog):
                 return False
 
             emoji = str(reaction.emoji)
-            print(emoji, str_confirm)
             if emoji == str_confirm and error:
                 return False
 

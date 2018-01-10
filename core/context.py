@@ -184,13 +184,9 @@ class Context(commands.Context):
         author_id = author_id or self.author.id
 
         def check(emoji, message_id, channel_id, user_id):
-            if message_id != msg.id or user_id != author_id:
-                return False
-
-            result = is_valid_emoji(str(emoji))
-            print(emojis)
-            print(result, 'emoji:', emoji)
-            return result
+            return (message_id == msg.id
+                    and user_id == author_id
+                    and is_valid_emoji(str(emoji)))
 
         for em in emojis:
             await msg.add_reaction(em)
