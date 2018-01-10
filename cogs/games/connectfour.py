@@ -9,8 +9,8 @@ from more_itertools import first_true, locate, one, windowed
 
 from . import errors
 from .bases import TwoPlayerGameCog
-
 from ..utils.context_managers import temp_message
+from ..utils.formats import escape_markdown
 
 NUM_ROWS = 6
 NUM_COLS = 7
@@ -59,7 +59,7 @@ class Board:
 
     def __str__(self):
         fmt = ''.join(itertools.repeat('{}', NUM_COLS))
-        return '\n'.join(map(fmt.format, *map(reversed, self._board)))
+        return self.top_row + '\n' + '\n'.join(map(fmt.format, *map(reversed, self._board)))
 
     def is_full(self):
         return Tile.NONE not in itertools.chain.from_iterable(self._board)
@@ -107,16 +107,14 @@ class ConnectFourSession:
 
         xo = random.sample((Tile.X, Tile.O), 2)
         self.players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
-        self._current = None
+        self._turn = random.random() > 0.5
         self._runner = None
 
-        player_field = '\n'.join(itertools.starmap('{1} = **{0}**'.format, self.players))
         instructions = ('Type the number of the column to play!\n'
                         'Or `quit` to stop the game (you will lose though).')
+
         self._game_screen = (discord.Embed(colour=0x00FF00)
-                             .set_author(name=f'Connect 4 - {self.ctx.author} vs {self.opponent}')
-                             .add_field(name='Players', value=player_field)
-                             .add_field(name='Current Player', value=None, inline=False)
+                             .set_author(name=f'Connect 4')
                              .add_field(name='Instructions', value=instructions)
                              )
 
@@ -135,7 +133,7 @@ class ConnectFourSession:
         return column - 1
 
     def _check_message(self, m):
-        return m.channel == self.ctx.channel and m.author.id == self._current.user.id
+        return m.channel == self.ctx.channel and m.author.id == self.current.user.id
 
     async def get_input(self):
         while True:
@@ -150,24 +148,29 @@ class ConnectFourSession:
 
     def _update_display(self):
         screen = self._game_screen
-        user = self._current.user
+
+        formats = [
+            f'{p.symbol} = {escape_markdown(str(p.user))}'
+            for p in self.players
+        ]
+        formats[self._turn] = f'**{formats[self._turn]}**'
+        joined = '\n'.join(formats)
 
         b = self.board
-        screen.description = f'**Current Board:**\n\n{b.top_row}\n{b}'
-        screen.set_thumbnail(url=user.avatar_url)
-        screen.set_field_at(1, name='Current Move', value=str(user), inline=False)
+        screen.description = f'{b}\n\u200b\n{joined}'
 
     async def _loop(self):
-        cycle = itertools.cycle(self.players)
-        for turn, self._current in enumerate(cycle, start=1):
-            user, tile = self._current
+        for turn in itertools.count(1):
+
+            user, tile = self.current
             self._update_display()
+
             async with temp_message(self.ctx, embed=self._game_screen):
                 while True:
                     try:
                         column = await self.get_input()
                     except (asyncio.TimeoutError, errors.RageQuit):
-                        return Stats(next(cycle), turn)
+                        return Stats(self.players[not self._turn], turn)
 
                     if column == 'h':
                         await self._send_help_embed()
@@ -184,6 +187,7 @@ class ConnectFourSession:
                     if winner:
                         self.board.mark_winning_lines()
                     return Stats(winner, turn)
+                self._turn = not self._turn
 
     async def run(self):
         try:
@@ -193,6 +197,10 @@ class ConnectFourSession:
             self._game_screen.set_author(name='Game ended.')
             self._game_screen.colour = 0
             await self.ctx.send(embed=self._game_screen)
+
+    @property
+    def current(self):
+        return self.players[self._turn]
 
     @property
     def winner(self):
