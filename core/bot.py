@@ -41,13 +41,15 @@ def _is_submodule(parent, child):
     return parent == child or child.startswith(parent + ".")
 
 
-class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
-    def __str__(self):
-        return self.emoji
+class _UnicodeEmoji(discord.PartialEmoji):
+    __slots__ = ()
+
+    def __new__(cls, name):
+        return super().__new__(cls, animated=False, name=name, id=None)
 
     @property
     def url(self):
-        hexes = '-'.join(hex(ord(c))[2:] for c in self.emoji)
+        hexes = '-'.join(hex(ord(c))[2:] for c in str(self))
         return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
 
 
@@ -181,7 +183,7 @@ class Chiaki(commands.Bot):
                 if match:
                     em = self.get_emoji(int(match[1]))
                 elif em in emoji.UNICODE_EMOJI:
-                    em = _ProxyEmoji(em)
+                    em = _UnicodeEmoji(name=em)
                 elif em:
                     log.warn('Unknown Emoji: %r', em)
 

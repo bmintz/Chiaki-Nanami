@@ -193,22 +193,6 @@ class Context(commands.Context):
             return result
 
         for em in emojis:
-            # Standard unicode emojis are wrapped in _ProxyEmoji in core/bot.py
-            # because we need a url property. This is an issue because
-            # message.add_reaction will just happily pass the _ProxyEmoji raw,
-            # causing a 400 Bad Request due to Discord not recognizing the object.
-            #
-            # This is the cleanest way to do it withour resorting to monkey-
-            # patching the discord.Message.add_reaction method. Since we're using
-            # the emojis defined in emojis.py, we only need to worry about two types:
-            # _ProxyEmoji and discord.Emoji, so we can just do a simple isinstance
-            # check for discord.Emoji so we don't need to import _ProxyEmoji.
-            #
-            # It also doesn't matter if the confirm/deny emojis are None. That's the
-            # user's fault.
-            if not isinstance(em, discord.Emoji):
-                em = str(em)
-
             await msg.add_reaction(em)
 
         if reacquire:
@@ -216,7 +200,6 @@ class Context(commands.Context):
 
         try:
             emoji, *_, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
-            # Extra str cast for the case of _ProxyEmojis
             return str(emoji) == str(confirm_emoji)
         finally:
             if reacquire:

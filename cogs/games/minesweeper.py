@@ -644,8 +644,7 @@ class Minesweeper(Cog):
 
         confirm = ctx.bot.emoji_config.confirm
         str_confirm = str(confirm)
-
-        valid_reactions = [str(confirm), '\N{BLACK SQUARE FOR STOP}']
+        valid_reactions = [str_confirm, '\N{BLACK SQUARE FOR STOP}']
         is_valid = frozenset(valid_reactions).__contains__
 
         description_format = (
@@ -697,8 +696,7 @@ class Minesweeper(Cog):
 
         # XXX: Refactor
         async def put():
-            cem = confirm if isinstance(confirm, discord.Emoji) else str_confirm
-            await message.add_reaction(cem)
+            await message.add_reaction(confirm)
             await message.add_reaction('\N{BLACK SQUARE FOR STOP}')
         put_future = asyncio.ensure_future(put())
 
@@ -723,6 +721,7 @@ class Minesweeper(Cog):
                 return False
 
             emoji = str(reaction.emoji)
+            print(emoji, str_confirm)
             if emoji == str_confirm and error:
                 return False
 
