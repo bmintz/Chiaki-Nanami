@@ -98,17 +98,18 @@ class Board:
 Player = namedtuple('Player', 'user symbol')
 Stats = namedtuple('Stats', 'winner turns')
 
-
+# XXX: Should be refactored along with tic-tac-toe
 class ConnectFourSession:
     def __init__(self, ctx, opponent):
         self.ctx = ctx
-        self.board = Board()
         self.opponent = opponent
 
         xo = random.sample((Tile.X, Tile.O), 2)
-        self.players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
+        self._players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
+        self._stopped = False
         self._turn = random.random() > 0.5
         self._runner = None
+        self._board = Board()
 
         instructions = ('Type the number of the column to play!\n'
                         'Or `quit` to stop the game (you will lose though).')
@@ -118,76 +119,62 @@ class ConnectFourSession:
                              .add_field(name='Instructions', value=instructions)
                              )
 
-    @staticmethod
-    def get_column(string):
-        lowered = string.lower()
+    def _check(self, m):
+        current = self.current
+        if not (m.channel == self.ctx.channel and m.author.id == current.user.id):
+            return
+
+        lowered = m.content.lower()
         if lowered in {'quit', 'stop'}:
+            self._stopped = True
+            return True
+
+        if not lowered.isdigit():
+            return
+
+        try:
+            self._board.place(int(lowered) - 1, current.symbol)
+        except (ValueError, IndexError):
+            return
+        else:
+            return True
+
+    async def wait_for_player_move(self):
+        message = await self.ctx.bot.wait_for('message', timeout=60, check=self._check)
+        await message.delete()
+        if self._stopped:
             raise errors.RageQuit
-
-        if lowered in {'help', 'h'}:
-            return 'h'
-
-        column = int(one(string))
-        if not 1 <= column <= 7:
-            raise ValueError('must be 1 <= column <= 7')
-        return column - 1
-
-    def _check_message(self, m):
-        return m.channel == self.ctx.channel and m.author.id == self.current.user.id
-
-    async def get_input(self):
-        while True:
-            message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
-            try:
-                coords = self.get_column(message.content)
-            except (ValueError, IndexError):
-                continue
-            else:
-                await message.delete()
-                return coords
 
     def _update_display(self):
         screen = self._game_screen
 
         formats = [
             f'{p.symbol} = {escape_markdown(str(p.user))}'
-            for p in self.players
+            for p in self._players
         ]
         formats[self._turn] = f'**{formats[self._turn]}**'
         joined = '\n'.join(formats)
 
-        b = self.board
+        b = self._board
         screen.description = f'{b}\n\u200b\n{joined}'
 
     async def _loop(self):
         for turn in itertools.count(1):
-
             user, tile = self.current
             self._update_display()
 
             async with temp_message(self.ctx, embed=self._game_screen):
-                while True:
-                    try:
-                        column = await self.get_input()
-                    except (asyncio.TimeoutError, errors.RageQuit):
-                        return Stats(self.players[not self._turn], turn)
-
-                    if column == 'h':
-                        await self._send_help_embed()
-                        continue
-                    try:
-                        self.board.place(column, tile)
-                    except (ValueError, IndexError):
-                        pass
-                    else:
-                        break
+                try:
+                    await self.wait_for_player_move()
+                except (asyncio.TimeoutError, errors.RageQuit):
+                    return Stats(self._players[not self._turn], turn)
 
                 winner = self.winner
-                if winner or self.board.is_full():
+                if winner or self._board.is_full():
                     if winner:
-                        self.board.mark_winning_lines()
+                        self._board.mark_winning_lines()
                     return Stats(winner, turn)
-                self._turn = not self._turn
+            self._turn = not self._turn
 
     async def run(self):
         try:
@@ -200,11 +187,11 @@ class ConnectFourSession:
 
     @property
     def current(self):
-        return self.players[self._turn]
+        return self._players[self._turn]
 
     @property
     def winner(self):
-        return discord.utils.get(self.players, symbol=self.board.winner)
+        return discord.utils.get(self._players, symbol=self._board.winner)
 
 class Connect4(TwoPlayerGameCog, name='Connect 4', game_cls=ConnectFourSession, aliases=['con4']):
     def _make_invite_embed(self, ctx, member):
