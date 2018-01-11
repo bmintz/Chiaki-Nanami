@@ -194,11 +194,7 @@ class ConnectFourSession:
         return discord.utils.get(self._players, symbol=self._board.winner)
 
 class Connect4(TwoPlayerGameCog, name='Connect 4', game_cls=ConnectFourSession, aliases=['con4']):
-    def _make_invite_embed(self, ctx, member):
-        return (super()._make_invite_embed(ctx, member)
-                .set_footer(text='Board size: 7 x 6')
-                )
-
+    pass
 
 def setup(bot):
     bot.add_cog(Connect4(bot))
