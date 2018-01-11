@@ -11,6 +11,8 @@ from . import errors
 from .bases import TwoPlayerGameCog
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
+from ..utils.misc import emoji_url
+
 
 NUM_ROWS = 6
 NUM_COLS = 7
@@ -98,6 +100,10 @@ class Board:
 Player = namedtuple('Player', 'user symbol')
 Stats = namedtuple('Stats', 'winner turns')
 
+# icons
+FOREFIT_ICON = emoji_url('\N{WAVING WHITE FLAG}')
+TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
+
 # XXX: Should be refactored along with tic-tac-toe
 class ConnectFourSession:
     def __init__(self, ctx, opponent):
@@ -107,6 +113,7 @@ class ConnectFourSession:
         xo = random.sample((Tile.X, Tile.O), 2)
         self._players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
         self._stopped = False
+        self._timed_out = False
         self._turn = random.random() > 0.5
         self._runner = None
         self._board = Board()
@@ -142,21 +149,44 @@ class ConnectFourSession:
     async def wait_for_player_move(self):
         message = await self.ctx.bot.wait_for('message', timeout=60, check=self._check)
         await message.delete()
+
         if self._stopped:
             raise errors.RageQuit
 
     def _update_display(self):
         screen = self._game_screen
+        user = self.current.user
+        winner = self.winner
 
         formats = [
             f'{p.symbol} = {escape_markdown(str(p.user))}'
             for p in self._players
         ]
-        formats[self._turn] = f'**{formats[self._turn]}**'
+
+        if not winner:
+            formats[self._turn] = f'**{formats[self._turn]}**'
+        else:
+            self._board.mark_winning_lines()
+
         joined = '\n'.join(formats)
 
         b = self._board
         screen.description = f'{b}\n\u200b\n{joined}'
+
+        if winner:
+            user = winner.user
+            screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
+        elif self._stopped:
+            screen.colour = 0
+            screen.set_author(name=f'{user} forefited...', icon_url=FOREFIT_ICON)
+        elif self._timed_out:
+            screen.colour = 0
+            screen.set_author(name=f'{user} ran out of time...', icon_url=TIMEOUT_ICON)
+        elif self._board.is_full():
+            screen.colour = 0
+            screen.set_author(name="It's a tie!")
+        else:
+            screen.set_author(name='Connect 4', icon_url=user.avatar_url)
 
     async def _loop(self):
         for turn in itertools.count(1):
@@ -167,12 +197,11 @@ class ConnectFourSession:
                 try:
                     await self.wait_for_player_move()
                 except (asyncio.TimeoutError, errors.RageQuit):
+                    self._timed_out = True
                     return Stats(self._players[not self._turn], turn)
 
                 winner = self.winner
                 if winner or self._board.is_full():
-                    if winner:
-                        self._board.mark_winning_lines()
                     return Stats(winner, turn)
             self._turn = not self._turn
 
@@ -181,8 +210,6 @@ class ConnectFourSession:
             return await self._loop()
         finally:
             self._update_display()
-            self._game_screen.set_author(name='Game ended.')
-            self._game_screen.colour = 0
             await self.ctx.send(embed=self._game_screen)
 
     @property
