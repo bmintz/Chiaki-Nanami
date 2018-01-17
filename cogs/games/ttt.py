@@ -41,6 +41,8 @@ class Board:
         )
 
     def place(self, x, thing):
+        if self._board[x] is not None:
+            raise IndexError(f'{x} is already occupied')
         self._board[x] = thing
 
     def is_full(self):
@@ -92,7 +94,8 @@ class TicTacToeSession:
         self._game_screen = discord.Embed(colour=0x00FF00)
 
     def _check_message(self, m):
-        if not (m.channel == self.ctx.channel and m.author == self.current.user):
+        user, tile = self.current
+        if not (m.channel == self.ctx.channel and m.author == user):
             return False
 
         string = m.content
@@ -102,18 +105,26 @@ class TicTacToeSession:
             self._stopped = True
             return True
 
-        return string.isdigit() and 1 <= int(string) <= SIZE
+        if not string.isdigit():
+            return
+
+        index = int(string)
+        if not 1 <= index <= SIZE:
+            return
+
+        try:
+            self._board.place(index - 1, tile)
+        except IndexError:
+            return
+        return True
 
     async def get_input(self):
-        while True:
-            message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
-            with contextlib.suppress(discord.HTTPException):
-                await message.delete()
+        message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
+        with contextlib.suppress(discord.HTTPException):
+            await message.delete()
 
-            if self._stopped:
-                raise errors.RageQuit
-
-            return int(message.content) - 1
+        if self._stopped:
+            raise errors.RageQuit
 
     def _update_display(self):
         screen = self._game_screen
@@ -163,8 +174,6 @@ class TicTacToeSession:
                 except (asyncio.TimeoutError, errors.RageQuit):
                     self._timed_out = True
                     return Stats(self._players[not self._turn], counter)
-
-                self._board.place(spot, tile)
 
                 winner = self.winner
                 if winner or self._board.is_full():
