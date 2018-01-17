@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import itertools
 import random
 from collections import namedtuple
@@ -106,7 +107,8 @@ class TicTacToeSession:
     async def get_input(self):
         while True:
             message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
-            await message.delete()
+            with contextlib.suppress(discord.HTTPException):
+                await message.delete()
 
             if self._stopped:
                 raise errors.RageQuit

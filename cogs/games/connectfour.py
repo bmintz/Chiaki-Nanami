@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import discord
 import enum
 import itertools
@@ -148,7 +149,8 @@ class ConnectFourSession:
 
     async def wait_for_player_move(self):
         message = await self.ctx.bot.wait_for('message', timeout=60, check=self._check)
-        await message.delete()
+        with contextlib.suppress(discord.HTTPException):
+            await message.delete()
 
         if self._stopped:
             raise errors.RageQuit
