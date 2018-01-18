@@ -133,9 +133,9 @@ class Chiaki(commands.Bot):
                          description=config.description,
                          pm_help=None)
 
-        self.cog_aliases = CIDict()
-        # override self.cogs so we don't have to override get_cog later.
-        self.cogs = collections.ChainMap(CIDict(), self.cog_aliases)
+        # Case-insensitive dict so we don't have to override get_cog
+        # or get_cog_commands
+        self.cogs = CIDict()
 
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
@@ -205,8 +205,8 @@ class Chiaki(commands.Bot):
             raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
         super().add_cog(cog)
 
-        self.cog_aliases.update(dict.fromkeys(cog.__aliases__, cog))
-        self.cog_aliases[cog.__class__.name.lower()] = cog
+        self.cogs.update(dict.fromkeys(cog.__aliases__, cog))
+        self.cogs[cog.__class__.name] = cog
 
     def remove_cog(self, name):
         real_cog = self.cogs.get(name)
@@ -216,10 +216,9 @@ class Chiaki(commands.Bot):
         super().remove_cog(name)
 
         # remove cog aliases
-        aliases = self.cog_aliases
-        for alias, cog in list(aliases.items()):
-            if cog is real_cog:
-                del aliases[alias]
+        cogs_to_remove = [name for name, cog in self.cogs.items() if cog is real_cog]
+        for name in cogs_to_remove:
+            del self.cogs[name]
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
@@ -437,10 +436,6 @@ class Chiaki(commands.Bot):
     @property
     def str_uptime(self):
         return duration_units(self.uptime.total_seconds())
-
-    @property
-    def all_cogs(self):
-        return collections.ChainMap(self.cogs, self.cog_aliases)
 
     @property
     def schema(self):
