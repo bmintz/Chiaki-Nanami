@@ -1,4 +1,5 @@
 import collections
+from reprlib import recursive_repr
 
 
 # For the sake of simplicity we will subclass collections.MutableMapping
@@ -20,6 +21,10 @@ class TransformedDict(collections.MutableMapping):
     def __init__(self, *args, **kwargs):
         self.store = {}
         self.update(dict(*args, **kwargs))  # use the free update to set keys
+
+    @recursive_repr()
+    def __repr__(self):
+        return f'{self.__class__.__name__}({list(self.items())})'
 
     def __getitem__(self, key):
         return self.store[self._transform_key(key)]
