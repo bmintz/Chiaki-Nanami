@@ -112,8 +112,7 @@ _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
 
 class Reason(commands.Converter):
-    @classmethod
-    async def convert(cls, ctx, arg):
+    async def convert(self, ctx, arg):
         result = f'{ctx.author} \N{EM DASH} {arg}'
 
         if len(result) > 512:
