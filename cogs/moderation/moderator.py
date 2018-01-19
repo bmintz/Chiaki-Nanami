@@ -584,12 +584,12 @@ class Moderator(Cog):
         for channel in channels:
             await channel.set_permissions(role, **muted_permissions)
 
-    async def _do_mute(self, member, when, connection=None):
+    async def _do_mute(self, member, when, *, connection=None, reason=None):
         mute_role = await self._setdefault_muted_role(member.guild, connection=None)
         if mute_role in member.roles:
             raise errors.InvalidUserArgument(f'{member.mention} is already been muted... ;-;')
 
-        await member.add_roles(mute_role)
+        await member.add_roles(mute_role, reason=reason)
         args = (member.guild.id, member.id, mute_role.id)
         await self.bot.db_scheduler.add_abs(when, 'mute_complete', args)
 
@@ -610,7 +610,7 @@ class Moderator(Cog):
         reason = reason or f'By {ctx.author}'
 
         when = ctx.message.created_at + duration.delta
-        await self._do_mute(member, when, ctx.db)
+        await self._do_mute(member, when, connection=ctx.db, reason=reason)
         await ctx.send(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
@@ -676,7 +676,7 @@ class Moderator(Cog):
         if role not in member.roles:
             return await ctx.send(f"{member} hasn't been muted!")
 
-        await member.remove_roles(role)
+        await member.remove_roles(role, reason=reason)
         await self._remove_time_entry(member.guild, member, ctx.db)
         await ctx.send(f'{member.mention} can now speak again... '
                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
@@ -827,7 +827,12 @@ class Moderator(Cog):
         expires = await self._remove_time_entry(member.guild, member)
         if expires:
             # mute them for an extra 60 mins
-            await self._do_mute(member, expires + datetime.timedelta(seconds=3600))
+            await self._do_mute(
+                member,
+                expires + datetime.timedelta(seconds=3600),
+                # TODO: Perhaps I should put the new date in the reason?
+                reason='Mute Evasion'
+            )
 
     async def on_member_update(self, before, after):
         # In the event of a manual unmute, this has to be covered.
