@@ -6,6 +6,7 @@ import enum
 import json
 import logging
 import operator
+import re
 
 from datetime import datetime, timedelta
 from discord.ext import commands
@@ -348,6 +349,16 @@ class ModLog(Cog):
         # In the event of a massban, the reason is a required positional argument
         # rather than a keyword-only consume rest one.
         reason = ctx.kwargs.get('reason') or ctx.args[2]
+        if reason is not None:
+            # The reason in commands is a User#0000 \N{EM DASH} reason.
+            # We just want the original reason for mod logs. Since usernames
+            # can't have # we can just regex it out.
+            #
+            # The reason why it's in this format is to provide an easy
+            # and convenient format for other mod-logging bots.
+            match = re.search('#[0-9]{4} \N{EM DASH} (.*)', reason)
+            if match:
+                reason = match[1]
 
         # We have get the config outside the two functions because we use it twice.
         config = await self._get_case_config(ctx.guild.id, connection=ctx.db)
