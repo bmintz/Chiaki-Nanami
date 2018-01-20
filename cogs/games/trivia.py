@@ -1,6 +1,8 @@
 import asyncio
 import collections
 import contextlib
+import glob
+import io
 import itertools
 import json
 import os
@@ -12,8 +14,10 @@ from html import unescape
 import aiohttp
 import discord
 from discord.ext import commands
+from PIL import Image
 
 from core.cog import Cog
+from ..utils import cache
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
 
@@ -43,17 +47,12 @@ class BaseTriviaSession:
     def _check(self, message):
         raise NotImplementedError
 
-    def _question_embed(self, number):
+    async def _show_question(self, number):
         raise NotImplementedError
 
     # End of the abstract methods
 
-    def _timeout_embed(self):
-        answer = self._current_question.answer
-        return (discord.Embed(description=f'The answer was **{answer}**', colour=0xFF0000)
-                .set_author(name='Times up!', icon_url=TIMEOUT_ICON)
-                .set_footer(text='No one got any points :(')
-                )
+    # These methods can be overriden by subclasses.
 
     def _answer_embed(self, user):
         score = self._score_board[user.id]
@@ -66,22 +65,34 @@ class BaseTriviaSession:
                 .set_footer(text=f'{user} now has {score} points.')
                 )
 
+    def _timeout_embed(self):
+        answer = self._current_question.answer
+        return (discord.Embed(description=f'The answer was **{answer}**', colour=0xFF0000)
+                .set_author(name='Times up!', icon_url=TIMEOUT_ICON)
+                .set_footer(text='No one got any points :(')
+                )
+
+    async def _show_answer(self, user=None, *, correct=True):
+        embed = self._answer_embed(user) if correct else self._timeout_embed()
+        await self._ctx.send(embed=embed)
+
+    # End.
+
     async def _loop(self):
         wait_for = self._ctx.bot.wait_for
-        send = self._ctx.send
 
         for q in itertools.count(1):
             self._current_question = await self._get_question()
-            await send(embed=self._question_embed(q))
+            await self._show_question(q)
 
             try:
                 message = await wait_for('message', timeout=20, check=self._check)
             except asyncio.TimeoutError:
-                await send(embed=self._timeout_embed())
+                await self._show_answer(correct=False)
             else:
                 user = message.author
                 self._score_board[user.id] += 1
-                await send(embed=self._answer_embed(user))
+                await self._show_answer(user)
 
                 if self._score_board[user.id] >= 10:
                     break
@@ -317,7 +328,7 @@ class DefaultTriviaSession(BaseTriviaSession):
         # TODO: Delete answers if bot has perms?
         return choice == self._current_question.answer
 
-    def _question_embed(self, number):
+    async def _show_question(self, number):
         question = self._current_question
         # This has to be cached because OTDBQuestion.choices scrambles them each time.
         self._choices = question.choices
@@ -334,31 +345,18 @@ class DefaultTriviaSession(BaseTriviaSession):
             itertools.starmap('{0}. {1}'.format, enumerate(self._choices, 1))
         )
 
-        return (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
-                .set_author(name=f'Question #{number}')
-                .add_field(name='Choices', value=possible_answers, inline=False)
-                .add_field(name='Leader', value=leader_text, inline=False)
-                .set_footer(text='Questions provided by opentdb.com')
-                )
+        embed = (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
+                 .set_author(name=f'Question #{number}')
+                 .add_field(name='Choices', value=possible_answers, inline=False)
+                 .add_field(name='Leader', value=leader_text, inline=False)
+                 .set_footer(text='Questions provided by opentdb.com')
+                 )
+
+        await self._ctx.send(embed=embed)
 
 
-Question = collections.namedtuple('Question', 'question answer')
-TANK_ICON = 'https://vignette.wikia.nocookie.net/diepio/images/f/f2/Tank_Screenshot2.png'
-
-
-class DiepioTriviaSession(BaseTriviaSession):
-    try:
-        with open(os.path.join('.', 'data', 'games', 'trivia', 'diepio.json')) as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        _questions = []
-    else:
-        # Supporting old cruft from when I wanted to do various built-in categories
-        _questions = [Question(**d) for d in data['questions']]
-
-    async def _get_question(self):
-        return random.choice(self._questions)
-
+class _FuzzyMatchCheck:
+    """Mixin for trivia sessions that rely on typing the answer"""
     def _check(self, message):
         if message.channel != self._ctx.channel:
             return False
@@ -372,7 +370,26 @@ class DiepioTriviaSession(BaseTriviaSession):
         sm = SequenceMatcher(None, message.content.lower(), self._current_question.answer.lower())
         return sm.ratio() >= .85
 
-    def _question_embed(self, number):
+
+# ------------------ Diep.io --------------------
+
+Question = collections.namedtuple('Question', 'question answer')
+TANK_ICON = 'https://vignette.wikia.nocookie.net/diepio/images/f/f2/Tank_Screenshot2.png'
+
+class DiepioTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
+    try:
+        with open(os.path.join('.', 'data', 'games', 'trivia', 'diepio.json')) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        _questions = []
+    else:
+        # Supporting old cruft from when I wanted to do various built-in categories
+        _questions = [Question(**d) for d in data['questions']]
+
+    async def _get_question(self):
+        return random.choice(self._questions)
+
+    async def _show_question(self, number):
         question = self._current_question.question
 
         leader = self.leader
@@ -381,10 +398,103 @@ class DiepioTriviaSession(BaseTriviaSession):
             if leader else None
         )
 
-        return (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
-                .set_author(name=f'Question #{number}', icon_url=TANK_ICON, url='http://diep.io')
-                .set_footer(text=f'Leader: {leader_text}')
+        embed = (discord.Embed(description=question, colour=random.randint(0, 0xFFFFFF))
+                 .set_author(name=f'Question #{number}', icon_url=TANK_ICON, url='http://diep.io')
+                 .set_footer(text=f'Leader: {leader_text}')
+                 )
+
+        await self._ctx.send(embed=embed)
+
+
+# ------------------ Pokemon --------------------
+
+POKEMON_PATH = os.path.join('data', 'pokemon')
+POKEMON_IMAGE_PATH = os.path.join(POKEMON_PATH, 'images')
+
+class PokemonQuestion(collections.namedtuple('PokemonQuestion', 'index, answer image')):
+    __slots__ = ()
+
+    @property
+    def file(self):
+        return os.path.join(POKEMON_PATH, 'images', f'{self.index}.png')
+
+# Image utilities
+
+def _create_silouhette(index):
+    with open(os.path.join(POKEMON_IMAGE_PATH, f'{index}.png'), 'rb') as f, \
+            Image.open(f) as im:
+
+        image = Image.new(im.mode, im.size)
+        image.putdata([
+            (30, 30, 30, 255) if a >= 100 else (0, 0, 0, 0)
+            for *_, a in im.getdata()
+        ])
+        return image
+
+def _write_image_to_file(image):
+    f = io.BytesIO()
+    image.save(f, 'png')
+    f.seek(0)
+    return discord.File(f, 'pokemon.png')
+
+@cache.cache(maxsize=None)
+async def _create_silouhette_async(index):
+    run = asyncio.get_event_loop().run_in_executor
+    return await run(None, _create_silouhette, index)
+
+async def _get_silouhette(index):
+    run = asyncio.get_event_loop().run_in_executor
+    image = await _create_silouhette_async(index)
+    return await run(None, _write_image_to_file, image)
+
+
+class PokemonTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
+    try:
+        with open(os.path.join(POKEMON_PATH, 'names.json')) as f:
+            _pokemon_names = json.load(f)
+    except FileNotFoundError:
+        _pokemon_names = {}
+
+    async def _get_question(self):
+        file = random.choice(glob.glob(f'{POKEMON_IMAGE_PATH}/*.png'))
+
+        index = os.path.splitext(os.path.basename(file))[0]
+        answer = self._pokemon_names[index]
+        image = await _get_silouhette(index)
+        return PokemonQuestion(index, answer, image)
+
+    async def _show_question(self, number):
+        question = self._current_question
+
+        leader = self.leader
+        leader_text = (
+            f'{self._ctx.bot.get_user(leader[0])} with {leader[1]} points'
+            if leader else None
+        )
+
+        embed = (discord.Embed(colour=random.randint(0, 0xFFFFFF))
+                 .set_author(name=f"Who's That Pokemon?")
+                 .set_image(url='attachment://pokemon.png')
+                 .set_footer(text=f'Leader: {leader_text}')
+                 )
+
+        await self._ctx.send(embed=embed, file=question.image)
+
+    def _timeout_embed(self):
+        return (super()._timeout_embed()
+                .set_image(url='attachment://answer.png')
                 )
+
+    def _answer_embed(self, user):
+        return (super()._answer_embed(user)
+                .set_image(url='attachment://answer.png')
+                )
+
+    async def _show_answer(self, user=None, *, correct=True):
+        embed = self._answer_embed(user) if correct else self._timeout_embed()
+        file = discord.File(self._current_question.file, 'answer.png')
+
+        await self._ctx.send(embed=embed, file=file)
 
 
 class Trivia(Cog):
@@ -456,6 +566,12 @@ class Trivia(Cog):
         @trivia.command(name='diepio', hidden=True)
         async def trivia_diepio(self, ctx):
             await self._trivia(ctx, DiepioTriviaSession)
+
+    if os.path.isdir(POKEMON_PATH):
+        @trivia.command(name='pokemon')
+        async def trivia_pokemon(self, ctx):
+            """Starts a game of "Who's That Pokemon?" """
+            await self._trivia(ctx, PokemonTriviaSession)
 
 
 def setup(bot):
