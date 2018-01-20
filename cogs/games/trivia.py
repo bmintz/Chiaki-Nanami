@@ -5,6 +5,7 @@ import glob
 import io
 import itertools
 import json
+import logging
 import os
 import random
 import time
@@ -29,6 +30,8 @@ class StopTrivia(Exception):
 POINTS_TO_WIN = 10
 TRIVIA_ANSWER_TIMEOUT = 60
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTriviaSession:
@@ -229,6 +232,7 @@ class DefaultTriviaSession(BaseTriviaSession):
         if cls.__token is not None:
             return
 
+        logger.info(f'Creating a new OTDB token at {time.monotonic()}')
         async with cls._session.get(cls.TOKEN_BASE, params=dict(command='request')) as r:
             response = await r.json()
 
@@ -249,6 +253,7 @@ class DefaultTriviaSession(BaseTriviaSession):
 
     @classmethod
     def refresh(cls, args):
+        logger.info('Re-using OTDB token from last reload.')
         cls.__token, cls.__cache, cls.__last_used = args
 
     async def __get(self):
@@ -383,6 +388,7 @@ class DiepioTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
     except FileNotFoundError:
         _questions = []
     else:
+        logger.info('Successfully loaded diep.io trivia.')
         # Supporting old cruft from when I wanted to do various built-in categories
         _questions = [Question(**d) for d in data['questions']]
 
@@ -410,6 +416,7 @@ class DiepioTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
 
 POKEMON_PATH = os.path.join('data', 'pokemon')
 POKEMON_IMAGE_PATH = os.path.join(POKEMON_PATH, 'images')
+POKEMON_NAMES_FILE = os.path.join(POKEMON_PATH, 'names.json')
 
 class PokemonQuestion(collections.namedtuple('PokemonQuestion', 'index, answer image')):
     __slots__ = ()
@@ -450,10 +457,13 @@ async def _get_silouhette(index):
 
 class PokemonTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
     try:
-        with open(os.path.join(POKEMON_PATH, 'names.json')) as f:
+        with open(POKEMON_NAMES_FILE) as f:
             _pokemon_names = json.load(f)
     except FileNotFoundError:
+        logger.warn(f'{POKEMON_NAMES_FILE} not found. Could not load pokemon names.')
         _pokemon_names = {}
+    else:
+        logger.info(f'Successfully loaded {POKEMON_NAMES_FILE}.')
 
     async def _get_question(self):
         file = random.choice(glob.glob(f'{POKEMON_IMAGE_PATH}/*.png'))
@@ -527,6 +537,7 @@ class Trivia(Cog):
     def __unload(self):
         args = DefaultTriviaSession.to_args()
         if args:
+            logger.info('Caching OTDB token for reloading.')
             self.bot.__cached_trivia_args__ = args
 
     @contextlib.contextmanager
@@ -572,6 +583,8 @@ class Trivia(Cog):
         async def trivia_pokemon(self, ctx):
             """Starts a game of "Who's That Pokemon?" """
             await self._trivia(ctx, PokemonTriviaSession)
+    else:
+        logger.warn(f'{POKEMON_PATH} directory not found. Could not add Pokemon Trivia.')
 
 
 def setup(bot):
