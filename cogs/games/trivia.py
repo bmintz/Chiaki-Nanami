@@ -562,10 +562,12 @@ class Trivia(Cog):
 
     @commands.group(invoke_without_command=True)
     async def trivia(self, ctx):
+        """Starts a game of trivia"""
         await self._trivia(ctx, DefaultTriviaSession)
 
     @trivia.command(name='stop', aliases=['quit'])
     async def trivia_stop(self, ctx):
+        """Stops trivia"""
         try:
             inst = self.sessions[ctx.channel.id]
         except KeyError:
@@ -575,13 +577,14 @@ class Trivia(Cog):
 
     @trivia.command(name='otdb', cls=DeprecatedCommand, instead='trivia')
     async def trivia_otdb(self, ctx):
-        """Deprecated, use `{prefix}trivia` instead."""
+        """Deprecated, use `{prefix}trivia` instead"""
         await ctx.invoke(self.trivia)
 
     if DiepioTriviaSession._questions:
         @commands.check(lambda ctx: ctx.guild.id in ctx.cog.diepio_guilds)
         @trivia.command(name='diepio', hidden=True)
         async def trivia_diepio(self, ctx):
+            """Starts a game of diep.io trivia"""
             await self._trivia(ctx, DiepioTriviaSession)
 
     if os.path.isdir(POKEMON_PATH):
