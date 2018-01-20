@@ -18,6 +18,7 @@ from discord.ext import commands
 from PIL import Image
 
 from core.cog import Cog
+from core.deprecated import DeprecatedCommand
 from ..utils import cache
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
@@ -571,6 +572,11 @@ class Trivia(Cog):
             await ctx.send("There's no trivia game to stop.")
         else:
             inst.stop()
+
+    @trivia.command(name='otdb', cls=DeprecatedCommand, instead='trivia')
+    async def trivia_otdb(self, ctx):
+        """Deprecated, use `{prefix}trivia` instead."""
+        await ctx.invoke(self.trivia)
 
     if DiepioTriviaSession._questions:
         @commands.check(lambda ctx: ctx.guild.id in ctx.cog.diepio_guilds)
