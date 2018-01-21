@@ -6,6 +6,8 @@ import json
 import logging
 import time
 
+from .misc import maybe_awaitable
+
 log = logging.getLogger(__name__)
 
 
@@ -115,7 +117,7 @@ class BaseScheduler:
                 delta -= self.MAX_SLEEP_TIME
 
             log.debug('entry %r is done, dispatching now.', timer)
-            self._dispatch(self._current)
+            await self._dispatch(self._current)
 
     def _restart(self):
         self.stop()
@@ -162,10 +164,10 @@ class BaseScheduler:
         self._restart()
 
     # Callback-related things
-    def _dispatch(self, timer):
+    async def _dispatch(self, timer):
         for cb in self._callbacks:
             try:
-                cb(timer)
+                await maybe_awaitable(cb, timer)
             except Exception as e:
                 log.error('Callback %r raised %r', cb, e)
                 raise
@@ -275,20 +277,13 @@ class DatabaseScheduler(BaseScheduler):
         self._pool = pool
         self._safe = safe_mode
         self._have_data = asyncio.Event()
-        self._db_lock = asyncio.Event()
-        self.add_callback(self._sync_remove)
 
-    def _sync_remove(self, entry):
-        # Because we're scheduling a task rather than running the coroutine
-        # right away, there might be a slight race in that _update
-        # might grab the already done entry and dispatch it again.
-        # We need to make sure that doesn't happen. Which is why this
-        # asyncio.Event is here to keep it synchronized.
-        if getattr(entry, 'short', False):
-            # The entry was short, so there's no entry to remove in the database.
-            return
-        self._db_lock.clear()
-        self._loop.create_task(self._remove(entry))
+    async def _dispatch(self, timer):
+        await super()._dispatch(timer)
+
+        # The entry was short, so there's no entry to remove in the database.
+        if not getattr(timer, 'short', True):
+            await self._remove(timer)
 
     # Overriding this because the two are datetime instances.
     @staticmethod
@@ -296,7 +291,6 @@ class DatabaseScheduler(BaseScheduler):
         return (time1 - time2).total_seconds()
 
     async def _get_entry(self, connection):
-        await self._db_lock.wait()
         query = 'SELECT * FROM schedule ORDER BY expires LIMIT 1;'
         return await connection.fetchrow(query)
 
@@ -338,9 +332,3 @@ class DatabaseScheduler(BaseScheduler):
                 self.stop()
             log.error('Removing %r failed. Exception: %r', entry, e)
             raise
-        else:
-            self._db_lock.set()
-
-    def run(self):
-        self._db_lock.set()  # Set the event right away so we don't just wait.
-        super().run()
