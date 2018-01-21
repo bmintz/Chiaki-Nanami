@@ -120,8 +120,8 @@ class BaseScheduler:
             await self._dispatch(self._current)
 
     def _restart(self):
-        self.stop()
-        self.run()
+        self._runner.cancel()
+        self._runner = self._loop.create_task(self._update())
 
     async def _short_task_optimization(self, delta, event):
         # XXX: Is it a good idea to use self._loop.call_later? It's short enough,
@@ -160,7 +160,6 @@ class BaseScheduler:
     async def remove(self, entry):
         """Removes an entry from the queue."""
         await self._remove(entry)
-
         self._restart()
 
     # Callback-related things
