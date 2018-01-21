@@ -289,19 +289,21 @@ class DatabaseScheduler(BaseScheduler):
     def _calculate_delta(time1, time2):
         return (time1 - time2).total_seconds()
 
-    async def _get_entry(self, connection):
+    async def _get_entry(self):
+        # Don't make a new connection to avoid hanging the bot
         query = 'SELECT * FROM schedule ORDER BY expires LIMIT 1;'
-        return await connection.fetchrow(query)
+        return await self._pool.fetchrow(query)
 
     async def _get(self):
-        async with self._pool.acquire() as connection:
-            while True:
-                entry = await self._get_entry(connection)
-                if entry is not None:
-                    return _Entry.from_record(entry)
+        while True:
+            entry = await self._get_entry()
+            if entry is not None:
+                self._have_data.set()
+                return _Entry.from_record(entry)
 
-                self._have_data.clear()
-                await self._have_data.wait()
+            self._have_data.clear()
+            self._current = None
+            await self._have_data.wait()
 
     async def _put(self, entry):
         # put the entry in the database
