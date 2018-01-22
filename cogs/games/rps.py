@@ -1,83 +1,135 @@
 import discord
+import json
+import pathlib
 import random
+import re
 
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from discord.ext import commands
 
 from core.cog import Cog
 
 
-RPS_COUNTERS = {
-    "rock"     : ("paper", ),
-    "paper"    : ("scissors", ),
-    "scissors" : ("rock", ),
-    }
-
-RPSLS_COUNTERS = {
-    "rock"     : ("paper", "spock", ),
-    "paper"    : ("lizard", "scissors", ),
-    "scissors" : ("spock", "rock", ),
-    "lizard"   : ("scissors", "rock", ),
-    "spock"    : ("paper", "lizard", ),
-    }
-
-
-Winner = namedtuple('Winner', 'name image')
+Result = namedtuple('Result', 'cmp name image')
 
 class RockPaperScissors(Cog):
     @staticmethod
-    def pick(elem, counters):
-        weights = [(elem in v) * 0.5 + 0.5 for v in counters.values()]
-        return random.choices(list(counters), weights)[0]
+    def pick(choice, elements):
+        beats = choice.beats
+        # Bias it towards winning elements
+        weights = [(e not in beats) * 0.5 + 0.5 for e in elements]
+        return Choice(*random.choices(list(elements.items()), weights)[0])
 
     @staticmethod
-    def _cmp(elem1, elem2, counters):
-        lowered1, lowered2 = elem1.lower(), elem2.lower()
+    def _result(choice1, choice2, ctx):
+        if choice1.element is _null_element or choice1.name.lower() in choice2.beats:
+            return Result(-1, "I", ctx.bot.user.avatar_url)
 
-        if lowered1 == lowered2:
-            return 0
-        # Invalid choice (according to Nadeko Nadeko wins)
-        if lowered1 not in counters:
-            return -1
-        return 1 if lowered1 in counters[lowered2] else -1
+        if choice1.element == choice2.element:
+            return Result(0, "It's a tie. No one", None)
 
-    @staticmethod
-    def _winner(res, ctx):
-        if res == -1:
-            return Winner("I", ctx.bot.user.avatar_url)
-        elif res == 0:
-            return Winner("It's a tie. No one", None)
-        return Winner(ctx.author.display_name, ctx.author.avatar_url)
+        return Result(1, ctx.author.display_name, ctx.author.avatar_url)
 
-    async def _rps_result(self, ctx, elem, counters, *, title):
-        if elem.lower() in ('chiaki', 'chiaki nanami'):
-            return await ctx.send("Hey, I'm not an RPS object!")
+    async def _rps(self, ctx, elem, game_type):
+        choice = self.pick(elem, game_type.elements)
+        cmp, name, thumbnail = self._result(elem, choice, ctx)
 
-        choice = self.pick(elem, counters)
-        name, thumbnail = self._winner(self._cmp(elem, choice, counters), ctx)
+        # Get the outcome
+        if cmp:
+            winner, loser = (elem, choice)[::cmp]
+            key = f'{winner.lower()}|{loser.lower()}'
+            outcome = re.sub(
+                r'\{(.*?)\}',
+                lambda m: game_type.elements[m[1].lower()].emoji,  # r'**\1**',
+                game_type.outcomes.get(key, f'{{{winner}}} did a thing.')
+            )
+        else:
+            outcome = 'Well, this is awkward...'
 
         description = (
-            f'{ctx.author.display_name} chose **{elem}**\n'
-            f'I chose **{choice.title()}**\n\u200b\n'
+            f'{elem.emoji} {ctx.author.display_name} chose **{elem}**\n'
+            f'{choice.emoji} I chose **{choice}**\n'
+            f'\u200b\n{outcome}\n'
             f'**{name}** wins!!'
         )
 
-        embed = discord.Embed(colour=0x00FF00, description=description).set_author(name=title)
+        embed = (discord.Embed(colour=0x00FF00, description=description)
+                 .set_author(name=game_type.title)
+                 )
 
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
 
         await ctx.send(embed=embed)
 
-    @commands.command(pass_context=True)
-    async def rps(self, ctx, *, elem : str):
-        """Rock Paper Scissors"""
-        await self._rps_result(ctx, elem, RPS_COUNTERS, title='Rock-Paper-Scissors')
 
-    @commands.command(pass_context=True)
-    async def rpsls(self, ctx, *, elem : str):
-        """Rock Paper Scissors Lizard Spock"""
-        await self._rps_result(ctx, elem, RPSLS_COUNTERS, title="Rock-Paper-Scissors-Lizard-Spock")
+GameType = namedtuple('RPSGameType', 'title elements outcomes')
+Element = namedtuple('Element', 'emoji beats')
+_null_element = Element('\u2754', set())
+
+# TODO: Dataclasses?
+class Choice(namedtuple('Choice', 'name element')):
+    __slots__ = ()
+
+    def __str__(self):
+        return self.name
+
+    def lower(self):
+        return self.name.lower()
+
+    @property
+    def beats(self):
+        return self.element.beats
+
+    @property
+    def emoji(self):
+        return self.element.emoji
+
+
+class RPSElement(commands.Converter):
+    def __init__(self, type):
+        self.game_type = type
+
+    async def convert(self, ctx, arg):
+        lowered = arg.lower()
+        if lowered in ('chiaki', 'chiaki nanami'):
+            raise commands.BadArgument("Hey, I'm not an RPS object!")
+
+        element = self.game_type.elements.get(lowered, _null_element)
+        return Choice(arg, element)
+
+
+def _make_rps_command(name, game_type):
+    @commands.command(name=name, help=game_type.title)
+    async def command(self, ctx, *, elem: RPSElement(game_type)):
+        await self._rps(ctx, elem, game_type)
+
+    return command
+
+
+def _create_commands():
+    path = pathlib.Path('data', 'games', 'rps')
+    for rps in path.glob('*.json'):
+        with rps.open() as f:
+            data = json.load(f)
+
+        beats = defaultdict(set)
+        outcomes = {}
+        for line in data['outcomes']:
+            winner, loser = map(str.lower, re.findall(r'\{(.*?)\}', line))
+
+            outcomes[f'{winner}|{loser}'] = line
+            beats[winner].add(loser)
+
+        data['elements'].update([
+            (k, Element(v, beats[k])) for k, v in data['elements'].items()
+        ])
+
+        game_type = GameType(data['title'], data['elements'], outcomes)
+        setattr(RockPaperScissors, rps.stem, _make_rps_command(rps.stem, game_type))
+
+_create_commands()
+del _create_commands
 
 
 def setup(bot):

@@ -1,0 +1,23 @@
+{
+    "title": "Rock-Paper-Scissors-Lizard-Spock",
+    "elements": {
+        "rock": "\ud83d\uddff",
+        "paper": "\ud83d\udcf0",
+        "scissors": "\u2702",
+        "lizard": "\ud83e\udd8e",
+        "spock": "\ud83d\udd96"
+    },
+
+    "outcomes": [
+        "{Scissors} cuts {paper}",
+        "{Scissors} decapitates {lizard}",
+        "{Rock} crushes {lizard}",
+        "{Rock} smashes {scissors}",
+        "{Paper} disproves {spock}",
+        "{Paper} covers {rock}",
+        "{Lizard} poisons {spock}",
+        "{Lizard} eats {paper}",
+        "{Spock} vaporizes {rock}",
+        "{Spock} smashes {scissors}"
+    ]
+}
