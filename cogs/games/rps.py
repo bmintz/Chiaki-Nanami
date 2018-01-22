@@ -47,7 +47,7 @@ class RockPaperScissors(Cog):
             return Winner("I", ctx.bot.user.avatar_url)
         elif res == 0:
             return Winner("It's a tie. No one", None)
-        return Winner(ctx.author, ctx.author.avatar_url)
+        return Winner(ctx.author.display_name, ctx.author.avatar_url)
 
     async def _rps_result(self, ctx, elem, counters, *, title):
         if elem.lower() in ('chiaki', 'chiaki nanami'):
@@ -56,12 +56,13 @@ class RockPaperScissors(Cog):
         choice = self.pick(elem, counters)
         name, thumbnail = self._winner(self._cmp(elem, choice, counters), ctx)
 
-        embed = (discord.Embed(colour=0x00FF00, description='\u200b')
-                 .set_author(name=title)
-                 .add_field(name=f'{ctx.author} chose...', value=f'**{elem}**', inline=False)
-                 .add_field(name='I chose...', value=f'**{choice.title()}**', inline=False)
-                 .add_field(name='Result', value=f'**{name}** wins!!', inline=False)
-                 )
+        description = (
+            f'{ctx.author.display_name} chose **{elem}**\n'
+            f'I chose **{choice.title()}**\n\u200b\n'
+            f'**{name}** wins!!'
+        )
+
+        embed = discord.Embed(colour=0x00FF00, description=description).set_author(name=title)
 
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
