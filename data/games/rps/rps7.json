@@ -1,0 +1,36 @@
+{
+    "title": "Rock-Paper-Scissors",
+    "elements": {
+        "rock": "\ud83d\uddff",
+        "paper": "\ud83d\udcf0",
+        "scissors": "\u2702",
+        "water": "\ud83d\udca7",
+        "fire": "\ud83d\udd25",
+        "air": "\ud83d\udca8",
+        "sponge": "\ud83e\uddc0"
+    },
+
+    "outcomes": [
+        "{Rock} pounds out {fire}",
+        "{Rock} crushes {sponge}",
+        "{Rock} smashes {scissors}",
+        "{Fire} melts {scissors}",
+        "{Fire} burns {paper}",
+        "{Fire} burns {sponge}",
+        "{Paper} covers {rock}",
+        "{Paper} fans {air}",
+        "{Paper} floats on {water}",
+        "{Scissors} swish through {air}",
+        "{Scissors} cuts {paper}",
+        "{Scissors} cuts {sponge}",
+        "{Sponge} soaks {paper}",
+        "{Sponge} uses {air} pockets",
+        "{Sponge} absorbs {water}",
+        "{Air} blows out {fire}",
+        "{Air} erodes {rock}",
+        "{Air} evaporates {water}",
+        "{Water} erodes {rock}",
+        "{Water} puts out {fire}",
+        "{Water} rusts {scissors}"
+    ]
+}
