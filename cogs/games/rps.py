@@ -6,6 +6,7 @@ import re
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
+from itertools import zip_longest
 
 from core.cog import Cog
 
@@ -63,7 +64,38 @@ class RockPaperScissors(Cog):
         await ctx.send(embed=embed)
 
 
-GameType = namedtuple('RPSGameType', 'title elements outcomes')
+def _distribute(n, seq):
+    return [seq[i::n] for i in range(n)]
+
+class GameType(namedtuple('RPSGameType', 'title elements outcomes')):
+    __slots__ = ()
+
+    def format_elements(self):
+        # self.elements: name -> Element
+        name_emoji = ((elem.emoji, name) for name, elem in self.elements.items())
+        # Mobile is a bitch.
+        per_row = -(-len(self.elements) // 3)
+        rows = _distribute(per_row, sorted(name_emoji, key=lambda p: len(p[1])))
+
+        widths = [
+            # We want the names' length not the tuples.
+            max(len(c[1]) for c in column)
+            for column in zip_longest(*rows, fillvalue=('', ''))
+        ]
+
+        formats = [f'{{{i}[0]}}`{{{i}[1]:<{w + 1}}}\u200b`' for i, w in enumerate(widths)]
+
+        return '\n'.join(
+            ' '.join(formats[:len(row)]).format(*row)
+            for row in rows
+        )
+
+    def element_embed(self):
+        return (discord.Embed(colour=0xFFC107, description=self.format_elements())
+                .set_author(name='Please type an element')
+                )
+
+
 Element = namedtuple('Element', 'emoji beats')
 _null_element = Element('\u2754', set())
 
@@ -94,14 +126,33 @@ class RPSElement(commands.Converter):
         lowered = arg.lower()
         if lowered in ('chiaki', 'chiaki nanami'):
             raise commands.BadArgument("Hey, I'm not an RPS object!")
-
         element = self.game_type.elements.get(lowered, _null_element)
         return Choice(arg, element)
 
 
+__warned_about_bad_element = set()
+
+
 def _make_rps_command(name, game_type):
     @commands.command(name=name, help=game_type.title)
-    async def command(self, ctx, *, elem: RPSElement(game_type)):
+    async def command(self, ctx, *, elem: RPSElement(game_type) = None):
+        if elem is None:
+            return await ctx.send(embed=game_type.element_embed(), delete_after=90)
+
+        if elem.element is _null_element:  # null element is a singleton
+            # XXX: De-nest
+            key = (ctx.invoked_with, ctx.author.id)
+            if key not in __warned_about_bad_element:
+                __warned_about_bad_element.add(key)
+                desc = game_type.format_elements()
+
+                embed = (discord.Embed(colour=0xFFC107, description=desc)
+                         .set_author(name='Please choose an actual element')
+                         .set_footer(text="If you do this again I'll win \U0001f609")
+                         )
+                embed.colour = 0xFFC107
+                return await ctx.send(embed=embed, delete_after=90)
+
         await self._rps(ctx, elem, game_type)
 
     return command
