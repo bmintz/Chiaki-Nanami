@@ -126,6 +126,9 @@ class RPSElement(commands.Converter):
         lowered = arg.lower()
         if lowered in ('chiaki', 'chiaki nanami'):
             raise commands.BadArgument("Hey, I'm not an RPS object!")
+        if lowered == 'element':
+            raise commands.BadArgument("Please don't be literal. Type an actual element.")
+
         element = self.game_type.elements.get(lowered, _null_element)
         return Choice(arg, element)
 
@@ -137,7 +140,9 @@ def _make_rps_command(name, game_type):
     @commands.command(name=name, help=game_type.title)
     async def command(self, ctx, *, elem: RPSElement(game_type) = None):
         if elem is None:
-            return await ctx.send(embed=game_type.element_embed(), delete_after=90)
+            embed = game_type.element_embed()
+            embed.description += f'\n\u200b\n(type `{ctx.clean_prefix}{ctx.invoked_with} element`)'
+            return await ctx.send(embed=embed, delete_after=90)
 
         if elem.element is _null_element:  # null element is a singleton
             # XXX: De-nest
