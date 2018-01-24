@@ -80,21 +80,6 @@ _extra_remarks = [
     ]
 
 
-def _get_members(cls, predicate):
-    results = inspect.getmembers(cls, predicate)
-    names = {p[0] for p in results}
-
-    # This relies on 3.6 properly ordering dicts in class definitions.
-    unique_names = unique_everseen(itertools.chain.from_iterable(b.__dict__ for b in cls.__mro__))
-    # Avoid building the whole dict.
-    name_locations = {n: i for i, n in enumerate(unique_names) if n in names}
-
-    # inspect.getmembers returns the pairs in definition order. We don't want
-    # that. We need them in definition order.
-    results.sort(key=lambda pair: name_locations[pair[0]])
-    return results
-
-
 class BaseReactionPaginator:
     """Base class for all embed paginators.
 
@@ -127,18 +112,33 @@ class BaseReactionPaginator:
         # in case a custom destination was specified, this is meant to be internal
         self._destination = None
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, *, stop='\N{BLACK SQUARE FOR STOP}', **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._reaction_map = OrderedDict()
+        cls._reaction_map = callbacks = OrderedDict()
 
-        for name, member in _get_members(cls, lambda m: hasattr(m, '__reaction_emoji__')):
-            cls._reaction_map[member.__reaction_emoji__] = name
+        # Can't use inspect.getmembers for two reasons:
+        # 1. It sorts the members lexographically, which is not what
+        #    we want. We want them in definition order.
+        # 2. It resolves descriptors too early. This causes things like
+        #    x = page('emoji')(partialmethod(meth, ...)) to not be registered.
+        #
+        name_members = itertools.chain.from_iterable(b.__dict__.items() for b in cls.__mro__)
+        for name, member in unique_everseen(name_members, key=lambda p: p[0]):
+            emoji = getattr(member, '__reaction_emoji__', None)
+            if emoji is None or emoji in callbacks:
+                continue
 
-        # We need to move stop to the end (assuming it exists).
-        # Otherwise it will show up somewhere in the middle
-        with contextlib.suppress(StopIteration):
-            key = next(k for k, v in cls._reaction_map.items() if v == 'stop')
-            cls._reaction_map.move_to_end(key)
+            # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
+            callbacks[emoji] = getattr(cls, name)
+
+        # Some people might want to move the stop emoji
+        # or have already defined stop as a button somewhere else
+        if stop is not None:
+            if stop in callbacks:
+                callbacks.move_to_end(stop)
+            else:
+                cls.stop.__reaction_emoji__ = stop
+                callbacks[stop] = cls.stop
 
     def __len__(self):
         return len(self._reaction_map)
@@ -150,6 +150,20 @@ class BaseReactionPaginator:
         """
         raise NotImplementedError
 
+    def check(self, reaction, user):
+        """The check that will be used to see if a reaction is valid
+
+        Subclasses may override this if needed.
+        """
+        return (reaction.message.id == self._message.id
+                and user.id == self.context.author.id
+                and reaction.emoji in self._reaction_map
+                )
+
+    def stop(self):
+        """Exit"""
+        self._paginating = False
+
     @property
     def color(self):
         return self.colour
@@ -157,17 +171,6 @@ class BaseReactionPaginator:
     @color.setter
     def color(self, color):
         self.colour = color
-
-    @page('\N{BLACK SQUARE FOR STOP}')
-    def stop(self):
-        """Exit"""
-        self._paginating = False
-
-    def _check_reaction(self, reaction, user):
-        return (reaction.message.id == self._message.id
-                and user.id == self.context.author.id
-                and reaction.emoji in self._reaction_map
-                )
 
     async def add_buttons(self):
         for emoji in self._reaction_map:
@@ -195,7 +198,7 @@ class BaseReactionPaginator:
         try:
             future = _put_reactions()
             wait_for_reaction = functools.partial(ctx.bot.wait_for, 'reaction_add',
-                                                  check=self._check_reaction, timeout=timeout)
+                                                  check=self.check, timeout=timeout)
             while self._paginating:
                 try:
                     react, user = await wait_for_reaction()
@@ -203,15 +206,15 @@ class BaseReactionPaginator:
                     break
                 else:
                     try:
-                        attr = self._reaction_map[react.emoji]
+                        func = self._reaction_map[react.emoji]
                     except KeyError:
                         # Because subclasses *can* override the check we need to check
                         # that the check given is valid, ie that the check will return
                         # True if and only if the emoji is in the reaction map.
                         raise RuntimeError(f"{react.emoji} has no method attached to it, check "
-                                           f"the {self._check_reaction.__qualname__} method")
+                                           f"the {self.check.__qualname__} method")
 
-                    next_embed = await maybe_awaitable(getattr(self, attr))
+                    next_embed = await maybe_awaitable(func, self)
                     if next_embed is None:
                         continue
 
@@ -238,10 +241,7 @@ class BaseReactionPaginator:
 
     @property
     def reaction_help(self):
-        return '\n'.join(
-            f'{em} => {getattr(self, f).__doc__}'
-            for em, f in self._reaction_map.items()
-        )
+        return '\n'.join(itertools.starmap('{0} => {1.__doc__}'.format, self._reaction_map.items()))
 
 
 class ListPaginator(BaseReactionPaginator):
@@ -254,8 +254,8 @@ class ListPaginator(BaseReactionPaginator):
         self._index = 0
         self._extra = set()
 
-    def _check_reaction(self, reaction, user):
-        return (super()._check_reaction(reaction, user)
+    def check(self, reaction, user):
+        return (super().check(reaction, user)
                 or (not self._extra.difference_update(self._reaction_map)
                 and self._extra.add(reaction.emoji)))
 
@@ -354,7 +354,7 @@ class ListPaginator(BaseReactionPaginator):
                 # 3. and the actual number of the page they want to go to.
 
                 with _always_done_future(ctx.bot.wait_for('message', check=check)) as f1, \
-                     _always_done_future(ctx.bot.wait_for('reaction_add', check=self._check_reaction)) as f2, \
+                     _always_done_future(ctx.bot.wait_for('reaction_add', check=self.check)) as f2, \
                      _always_done_future(ctx.bot.wait_for('reaction_remove', check=remove_check)) as f3:
                     # ...
                     await self._message.edit(embed=embed)
@@ -393,7 +393,7 @@ class ListPaginator(BaseReactionPaginator):
                             # True if and only if the emoji is in the reaction map.
                             raise RuntimeError(
                                 f"{react.emoji} has no method attached to it, check "
-                                f"the {self._check_reaction.__qualname__} method"
+                                f"the {self.check.__qualname__} method"
                             )
 
                         try:
@@ -412,11 +412,11 @@ class ListPaginator(BaseReactionPaginator):
     def help_page(self):
         """Help - this message"""
         initial_message = "This is the interactive help thing!",
-        funcs = (f'{em} => {getattr(self, f).__doc__}' for em, f in self._reaction_map.items())
+        docs = itertools.starmap('{0} => {1.__doc__}'.format, self._reaction_map.items())
         extras = zip(self._extra, (random.choice(_extra_remarks) for _ in itertools.count()))
         remarks = itertools.starmap('{0} => {1}'.format, extras)
 
-        joined = '\n'.join(itertools.chain(initial_message, funcs, remarks))
+        joined = '\n'.join(itertools.chain(initial_message, docs, remarks))
 
         return (discord.Embed(title=self.title, colour=self.colour, description=joined)
                 .set_footer(text=f"From page {self._index + 1}")
