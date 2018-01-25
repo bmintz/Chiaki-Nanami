@@ -749,7 +749,7 @@ class GeneralHelpPaginator(ListPaginator):
         result = super().__getitem__(idx - self._num_extra_pages)
         # Properly set the index, because ListPagination.__getitem__ sets
         # _index to two pages before, breaking it
-        self._index = idx
+        self._index += self._num_extra_pages
         return result
 
     def _page_footer_embed(self, embed, *, offset=0):
