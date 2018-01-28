@@ -245,9 +245,13 @@ class ListPaginator(BaseReactionPaginator):
         self._extra = set()
 
     def check(self, reaction, user):
-        return (super().check(reaction, user)
-                or (not self._extra.difference_update(self._reaction_map)
-                and self._extra.add(reaction.emoji)))
+        if not (reaction.message.id == self._message.id and user.id == self.context.author.id):
+            return
+
+        if str(reaction.emoji) in self._reaction_map:
+            return True
+
+        self._extra.add(reaction.emoji)
 
     def _create_embed(self, idx, page):
         # Override this if you want paginated embeds
