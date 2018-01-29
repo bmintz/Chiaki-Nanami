@@ -7,7 +7,7 @@ import json
 import psutil
 
 from discord.ext import commands
-from itertools import chain, starmap
+from itertools import accumulate, chain, count, dropwhile, starmap
 from math import log10
 from more_itertools import sliced
 from operator import attrgetter
@@ -31,6 +31,15 @@ async def _mee6_stats(session, member):
             user_stats["rank"] = idx
             return user_stats
     return None
+
+def _mee6_xp_required(level):
+    return 5 * (level**2 + 10 * level + 20)
+
+def _mee6_next_level(xp):
+    return next(dropwhile(
+        lambda pair: xp > pair[1],
+        enumerate(accumulate(map(_mee6_xp_required, count())))
+    ))[0]
 
 
 _role_create = discord.AuditLogAction.role_create
@@ -375,18 +384,24 @@ class Information(Cog):
                 if stats is None:
                     return await ctx.send(f"{member} doesn't have a level yet...")
 
+        # Kill me please this took me forever to do.
         description = f"Currently sitting at {stats['rank']}!"
-        xp_progress = "{xp}/{lvl_xp} ({xp_percent}%)".format(**stats)
-        xp_remaining = stats['lvl_xp'] - stats['xp']
+        next_level = _mee6_next_level(stats['xp'])
+        next_level_xp = _mee6_xp_required(next_level)
+        xp_now = stats['xp'] - sum(map(_mee6_xp_required, range(next_level)))
+        xp_remaining = next_level_xp - xp_now
+        xp_percent = xp_now / next_level_xp * 100
+
+        xp_progress = f'{xp_now}/{next_level_xp} ({xp_percent: .2f}%)'
         colour = await user_color(member)
 
         mee6_embed = (discord.Embed(colour=colour, description=description)
                       .set_author(name=member.display_name, icon_url=avatar_url)
                       .set_thumbnail(url=avatar_url)
-                      .add_field(name="Level", value=stats['lvl'])
-                      .add_field(name="Total XP", value=stats['total_xp'])
-                      .add_field(name="Level XP",  value=xp_progress)
-                      .add_field(name="XP Remaining to next level",  value=xp_remaining)
+                      .add_field(name="Level", value=next_level - 1)
+                      .add_field(name="Total XP", value=stats['xp'])
+                      .add_field(name="Level XP", value=xp_progress)
+                      .add_field(name="XP Remaining to next level", value=xp_remaining)
                       .set_footer(text=f"ID: {member.id}")
                       )
 
