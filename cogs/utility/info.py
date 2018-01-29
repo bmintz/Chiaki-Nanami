@@ -398,7 +398,7 @@ class Information(Cog):
         mee6_embed = (discord.Embed(colour=colour, description=description)
                       .set_author(name=member.display_name, icon_url=avatar_url)
                       .set_thumbnail(url=avatar_url)
-                      .add_field(name="Level", value=next_level - 1)
+                      .add_field(name="Level", value=next_level)
                       .add_field(name="Total XP", value=stats['xp'])
                       .add_field(name="Level XP", value=xp_progress)
                       .add_field(name="XP Remaining to next level", value=xp_remaining)
