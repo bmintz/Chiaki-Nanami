@@ -6,11 +6,12 @@ import random
 import textwrap
 import time
 from datetime import datetime
-from functools import partial
+from functools import partial, partialmethod
 from string import ascii_lowercase, ascii_uppercase
 
 import discord
 from discord.ext import commands
+from more_itertools import chunked
 
 from core.cog import Cog
 from ..utils.formats import pluralize
@@ -83,34 +84,20 @@ class FlagType(enum.Enum):
     unsure = 'unsure'
 
 
-class Tile(enum.Enum):
-    blank = '\N{WHITE LARGE SQUARE}'
-    flag = '\N{TRIANGULAR FLAG ON POST}'
-    mine = '\N{EIGHT POINTED BLACK STAR}'
-    shown = '\N{BLACK LARGE SQUARE}'
-    unsure = '\N{BLACK QUESTION MARK ORNAMENT}'
-    boom = '\N{COLLISION SYMBOL}'
-
-    def __str__(self):
-        return self.value
-
-    @staticmethod
-    def numbered(number):
-        return f'{number}\U000020e3'
-
 SURROUNDING = list(filter(any, itertools.product(range(-1, 2), repeat=2)))
+VISIBLE, FLAG, UNSURE, MINE = range(4)
 
-# XXX: Simplify this class later
 class Board:
     def __init__(self, width, height, mines):
         self.__validate(width, height, mines)
+        self.width = width
+        self.height = height
         self._mine_count = mines
 
-        self._board = [[Tile.blank] * width for _ in range(height)]
-        self.visible = set()
-        self.flags = set()
-        self.unsures = set()
-        self.mines = set()
+        self._cell_types = ({}, set(), set(), set())
+        self._revealed = False
+        self._explode_at = None
+        self._blown_up = False
 
     @staticmethod
     def __validate(width, height, mines):
@@ -131,11 +118,33 @@ class Board:
         if mines <= 0:
             raise ValueError("A least one mine is required")
 
+    def _tiles(self):
+        visible, flags, unsures, mines = self._cell_types
+        reveal = self._revealed
+        visible_get = visible.get
+
+        for y, x in itertools.product(range(self.height), range(self.width)):
+            xy = x, y
+            number = visible_get(xy)
+            if number is not None:
+                yield f'{number}\u20e3' if number else '\N{BLACK LARGE SQUARE}'
+            elif xy in flags:
+                yield '\N{TRIANGULAR FLAG ON POST}'
+            elif xy in unsures:
+                yield '\N{BLACK QUESTION MARK ORNAMENT}'
+            elif xy in mines and reveal:
+                yield '\N{COLLISION SYMBOL}' if self._blown_up else '\N{TRIANGULAR FLAG ON POST}'
+            elif xy == self._explode_at:
+                yield '\N{COLLISION SYMBOL}'
+            else:
+                yield '\N{WHITE LARGE SQUARE}'
+
     def __contains__(self, xy):
-        return 0 <= xy[0] < self.width and 0 <= xy[1] < self.height
+        x, y = xy
+        return 0 <= x < self.width and 0 <= y < self.height
 
     def __repr__(self):
-        return f'{type(self).__name__}({self.width}, {self.height}, {len(self.mines)})'
+        return '{0.__class__.__name__}({0.width}, {0.height}, {0.mine_count})'.format(self)
 
     def __str__(self):
         meta_text = (
@@ -143,38 +152,35 @@ class Board:
             f'**Flags Remaining:** {self.remaining_flags}'
         )
 
-        top_row = ' '.join(REGIONAL_INDICATORS[:self.width])
-        string = '\n'.join([
-            f"{char} {' '.join(map(str, cells))}"
-            for char, cells in zip(REGIONAL_INDICATORS, self._board)
-        ])
+        top_row = '\u200b'.join(REGIONAL_INDICATORS[:self.width])
+        rows = map(''.join, chunked(self._tiles(), self.width))
+        string = '\n'.join(map('{0}{1}'.format, REGIONAL_INDICATORS, rows))
 
-        return f'{meta_text}\n\u200b\n\N{BLACK LARGE SQUARE} {top_row}\n{string}'
+        return f'{meta_text}\n\u200b\n\N{BLACK LARGE SQUARE}{top_row}\n{string}'
 
     def _place_mines_from(self, x, y):
         surrounding = set(self._get_neighbours(x, y))
         click_area = surrounding | {(x, y)}
 
-        possible_coords = itertools.product(range(self.width), range(self.height))
-        coords = [p for p in possible_coords if p not in click_area]
+        coords = list(itertools.filterfalse(
+            click_area.__contains__,
+            itertools.product(range(self.width), range(self.height))
+        ))
 
-        self.mines = set(random.sample(coords, k=min(self._mine_count, len(coords))))
+        self.mines.update(random.sample(coords, k=min(self._mine_count, len(coords))))
         self.mines.update(random.sample(surrounding, self._mine_count - len(self.mines)))
 
         # All mines should be exhausted, unless we somehow made a malformed board.
         assert len(self.mines) == self._mine_count, f"only {len(self.mines)} mines were placed"
 
-    def is_mine(self, x, y):
-        return (x, y) in self.mines
+    def _is(self, type, x, y):
+        return (x, y) in self._cell_types[type]
 
-    def is_flag(self, x, y):
-        return (x, y) in self.flags
-
-    def is_visible(self, x, y):
-        return (x, y) in self.visible
-
-    def is_unsure(self, x, y):
-        return (x, y) in self.unsures
+    is_mine = partialmethod(_is, MINE)
+    is_visible = partialmethod(_is, VISIBLE)
+    is_flag = partialmethod(_is, FLAG)
+    is_unsure = partialmethod(_is, UNSURE)
+    del _is
 
     def _get_neighbours(self, x, y):
         pairs = ((x + surr_x, y + surr_y) for (surr_x, surr_y) in SURROUNDING)
@@ -184,66 +190,63 @@ class Board:
         if not self.mines:
             self._place_mines_from(x, y)
 
-        if self.is_visible(x, y):
+        xy = x, y
+        if any(xy in cells for cells in self._cell_types[:-1]):
             return
 
-        self.visible.add((x, y))
-        if self.is_mine(x, y) and not self.is_flag(x, y):
+        mines, flags = self.mines, self.flags
+        if xy in mines and xy not in flags:
+            self._blown_up = True
             raise HitMine(x, y)
 
-        surrounding = sum(self.is_mine(nx, ny) for nx, ny in self._get_neighbours(x, y))
-        if not surrounding:
-            self._board[y][x] = Tile.shown
-            for nx, ny in self._get_neighbours(x, y):
-                self.show(nx, ny)
-        else:
-            self._board[y][x] = Tile.numbered(surrounding)
+        neighbours = list(self._get_neighbours(x, y))
+        surrounding = sum(n in mines for n in neighbours)
+        self._cell_types[VISIBLE][xy] = surrounding
 
-    def _modify_board(self, x, y, attr):
+        if not surrounding:
+            for nx, ny in neighbours:
+                self.show(nx, ny)
+
+    def _modify(self, type, x, y):
         if self.is_visible(x, y):
             return
 
-        tup = x, y
-        was_thing = getattr(self, f'is_{attr}')(x, y)
-        for thing in ('flags', 'unsures'):
-            getattr(self, thing).discard(tup)
+        types = self._cell_types
+        xy = x, y
+        was_thing = xy in types[type]
 
-        if was_thing:
-            self._board[y][x] = Tile.blank
-        else:
-            getattr(self, f'{attr}s').add(tup)
-            self._board[y][x] = getattr(Tile, attr)
+        for t in [FLAG, UNSURE]:
+            types[t].discard(xy)
+
+        if not was_thing:
+            types[type].add(xy)
+
+    unsure = partialmethod(_modify, UNSURE)
 
     def flag(self, x, y):
-        self._modify_board(x, y, 'flag')
+        if self.remaining_flags > 0:
+            self._modify(FLAG, x, y)
 
-    def unsure(self, x, y):
-        self._modify_board(x, y, 'unsure')
-
-    def reveal_mines(self, success=False):
-        tile = Tile.flag if success else Tile.boom
-        for mx, my in self.mines:
-            self._board[my][mx] = tile
-
-    def hide_mines(self):
-        for mx, my in self.mines:
-            self._board[my][mx] = Tile.blank
+    def reveal(self):
+        self._revealed = True
 
     def explode(self, x, y):
-        if not self.is_visible(x, y):
-            return
-        self._board[y][x] = Tile.boom
+        self._explode_at = x, y
 
     def is_solved(self):
         return len(self.visible) + len(self.mines) == self.width * self.height
 
     @property
-    def width(self):
-        return len(self._board[0])
+    def mines(self):
+        return self._cell_types[MINE]
 
     @property
-    def height(self):
-        return len(self._board)
+    def flags(self):
+        return self._cell_types[FLAG]
+
+    @property
+    def visible(self):
+        return self._cell_types[VISIBLE]
 
     @property
     def mine_count(self):
@@ -256,10 +259,6 @@ class Board:
     @property
     def remaining_flags(self):
         return self.mine_count - self.mines_marked
-
-    @property
-    def remaining_mines(self):
-        return len(self.mines - self.flags)
 
     @classmethod
     def beginner(cls):
@@ -334,11 +333,11 @@ class _MinesweeperHelp(BaseReactionPaginator):
     def _possible_spaces():
         number = random.randint(1, 9)
         return textwrap.dedent(f'''
-        {Tile.shown} = Empty tile, reveals numbers or other empties around it.
-        {Tile.numbered(number)} = Number of mines around it. This one has {pluralize(mine=number)}.
-        {Tile.boom} = BOOM! Hitting a mine will instantly end the game.
-        {Tile.flag} = A flagged tile means it *might* be a mine.
-        {Tile.unsure} = It's either a mine or not. No one's sure.
+        \N{BLACK LARGE SQUARE} = Empty tile, reveals numbers or other empties around it.
+        {number}\u20e3 = Number of mines around it. This one has {pluralize(mine=number)}.
+        \N{COLLISION SYMBOL} = BOOM! Hitting a mine will instantly end the game.
+        \N{TRIANGULAR FLAG ON POST} = A flagged tile means it *might* be a mine.
+        \N{BLACK QUESTION MARK ORNAMENT} = It's either a mine or not. No one's sure.
         \u200b
         ''')
 
@@ -513,10 +512,11 @@ class MinesweeperSession:
             await asyncio.sleep(random.uniform(0.5, 1))
 
             # Then explode all the mines
-            self._board.reveal_mines()
+            self._board.reveal()
             await delete_edit(0xFF0000, 'Game Over!', icon=GAME_OVER_ICON)
             return False, -1
         else:
+            self._board.reveal()
             await delete_edit(0x00FF00, "You're winner!", icon=SUCCESS_ICON)
             return True, end - start
         finally:
