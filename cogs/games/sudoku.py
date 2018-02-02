@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import itertools
 import random
+import re
 import textwrap
 
 import discord
@@ -69,8 +70,9 @@ def _get_coords(size):
     return itertools.product(range(size), repeat=2)
 
 
-_markers = [chr(i) for i in range(0x1f1e6, 0x1f1ef)]
-_top_row = '  '.join(map(' '.join, grouper(3, _markers)))
+_letter_markers = [chr(i) for i in range(0x1f1e6, 0x1f1ef)]
+_number_markers = [f'{i}\u20e3' for i in range(1, 10)]
+_top_row = '  '.join(map(' '.join, grouper(3, _letter_markers)))
 _top_row = '\N{SOUTH EAST ARROW}  ' + _top_row
 _letters = 'abcdefghi'
 
@@ -119,7 +121,7 @@ class Board:
             return f'{cell}\u20e3' if cell else '\N{BLACK LARGE SQUARE}'
 
         return _top_row + '\n' + '\n'.join(
-            fmt.format(_markers[i], *map(draw_cell, line), '\N{WHITE SMALL SQUARE}')
+            fmt.format(_number_markers[i], *map(draw_cell, line), '\N{WHITE SMALL SQUARE}')
             + '\n' * (((i + 1) % 3 == 0))
             for i, line in enumerate(self._board)
         )
@@ -309,15 +311,14 @@ class Controller(BaseReactionPaginator):
         ''')
 
         input_field = textwrap.dedent('''
-            Send a message in this format:
-            ```
-            row column number
-            ```
-            Examples: **`a b 2`**, **`B A 5`**
+            Send a message in the following format:
+            `letter number number`
             \u200b
             Use `A-I` for `row` and `column`.
             Use `1-9` for the number.
-
+            -------------------------
+            Examples: **`a 1 2`**, **`B65`**
+            \u200b
             To check your board, click \N{WHITE HEAVY CHECK MARK}.
             You must fill the whole board first.
             \u200b
@@ -434,7 +435,7 @@ class Controller(BaseReactionPaginator):
         return self._current
 
 
-def _parse_message(string):
+def _legacy_parse(string):
     x, y, number, = string.lower().split()
 
     number = int(number)
@@ -442,6 +443,26 @@ def _parse_message(string):
         raise ValueError("number must be between 1 and 9")
 
     return _letters.index(x), _letters.index(y), number
+
+_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([1-9])')
+
+def _parse(string):
+    match = _INPUT_REGEX.match(string.lower())
+    if match is None:
+        raise ValueError('invalid input format')
+
+    x, y, number = match.groups()
+    return _letters.index(x), int(y) - 1, int(number)
+
+
+def _parse_input(string):
+    # Really not sure if I should put this in the board object...
+    for parser in [_parse, _legacy_parse]:
+        try:
+            return parser(string)
+        except ValueError:
+            continue
+    return None
 
 
 class SudokuSession:
@@ -466,10 +487,10 @@ class SudokuSession:
 
         # Parse the input right away so that we don't have any
         # random messages resetting the timer.
-        try:
-            x, y, number = _parse_message(message.content)
-        except ValueError:
+        result = _parse_input(message.content)
+        if result is None:
             return
+        x, y, number = result
 
         try:
             self._board[x, y] = number
