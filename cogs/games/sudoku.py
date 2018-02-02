@@ -459,9 +459,24 @@ class SudokuSession:
                          )
 
     def check(self, message):
-        return (self._controller.in_game()
+        if not (self._controller.in_game()
                 and message.channel == self._ctx.channel
-                and message.author == self._ctx.author)
+                and message.author == self._ctx.author):
+            return
+
+        # Parse the input right away so that we don't have any
+        # random messages resetting the timer.
+        try:
+            x, y, number = _parse_message(message.content)
+        except ValueError:
+            return
+
+        try:
+            self._board[x, y] = number
+        except (IndexError, ValueError):
+            return
+
+        return True
 
     async def _loop(self):
         # TODO: Set an event and add a wait_until_ready method on the paginator
@@ -484,16 +499,6 @@ class SudokuSession:
 
                 await self._ctx.send(f'{self._ctx.author.mention} You took too long!')
                 break
-
-            try:
-                x, y, number = _parse_message(message.content)
-            except ValueError:
-                continue
-
-            try:
-                self._board[x, y] = number
-            except (IndexError, ValueError):
-                continue
 
             with contextlib.suppress(discord.HTTPException):
                 await message.delete()

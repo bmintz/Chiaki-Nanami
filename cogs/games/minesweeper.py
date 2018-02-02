@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import contextlib
 import enum
 import itertools
@@ -398,12 +399,14 @@ class _Controller(BaseReactionPaginator):
     def default(self):
         return self._game.display
 
+
 class MinesweeperSession:
     def __init__(self, ctx, level, board):
         self._board = board
         self._ctx = ctx
         self._header = f'Minesweeper - {level}'
         self._controller = _Controller(ctx, self)
+        self._input = None
 
     @property
     def display(self):
@@ -415,10 +418,18 @@ class MinesweeperSession:
                 .add_field(name='Stuck?', value='For help, click \N{INFORMATION SOURCE}.')
                 )
 
-    def _check_message(self, message):
-        return (self._controller.can_poll()
+    def _check(self, message):
+        if not (self._controller.can_poll()
                 and message.channel == self._ctx.channel
-                and message.author == self._ctx.author)
+                and message.author == self._ctx.author):
+            return
+
+        parsed = self._parse_message(message.content)
+        if parsed is None:
+            return
+
+        self._input = parsed
+        return True
 
     def _parse_message(self, content):
         splitted = content.lower().split(None, 3)[:3]
@@ -452,21 +463,17 @@ class MinesweeperSession:
 
         while not self._board.is_solved():
             try:
-                message = await wait_for('message', timeout=120, check=self._check_message)
+                message = await wait_for('message', timeout=120, check=self._check)
             except asyncio.TimeoutError:
                 if self._controller.can_poll():
                     raise
                 continue
 
-            parsed = self._parse_message(message.content)
-            if parsed is None:      # garbage input, ignore.
-                continue
+            x, y, thing = self._input
+            getattr(self._board, thing.value)(x, y)
 
-            x, y, thing = parsed
             with contextlib.suppress(discord.HTTPException):
                 await message.delete()
-
-            getattr(self._board, thing.value)(x, y)
 
             await self._controller._message.edit(embed=self.display)
 
