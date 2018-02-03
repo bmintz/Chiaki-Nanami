@@ -424,11 +424,11 @@ class MinesweeperSession:
                 and message.author == self._ctx.author):
             return
 
-        parsed = self._parse_message(message.content)
-        if parsed is None:
+        try:
+            self._input = self._parse_message(message.content)
+        except ValueError:
             return
 
-        self._input = parsed
         return True
 
     def _parse_message(self, content):
@@ -440,21 +440,18 @@ class MinesweeperSession:
         elif chars == 3:
             flag = getattr(FlagType, splitted[2].lower(), FlagType.default)
         else:  # We need at least the x, y coordinates...
-            return None
+            raise ValueError(f'expected 2 or 3 tokens, got {chars}')
 
-        try:
-            x, y = map(ascii_lowercase.index, splitted[:2])
-        except ValueError:
-            return None
+        x, y = map(ascii_lowercase.index, splitted[:2])
 
         tup = x, y
         board = self._board
         if tup not in board:
-            return None
+            raise ValueError(f'{x} {y} is out of bounds')
 
         if board.is_visible(x, y):
             # Already visible, don't bother with this.
-            return None
+            raise ValueError(f'{x} {y} is already visible')
 
         if flag is FlagType.default and (board.is_flag(x, y) or board.is_unsure(x, y)):
             # We shouldn't allow exposing tiles if they're flagged or
@@ -462,7 +459,7 @@ class MinesweeperSession:
             # If the user flagged the tile, they probably know
             # it's a mine already, and they probably don't want to step
             # on a mine they know is there.
-            return None
+            raise ValueError(f'{x} {y} is a flagged or unsure tile')
 
         return x, y, flag
 
