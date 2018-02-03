@@ -446,10 +446,25 @@ class MinesweeperSession:
             x, y = map(ascii_lowercase.index, splitted[:2])
         except ValueError:
             return None
-        else:
-            if (x, y) not in self._board:
-                return None
-            return x, y, flag
+
+        tup = x, y
+        board = self._board
+        if tup not in board:
+            return None
+
+        if board.is_visible(x, y):
+            # Already visible, don't bother with this.
+            return None
+
+        if flag is FlagType.default and (board.is_flag(x, y) or board.is_unsure(x, y)):
+            # We shouldn't allow exposing tiles if they're flagged or
+            # marked unsure, because that doesn't make much sense.
+            # If the user flagged the tile, they probably know
+            # it's a mine already, and they probably don't want to step
+            # on a mine they know is there.
+            return None
+
+        return x, y, flag
 
     async def _loop(self):
         # TODO: Set an event and add a wait_until_ready method on the paginator
