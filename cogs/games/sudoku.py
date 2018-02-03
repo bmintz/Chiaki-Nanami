@@ -316,8 +316,10 @@ class Controller(BaseReactionPaginator):
             \u200b
             Use `A-I` for `row` and `column`.
             Use `1-9` for the number.
+            Use `0` or `clear` for the second number
+            if you want to clear the tile.
             -------------------------
-            Examples: **`a 1 2`**, **`B65`**
+            Examples: **`a 1 2`**, **`B65`**, **`D 7 clear`**
             \u200b
             To check your board, click \N{WHITE HEAVY CHECK MARK}.
             You must fill the whole board first.
@@ -444,7 +446,7 @@ def _legacy_parse(string):
 
     return _letters.index(x), _letters.index(y), number
 
-_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([1-9])')
+_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([0-9]|clear)')
 
 def _parse(string):
     match = _INPUT_REGEX.match(string.lower())
@@ -452,7 +454,13 @@ def _parse(string):
         raise ValueError('invalid input format')
 
     x, y, number = match.groups()
-    return _letters.index(x), int(y) - 1, int(number)
+
+    if number in ['clear', '0']:
+        number = EMPTY
+    else:
+        number = int(number)
+
+    return _letters.index(x), int(y) - 1, number
 
 
 def _parse_input(string):
