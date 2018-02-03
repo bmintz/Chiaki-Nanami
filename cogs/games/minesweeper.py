@@ -4,15 +4,17 @@ import contextlib
 import enum
 import itertools
 import random
+import re
 import textwrap
 import time
 from datetime import datetime
 from functools import partial, partialmethod
+from operator import itemgetter
 from string import ascii_lowercase, ascii_uppercase
 
 import discord
 from discord.ext import commands
-from more_itertools import chunked
+from more_itertools import chunked, tail
 
 from core.cog import Cog
 from ..utils.formats import pluralize
@@ -262,19 +264,56 @@ class Board:
         return self.mine_count - self.mines_marked
 
     @classmethod
-    def beginner(cls):
+    def beginner(cls, **kwargs):
         """Returns a beginner minesweeper board"""
-        return cls(9, 9, 10)
+        return cls(9, 9, 10, **kwargs)
 
     @classmethod
-    def intermediate(cls):
+    def intermediate(cls, **kwargs):
         """Returns a intermediate minesweeper board"""
-        return cls(12, 12, 20)
+        return cls(12, 12, 20, **kwargs)
 
     @classmethod
-    def expert(cls):
+    def expert(cls, **kwargs):
         """Returns an expert minesweeper board"""
-        return cls(13, 13, 40)
+        return cls(13, 13, 40, **kwargs)
+
+
+# Subclass that will be used for minesweeper, so that we can see
+# the original board class in case we need it later.
+class CustomizableRowBoard(Board):
+    def __init__(self, width, height, mines, x_row, y_row):
+        super().__init__(width, height, mines)
+        self._x_row = x_row
+        self._y_row = y_row
+
+    def __str__(self):
+        meta_text = (
+            f'**Marked:** {self.mines_marked} / {self.mine_count}\n'
+            f'**Flags Remaining:** {self.remaining_flags}'
+        )
+
+        top_row = '\u200b'.join(self._x_row[:self.width])
+        rows = map(''.join, chunked(self._tiles(), self.width))
+        string = '\n'.join(map('{0}{1}'.format, self._y_row, rows))
+
+        return f'{meta_text}\n\u200b\n\N{BLACK LARGE SQUARE}{top_row}\n{string}'
+
+    def examples(self, xs, ys):
+        # We have duplicate values in FlagType, so we can't just iterate
+        # through it normally...
+        flags = list(FlagType._member_map_)[1:] + ['']
+        examples = random.sample(
+            list(itertools.product(range(self.width), range(self.height))), 5
+        )
+
+        random_flag = partial(random.choices, flags, weights=[.1, .1, .1, .1, .3])
+        random_delim = partial(random.choices, [' ', ''], weights=[.6, .4])
+
+        return ', '.join(
+            f"**`{random_delim()[0].join((xs[x], ys[y], random_flag()[0]))}`**"
+            for x, y in examples
+        )
 
 
 class _LockedMessage:
@@ -314,16 +353,20 @@ class _MinesweeperHelp(BaseReactionPaginator):
     @page('\N{VIDEO GAME}')
     def controls(self):
         """Controls"""
+        board = self._game._board
+        scheme = self._game._control_scheme
         text = textwrap.dedent(f'''
         **Type in this format:**
         ```
         column row
         ```
-        Use `A-{ascii_uppercase[self._game._board.width - 1]}` for the column
-        and `A-{ascii_uppercase[self._game._board.height - 1]}` for the row.
+        Use `{scheme.x_range(board.width)}` for the column
+        and `{scheme.y_range(board.height)}` for the row.
         \u200b
         To flag a tile, type `f` or `flag` after the row.
         If you're unsure about a tile, type `u` or `unsure` after the row.
+
+        Examples: {board.examples(scheme.x, scheme.y)}
         ''')
         return (discord.Embed(colour=self.colour, description=text)
                 .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
@@ -400,6 +443,76 @@ class _Controller(BaseReactionPaginator):
         return self._game.display
 
 
+def _consecutive_groups(iterable, ordering=lambda x: x):
+    # Copied from more-itertools
+    #
+    # As this is in 4.0.0 which I have not supported *yet* due to always_iterable
+    # returning an iterator rather than a tuple.
+    for k, g in itertools.groupby(
+        enumerate(iterable), key=lambda x: x[0] - ordering(x[1])
+    ):
+        yield map(itemgetter(1), g)
+
+def _first_and_last(iterable, ordering=lambda x: x):
+    return (
+        (next(it), next(tail(1, it), ''))
+        for it in _consecutive_groups(iterable, ordering)
+    )
+
+
+_numbers_to_letters_marker = object()
+_possible_characters = [
+    *map(str, range(1, 18)),
+    _numbers_to_letters_marker,
+    *ascii_lowercase
+]
+
+def _range_row(strings):
+    return ' or '.join(
+        (f'{start}-{end}' if end else start).upper()
+        for start, end in _first_and_last(strings, _possible_characters.index)
+    )
+
+
+class ControlScheme(collections.namedtuple('ControlScheme', 'x y x_row y_row pattern')):
+    __slots__ = ()
+
+    def x_range(self, limit):
+        return _range_row(self.x[:limit])
+
+    def y_range(self, limit):
+        return _range_row(self.y[:limit])
+
+
+_number_emojis = [f'{i}\u20e3' for i in range(1, 10)] + ['\N{KEYCAP TEN}']
+
+DEFAULT_CONTROL_SCHEME = ControlScheme(
+    ascii_lowercase, [*map(str, range(1, 11)), *'abcdefgh'],
+    REGIONAL_INDICATORS, [*_number_emojis, *REGIONAL_INDICATORS[:7]],
+    '([a-q])\s{0,1}(10|[1-9a-g])\s{0,1}(flag|unsure|u|f)?',
+)
+
+# Control scheme with custom emojis
+MINESWEEPER_EMOJI_REPO_GUILD_ID = 409305485720944651
+_emojis = [
+    *_number_emojis,
+    '<:eleven:409305887682068480>',
+    '<:twelve:409324947945553932>',
+    '<:thirteen:409325803948605440>',
+    '<:fourteen:409328295147208725>',
+    '<:fifteen:409331600476733440>',
+    '<:sixteen:409332191542247426>',
+    '<:seventeen:409336343097901066>',
+]
+
+CUSTOM_EMOJI_CONTROL_SCHEME = ControlScheme(
+    ascii_lowercase, list(map(str, range(1, 18))),
+    REGIONAL_INDICATORS, _emojis,
+    '([a-q])\s{0,1}(1?[0-9])\s{0,1}(flag|unsure|u|f)?',
+)
+del _number_emojis, _emojis
+
+
 class MinesweeperSession:
     def __init__(self, ctx, level, board):
         self._board = board
@@ -407,6 +520,7 @@ class MinesweeperSession:
         self._header = f'Minesweeper - {level}'
         self._controller = _Controller(ctx, self)
         self._input = None
+        self._control_scheme = ctx.__msw_control_scheme__
 
     @property
     def display(self):
@@ -431,19 +545,7 @@ class MinesweeperSession:
 
         return True
 
-    def _parse_message(self, content):
-        splitted = content.lower().split(None, 3)[:3]
-        chars = len(splitted)
-
-        if chars == 2:
-            flag = FlagType.default
-        elif chars == 3:
-            flag = getattr(FlagType, splitted[2].lower(), FlagType.default)
-        else:  # We need at least the x, y coordinates...
-            raise ValueError(f'expected 2 or 3 tokens, got {chars}')
-
-        x, y = map(ascii_lowercase.index, splitted[:2])
-
+    def __validate_input(self, x, y, flag):
         tup = x, y
         board = self._board
         if tup not in board:
@@ -461,7 +563,45 @@ class MinesweeperSession:
             # on a mine they know is there.
             raise ValueError(f'{x} {y} is a flagged or unsure tile')
 
+    def _parse(self, string):
+        scheme = self._control_scheme
+        match = re.fullmatch(scheme.pattern, string.lower())
+        if not match:
+            raise ValueError('invalid input format')
+
+        x = scheme.x.index(match[1])
+        y = scheme.y.index(match[2])
+        if match[3]:
+            flag = FlagType[match[3]]
+        else:
+            flag = FlagType.default
+
+        self.__validate_input(x, y, flag)
         return x, y, flag
+
+    def _legacy_parse(self, content):
+        splitted = content.lower().split(None, 3)[:3]
+        chars = len(splitted)
+
+        if chars == 2:
+            flag = FlagType.default
+        elif chars == 3:
+            flag = getattr(FlagType, splitted[2].lower(), FlagType.default)
+        else:  # We need at least the x, y coordinates...
+            raise ValueError(f'expected 2 or 3 tokens, got {chars}')
+
+        x, y = map(ascii_lowercase.index, splitted[:2])
+        self.__validate_input(x, y, flag)
+
+        return x, y, flag
+
+    def _parse_message(self, string):
+        for parse in [self._parse, self._legacy_parse]:
+            try:
+                return parse(string)
+            except ValueError:
+                continue
+        raise ValueError(f'bad input {string}')
 
     async def _loop(self):
         # TODO: Set an event and add a wait_until_ready method on the paginator
@@ -590,6 +730,26 @@ class Minesweeper(Cog):
     def __init__(self, bot):
         super().__init__(bot)
         self.sessions = {}
+
+    # Needed to set the "control scheme" for minesweeper.
+    # Depending on whether or not the bot has access to the number emojis
+    # we need to properly set the control scheme, otherwise we'll have
+    # ":bad emojis:" messing up the player.
+    async def __before_invoke(self, ctx):
+        guild = ctx.bot.get_guild(MINESWEEPER_EMOJI_REPO_GUILD_ID)
+        if guild and ctx.me.permissions_in(ctx.channel).external_emojis:
+            # We only want to use this scheme if the bot can
+            # actually use the emojis from the emoji repo.
+            scheme = CUSTOM_EMOJI_CONTROL_SCHEME
+        else:
+            scheme = DEFAULT_CONTROL_SCHEME
+
+        # These don't really need to be deleted I guess, since the
+        # context object doesn't last long enough to warrant that.
+        ctx.__msw_control_scheme__ = scheme
+        ctx.__msw_x_row__ = scheme.x_row
+        ctx.__msw_y_row__ = scheme.y_row
+        return ctx.__msw_control_scheme__
 
     async def __error(self, ctx, error):
         if isinstance(error, AlreadyPlaying):
@@ -798,7 +958,11 @@ class Minesweeper(Cog):
                     await result.delete()
 
                 try:
-                    board = Board(*args)
+                    board = CustomizableRowBoard(
+                        *args,
+                        x_row=ctx.__msw_x_row__,
+                        y_row=ctx.__msw_y_row__,
+                    )
                 except ValueError as e:
                     error = e
                 else:
@@ -865,7 +1029,9 @@ class Minesweeper(Cog):
                 return Level.custom, await self._get_custom_board(ctx, message)
 
             index = int(emoji[0]) - 1
-            return Level(index + 1), getattr(Board, names[index].lower())()
+            clsmethod = getattr(CustomizableRowBoard, names[index].lower())
+            board = clsmethod(x_row=ctx.__msw_x_row__, y_row=ctx.__msw_y_row__)
+            return Level(index + 1), board
         finally:
             # This attribute might not always be set. e.g if we didn't
             # choose custom mode.
@@ -906,7 +1072,10 @@ class Minesweeper(Cog):
                 except (asyncio.TimeoutError, BoardCancelled):
                     return
             else:
-                board = getattr(Board, level.name)()
+                board = getattr(CustomizableRowBoard, level.name)(
+                    x_row=ctx.__msw_x_row__,
+                    y_row=ctx.__msw_y_row__
+                )
 
             await self._do_minesweeper(ctx, level, board)
 
@@ -916,7 +1085,10 @@ class Minesweeper(Cog):
         """Starts a custom game of Minesweeper"""
         with self._create_session(ctx):
             try:
-                board = Board(width, height, mines)
+                board = CustomizableRowBoard(
+                    width, height, mines,
+                    ctx.__msw_x_row__, ctx.__msw_y_row__
+                )
             except ValueError as e:
                 await ctx.send(e)
             else:
