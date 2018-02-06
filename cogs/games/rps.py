@@ -129,7 +129,15 @@ class RPSElement(commands.Converter):
         if lowered == 'element':
             raise commands.BadArgument("Please don't be literal. Type an actual element.")
 
-        element = self.game_type.elements.get(lowered, _null_element)
+        elements = self.game_type.elements
+        try:
+            element = elements[lowered]
+        except KeyError:
+            arg, element = next(
+                (p for p in elements.items() if p[1].emoji == lowered),
+                (arg, _null_element)
+            )
+
         return Choice(arg, element)
 
 
