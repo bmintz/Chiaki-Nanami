@@ -131,9 +131,12 @@ class Board:
         if EMPTY in flatten(self._board):
             raise ValueError('Fill the board first.')
 
-        required_nums = set(range(1, len(self._board[0]) + 1))
+        row_markers = range(1, len(self._board[0]) + 1)
+        column_markers = _letters.upper()
 
-        def check(lines, header, seq=_letters.upper()):
+        required_nums = set(row_markers)
+
+        def check(lines, header, seq):
             lines = enumerate(map(set, lines))
             if all(line == required_nums for _, line in lines):
                 return
@@ -144,11 +147,11 @@ class Board:
             raise ValueError(f'{header} {seq[num - 1]} is invalid')
 
         # Check rows
-        check(self._board, 'Row')
+        check(self._board, 'Row', row_markers)
         # Check columns
-        check(zip(*self._board), 'Column')
+        check(zip(*self._board), 'Column', column_markers)
         # Check boxes
-        check(map(flatten, _get_squares(self._board)), 'Box', range(1, len(self._board[0]) + 1))
+        check(map(flatten, _get_squares(self._board)), 'Box', row_markers)
 
     def clear(self):
         non_clues = itertools.filterfalse(self._clues.__contains__, _get_coords(len(self._board)))
