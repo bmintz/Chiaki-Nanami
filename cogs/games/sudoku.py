@@ -72,7 +72,7 @@ def _get_coords(size):
 
 _letter_markers = [chr(i) for i in range(0x1f1e6, 0x1f1ef)]
 _number_markers = [f'{i}\u20e3' for i in range(1, 10)]
-_top_row = '  '.join(map(' '.join, grouper(3, _letter_markers)))
+_top_row = '  '.join(map('\u200b'.join, grouper(3, _letter_markers)))
 _top_row = '\N{SOUTH EAST ARROW}  ' + _top_row
 _letters = 'abcdefghi'
 
@@ -130,7 +130,7 @@ class Board:
         return f'{self.__class__.__name__}(clues={len(self._clues)!r})'
 
     def __str__(self):
-        fmt = "{0}  {1} {2} {3}  {4} {5} {6}  {7} {8} {9}"
+        fmt = "{0}  {1}{2}{3}  {4}{5}{6}  {7}{8}{9}"
         clues = self._clues
         clue_markers = self._clue_markers
 
