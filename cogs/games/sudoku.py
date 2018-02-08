@@ -77,8 +77,22 @@ _top_row = '\N{SOUTH EAST ARROW}  ' + _top_row
 _letters = 'abcdefghi'
 
 
+DEFAULT_CLUE_EMOJIS = tuple(_number_markers)
+CUSTOM_CLUE_EMOJIS = (
+    '<:clue1:411056517312151573>',
+    '<:clue2:411097959342669824>',
+    '<:clue3:411099996289499136>',
+    '<:clue4:411103926197420032>',
+    '<:clue5:411103970279292928>',
+    '<:clue6:411103996376514570>',
+    '<:clue7:411106238236196865>',
+    '<:clue8:411108321567834133>',
+    '<:clue9:411108337153867776>',
+)
+
+
 class Board:
-    __slots__ = ('_board', '_clues', 'new', 'dirty')
+    __slots__ = ('_board', '_clues', '_clue_markers', 'new', 'dirty')
 
     def __init__(self, clues):
         self.new = True
@@ -97,6 +111,9 @@ class Board:
         for p in it:
             self[p] = EMPTY
 
+        # Needed to specially mark the clues.
+        self._clue_markers = DEFAULT_CLUE_EMOJIS
+
     def __getitem__(self, xy):
         x, y = xy
         return self._board[y][x]
@@ -112,16 +129,24 @@ class Board:
     def __repr__(self):
         return f'{self.__class__.__name__}(clues={len(self._clues)!r})'
 
-    # TODO: Use different emojis to represent the clues. This will be hard
-    # without using the config file...
     def __str__(self):
         fmt = "{0}  {1} {2} {3}  {4} {5} {6}  {7} {8} {9}"
+        clues = self._clues
+        clue_markers = self._clue_markers
 
-        def draw_cell(cell):
-            return f'{cell}\u20e3' if cell else '\N{BLACK LARGE SQUARE}'
+        def draw_cell(y, cell_pair):
+            x, cell = cell_pair
+            if not cell:
+                return '\N{BLACK LARGE SQUARE}'
+
+            return clue_markers[cell - 1] if (x, y) in clues else f'{cell}\u20e3'
 
         return _top_row + '\n' + '\n'.join(
-            fmt.format(_number_markers[i], *map(draw_cell, line), '\N{WHITE SMALL SQUARE}')
+            fmt.format(
+                _number_markers[i],
+                *map(draw_cell, itertools.repeat(i), enumerate(line)),
+                '\N{WHITE SMALL SQUARE}'
+            )
             + '\n' * (((i + 1) % 3 == 0))
             for i, line in enumerate(self._board)
         )
@@ -172,6 +197,7 @@ class Board:
         self._clues = {divmod(clue, size) for clue in data['clues']}
         self.new = False
         self.dirty = False  # We don't need to save a game we just loaded.
+        self._clue_markers = DEFAULT_CLUE_EMOJIS  # Needed to specially mark the clues.
 
         return self
 
@@ -486,8 +512,11 @@ class SudokuSession:
 
     def __init__(self, ctx, board):
         self._board = board
-        self._controller = Controller(ctx, self)
         self._ctx = ctx
+        if ctx.bot.get_guild(409305485720944651) and ctx.me.permissions_in(ctx.channel).external_emojis:
+            self._board._clue_markers = CUSTOM_CLUE_EMOJIS
+
+        self._controller = Controller(ctx, self)
 
         a = ctx.author
         self._display = (discord.Embed(colour=ctx.bot.colour, description=str(self._board))
