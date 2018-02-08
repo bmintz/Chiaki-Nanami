@@ -298,7 +298,12 @@ class Controller(BaseReactionPaginator):
             d = self.display
             d.description = f'**Sudoku Complete!**\n\n{self._game._board}'
             d.colour = 0x4CAF50
-            self.stop()
+
+            # stop() is a coro and it prompts if the user wants to save
+            # so we can't use that here.
+            self._paginating = False
+            if not self._future.done():
+                self._future.cancel()
 
         return self.display
 
