@@ -513,7 +513,7 @@ class SudokuSession:
     def __init__(self, ctx, board):
         self._board = board
         self._ctx = ctx
-        if ctx.bot.get_guild(409305485720944651) and ctx.me.permissions_in(ctx.channel).external_emojis:
+        if ctx.can_use_chiaki_repo_emojis():
             self._board._clue_markers = CUSTOM_CLUE_EMOJIS
 
         self._controller = Controller(ctx, self)

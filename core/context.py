@@ -9,6 +9,9 @@ from discord.ext import commands
 from itertools import starmap
 
 
+CHIAKI_EMOJI_REPO_GUILD_ID = 409305485720944651
+
+
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
     __slots__ = ()
 
@@ -203,3 +206,12 @@ class Context(commands.Context):
 
             if delete_after:
                 await msg.delete()
+
+    def can_use_chiaki_repo_emojis(self):
+        """Return True if the bot can use emojis from the Chiaki Emoji Repository.
+
+        This is used for Minesweeper and Sudoku.
+        """
+        return (self.bot.get_guild(CHIAKI_EMOJI_REPO_GUILD_ID) is not None
+                and self.me.permissions_in(self.channel).external_emojis)
+

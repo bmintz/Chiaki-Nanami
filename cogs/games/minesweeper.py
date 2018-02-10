@@ -493,7 +493,6 @@ DEFAULT_CONTROL_SCHEME = ControlScheme(
 )
 
 # Control scheme with custom emojis
-MINESWEEPER_EMOJI_REPO_GUILD_ID = 409305485720944651
 _emojis = [
     *_number_emojis,
     '<:eleven:409305887682068480>',
@@ -736,10 +735,7 @@ class Minesweeper(Cog):
     # we need to properly set the control scheme, otherwise we'll have
     # ":bad emojis:" messing up the player.
     async def __before_invoke(self, ctx):
-        guild = ctx.bot.get_guild(MINESWEEPER_EMOJI_REPO_GUILD_ID)
-        if guild and ctx.me.permissions_in(ctx.channel).external_emojis:
-            # We only want to use this scheme if the bot can
-            # actually use the emojis from the emoji repo.
+        if ctx.can_use_chiaki_repo_emojis():
             scheme = CUSTOM_EMOJI_CONTROL_SCHEME
         else:
             scheme = DEFAULT_CONTROL_SCHEME
