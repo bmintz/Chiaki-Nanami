@@ -659,8 +659,56 @@ async def _can_run(command, ctx):
 
 async def _command_formatters(commands, ctx):
     for command in commands:
-        fmt = '`{}`' if await _can_run(command, ctx) else '~~`{}`~~'
-        yield map(fmt.format, _all_names(command))
+        # Can't do async-genexpr because Python <3.6.4 requires the function
+        # to be async def, however then we'd have to await it.
+        yield command.name, await _can_run(command, ctx)
+
+
+NUM_COMMAND_COLUMNS = 2
+def _command_lines(command_can_run_pairs):
+    if len(command_can_run_pairs) % 2:
+        # Avoid modifying the list if we can help it
+        command_can_run_pairs = command_can_run_pairs + [('', '')]
+
+    pairs = list(sliced(command_can_run_pairs, NUM_COMMAND_COLUMNS))
+    widths = [max(len(c[0]) for c in column) for column in zip(*pairs)]
+
+    # XXX: Does not work on iOS clients for some reason -- the
+    #      strikethrough doesn't render at all.
+    def format_pair(pair, width):
+        command, can_run = pair
+        if not command:
+            return ''
+
+        # Simply doing f'`{command:>width + 1}`' is not enough because
+        # we want to cross out only the command text, not the entire
+        # block. Doing that requires making two code blocks, one for
+        # the command, and one padded with spaces.
+        #
+        # However Discord loves to be really fucky with codeblocks. If
+        # there are two backticks close together, it will make one huge
+        # code block with the middle two unescaped. e.g `abc``test` will
+        # make one long code block with the string of "abc``test" rather
+        # than what we really want.
+        #
+        # Discord also loves to mess around with spaces, because our code
+        # block is technically empty, Discord will just strip out the
+        # whitespace, leaving us with an empty code block. Thus we need
+        # three zwses -- one between the two code blocks to prevent them
+        # from merging, and two at each end of the 2nd code block to prevent
+        # the padding spaces from getting stripped.
+        #
+        # ~~*phew*~~
+        formatted = f'`{command}`'
+        if not can_run:
+            formatted = f'~~{formatted}~~'
+
+        to_pad = width - len(command) + 1
+        padding = f'\u200b`\u200b{" " * to_pad}\u200b`' if to_pad > 0 else ''
+
+        return formatted + padding
+
+    return (' '.join(map(format_pair, pair, widths)) for pair in pairs)
 
 
 CROSSED_NOTE = "**Note:** You can't use commands\nthat are ~~crossed out~~."
@@ -679,10 +727,9 @@ class CogPages(ListPaginator):
         entries = (c for c in ctx.bot.get_cog_commands(cog_name)
                    if not (c.hidden or ctx.bot.formatter.show_hidden))
 
-        formats = _command_formatters(sorted(entries, key=str), ctx)
-        lines = [' | '.join(line) async for line in formats]
+        pairs = [pair async for pair in _command_formatters(sorted(entries, key=str), ctx)]
 
-        self = cls(ctx, lines)
+        self = cls(ctx, _command_lines(pairs))
         self._cog_doc = inspect.getdoc(cog) or 'No description... yet.'
         self._cog_name = cog_name
 
@@ -720,7 +767,7 @@ class GeneralHelpPaginator(ListPaginator):
         )
 
         nested_pages = []
-        per_page = 10
+        per_page = 30
 
         # (cog, description, first 10 commands)
         # (cog, description, next 10 commands)
@@ -736,7 +783,7 @@ class GeneralHelpPaginator(ListPaginator):
             module = sys.modules[pkg_name]
             description = inspect.getdoc(module) or 'No description... yet.'
 
-            lines = [' | '.join(line) async for line in _command_formatters(cmds, ctx)]
+            lines = [pair async for pair in _command_formatters(cmds, ctx)]
             nested_pages.extend((parent, description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
@@ -762,8 +809,9 @@ class GeneralHelpPaginator(ListPaginator):
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
         note = f'For more help on a command,\ntype `{self.context.clean_prefix}help "a command"`.'
+        formatted = '\n'.join(_command_lines(lines))
         # ZWS is needed for mobile where they like to strip blank lines for no reason.
-        commands = '\n'.join(lines) + f'\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
+        commands = f'{formatted}\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
 
         return self._page_footer_embed(
             discord.Embed(colour=self.colour, description=description)
