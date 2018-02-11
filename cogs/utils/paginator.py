@@ -560,6 +560,21 @@ def _make_command_requirements(command):
 
     return '\n'.join(requirements)
 
+def _list_subcommands_and_descriptions(command):
+    name_docs = sorted((str(sub), sub.short_doc) for sub in set(command.walk_commands()))
+    padding = max(len(name) for name, _ in name_docs)
+
+    return '\n'.join(
+        f'`{name:<{padding}}\u200b` \N{EM DASH} {doc}'
+        for name, doc in name_docs
+    )
+
+def _at_least(iterable, n):
+    return any(True for _ in itertools.islice(iterable, n, None))
+
+def _requires_extra_page(command):
+    return _has_subcommands(command) and _at_least(command.walk_commands(), 6)
+
 
 class HelpCommandPage(BaseReactionPaginator):
     def __init__(self, ctx, command, func=None):
@@ -568,7 +583,8 @@ class HelpCommandPage(BaseReactionPaginator):
         self.func = func
         self._toggle = True
         self._on_subcommand_page = False
-        self._reaction_map = self._reaction_map if _has_subcommands(command) else self._normal_reaction_map
+        if not _requires_extra_page(command):
+            self._reaction_map = self._normal_reaction_map
 
     @page('\N{INFORMATION SOURCE}')
     def default(self):
@@ -589,16 +605,17 @@ class HelpCommandPage(BaseReactionPaginator):
 
         assert isinstance(command, commands.GroupMixin), "command has no subcommands"
         self._on_subcommand_page = True
-        subs = sorted(map(str, set(command.walk_commands())))
+        subs = _list_subcommands_and_descriptions(command)
+        random_command = random.choice(list(command.walk_commands()))
 
         note = (
             f'Type `{ctx.clean_prefix}{ctx.invoked_with} {command} subcommand`'
             f' for more info on a subcommand.\n'
-            f'(e.g. type `{ctx.clean_prefix}{ctx.invoked_with} {random.choice(subs)}`)'
+            f'(e.g. type `{ctx.clean_prefix}{ctx.invoked_with} {random_command}`)'
         )
 
-        return (discord.Embed(colour=self.colour, description='\n'.join(map('`{}`'.format, subs)))
-                .set_author(name=f'Child Commands for {command}')
+        return (discord.Embed(colour=self.colour, description=subs)
+                .set_author(name=f'See also')
                 .add_field(name='\u200b', value=note, inline=False)
                 )
 
@@ -622,8 +639,12 @@ class HelpCommandPage(BaseReactionPaginator):
                      )
 
         if _has_subcommands(command):
-            prompt = func('Click \N{DOWNWARDS BLACK ARROW} to see all the subcommands!')
-            cmd_embed.add_field(name=func('Subcommands'), value=prompt, inline=False)
+            if _at_least(command.walk_commands(), 6):
+                prompt = func('Click \N{DOWNWARDS BLACK ARROW} to see all the subcommands!')
+                cmd_embed.add_field(name=func('See Also'), value=prompt, inline=False)
+            else:
+                subs = func(_list_subcommands_and_descriptions(command))
+                cmd_embed.add_field(name=func('See Also'), value=subs, inline=False)
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
