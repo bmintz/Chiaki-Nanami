@@ -306,7 +306,11 @@ class Chiaki(commands.Bot):
             self.start_time = datetime.utcnow()
 
     async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.CheckFailure) and await self.is_owner(ctx.author):
+        if (
+            isinstance(error, commands.CheckFailure)
+            and not isinstance(error, commands.BotMissingPermissions)
+            and await self.is_owner(ctx.author)
+        ):
             # There is actually a race here. When this command is invoked the
             # first time, it's wrapped in a context manager that automatically
             # starts and closes a DB session.
@@ -346,6 +350,8 @@ class Chiaki(commands.Bot):
             print(f'In {ctx.command.qualified_name}:', file=sys.stderr)
             traceback.print_tb(error.original.__traceback__)
             print(f'{error.__class__.__name__}: {error}'.format(error), file=sys.stderr)
+        elif isinstance(error, commands.BotMissingPermissions):
+            await ctx.bot_missing_perms(error.missing_perms)
 
     async def on_message(self, message):
         self.message_counter += 1

@@ -8,8 +8,15 @@ import sys
 from discord.ext import commands
 from itertools import starmap
 
+from cogs.utils.formats import human_join
+
 
 CHIAKI_EMOJI_REPO_GUILD_ID = 409305485720944651
+
+_DEFAULT_MISSING_PERMS_ACTIONS = {
+    'embed_links': 'embeds',
+    'attach_files': 'upload stuffs',
+}
 
 
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
@@ -215,3 +222,26 @@ class Context(commands.Context):
         return (self.bot.get_guild(CHIAKI_EMOJI_REPO_GUILD_ID) is not None
                 and self.me.permissions_in(self.channel).external_emojis)
 
+    def bot_missing_perms(self, missing_perms, *, action=None):
+        """Send a message that the bot is missing permssions.
+
+        If action is not specified the actions for each permissions are used.
+        """
+        if action is None:
+            actions = (
+                _DEFAULT_MISSING_PERMS_ACTIONS.get(p, p.replace('_', ' '))
+                for p in missing_perms
+            )
+            action = human_join(actions, final='or')
+
+        nice_perms = (
+            perm.replace('_', ' ').replace('guild', 'server').title()
+            for perm in missing_perms
+        )
+
+        message = (
+            f"Hey hey, I don't have permissions to {action}. "
+            f'Please check if I have {human_join(nice_perms)}.'
+        )
+
+        return self.send(message)
