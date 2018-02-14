@@ -181,6 +181,7 @@ class Moderator(Cog):
 
     @commands.group(invoke_without_command=True, usage=['15', '99999 @Mee6#4876'])
     @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_messages=True)
     async def slowmode(self, ctx, duration: time.Delta, *, member: discord.Member=None):
         """Puts a thing in slowmode.
 
@@ -224,6 +225,7 @@ class Moderator(Cog):
 
     @slowmode.command(name='noimmune', aliases=['n-i'], usage=['10', '1000000000 @b1nzy#1337'])
     @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_messages=True)
     async def slowmode_no_immune(self, ctx, duration: time.Delta, *, member: discord.Member=None):
         """Puts the channel or member in "no-immune" slowmode.
 
@@ -266,6 +268,12 @@ class Moderator(Cog):
         """Alias for `{prefix}slowmode off`"""
         await ctx.invoke(self.slowmode_off, member=member)
 
+    @slowmode.error
+    @slowmode_no_immune.error
+    async def slowmode_error(self, ctx, error):
+        if isinstance(error, commands.BotMissingPermissions):
+            await ctx.bot_missing_perms(error.missing_perms, action='slow people down')
+
     # ----------------------- End slowmode ---------------------
 
     @commands.command(aliases=['newmembers', 'joined'])
@@ -295,6 +303,7 @@ class Moderator(Cog):
 
     @commands.command(aliases=['clr'], usage=['', '50', '@Corrupt X#6821'])
     @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_messages=True)
     async def clear(self, ctx, num_or_user: union(int, discord.Member)=None):
         """Clears some messages in a channels
 
@@ -375,8 +384,8 @@ class Moderator(Cog):
         # We need to use the __cause__ because any non-CommandErrors will be
         # wrapped in CommandInvokeError
         cause = error.__cause__
-        if isinstance(cause, discord.Forbidden):
-            await ctx.send("I need the Manage Messages perm to clear messages.")
+        if isinstance(error, commands.BotMissingPermissions):
+            await ctx.bot_missing_perms(error.missing_perms, action='delete messages')
         elif isinstance(cause, discord.HTTPException):
             await ctx.send(
                 "Couldn't delete the messages for some reason... Here's the error:\n"
@@ -595,6 +604,7 @@ class Moderator(Cog):
 
     @commands.command(usage=['192060404501839872 stfu about your gf'])
     @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_roles=True)
     async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
         """Mutes a user (obviously)
 
@@ -668,6 +678,7 @@ class Moderator(Cog):
 
     @commands.command(usage=['@rjt#2336 sorry bb'])
     @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_roles=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: Reason=None):
         """Unmutes a user (obviously)"""
         reason = reason or f'Unmute by {ctx.author}'
@@ -716,6 +727,7 @@ class Moderator(Cog):
 
     @commands.command(usage='@Salt#3514 Inferior bot')
     @commands.has_permissions(kick_members=True)
+    @commands.bot_has_permissions(kick_members=True)
     async def kick(self, ctx, member: CheckedMember, *, reason: Reason=None):
         """Kick a user (obviously)"""
         reason = reason or f'By {ctx.author}'
@@ -725,6 +737,7 @@ class Moderator(Cog):
 
     @commands.command(aliases=['sb'], usage='259209114268336129 Enough of your raid fetish.')
     @commands.has_permissions(kick_members=True, manage_messages=True)
+    @commands.bot_has_permissions(ban_members=True)
     async def softban(self, ctx, member: CheckedMember, *, reason: Reason=None):
         """Softbans a user (obviously)"""
         reason = reason or f'By {ctx.author}'
@@ -735,6 +748,7 @@ class Moderator(Cog):
 
     @commands.command(aliases=['tb'], usage='Kwoth#2560 Your bot sucks lol')
     @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
     async def tempban(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
         """Temporarily bans a user (obviously)"""
         reason = reason or f'By {ctx.author}'
@@ -746,6 +760,7 @@ class Moderator(Cog):
 
     @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
     @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
     async def ban(self, ctx, member: CheckedMember(MemberID), *, reason: Reason=None):
         """Bans a user (obviously)
 
@@ -758,6 +773,7 @@ class Moderator(Cog):
 
     @commands.command(unban='@Nadeko#6685 oops')
     @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
     async def unban(self, ctx, user: BannedMember, *, reason: Reason=None):
         """Unbans the user (obviously)"""
         reason = reason or f'By {ctx.author}'
@@ -782,27 +798,22 @@ class Moderator(Cog):
         cmd._required_perms = 'Ban Members'
     del cmd     # cmd still exists outside the for loop, (which is named as unban...)
 
-    @mute.error
-    @unmute.error
-    @kick.error
-    @softban.error
-    @tempban.error
-    @ban.error
-    @unban.error
-    @massban.error
-    async def mod_action_error(self, ctx, error):
-        # We need to use the __cause__ because any non-CommandErrors will be
-        # wrapped in CommandInvokeError
-        cause = error.__cause__
-        command = ctx.command
+    def _error(command, action=None):
+        @command.error
+        async def error(self, ctx, error):
+            if isinstance(error, commands.BotMissingPermissions):
+                await ctx.bot_missing_perms(error.missing_permissions, action=action)
+        return error
 
-        if isinstance(cause, discord.Forbidden):
-            await ctx.send(
-                f'I need the {command._required_perms} permissions to {command}, I think... '
-                "Or maybe they're just too powerful for me."
-            )
-        elif isinstance(cause, discord.HTTPException):
-            await ctx.send(f"Couldn't {command} the member for some reason")
+    mute_error = _error(mute, 'mute members')
+    unmute_error = _error(unmute, 'unmute members')
+    kick_error = _error(kick)
+    ban_error = _error(ban)
+    softban_error = _error(softban, 'softly ban someone')
+    tempban_error = _error(tempban, 'temporarily ban someone')
+    massban_error = _error(massban, 'ban all the people')
+    unban_error = _error(unban)
+    del _error
 
     # --------- Events ---------
 

@@ -108,6 +108,15 @@ class AutoRole(disambiguate.DisambiguateRole):
         return role
 
 
+_bot_role_check = partial(commands.bot_has_permissions, manage_roles=True)
+
+def _role_error(command, action):
+    @command.error
+    async def error(self, ctx, error):
+        if isinstance(error, commands.BotMissingPermissions):
+            await ctx.bot_missing_perms(error.missing_perms, action=action)
+
+
 class Roles(Cog):
     """Commands that are related to roles.
 
@@ -163,6 +172,7 @@ class Roles(Cog):
         await ctx.send(msg)
 
     @commands.command()
+    @_bot_role_check()
     async def iam(self, ctx, *, role: SelfRole):
         """Gives a self-assignable role (and only a self-assignable role) to yourself."""
         if role in ctx.author.roles:
@@ -172,6 +182,7 @@ class Roles(Cog):
         await ctx.send(f"You are now **{role}**... I think.")
 
     @commands.command()
+    @_bot_role_check()
     async def iamnot(self, ctx, *, role: SelfRole):
         """Removes a self-assignable role (and only a self-assignable role) from yourself."""
         if role not in ctx.author.roles:
@@ -181,6 +192,7 @@ class Roles(Cog):
         await ctx.send(f"You are no longer **{role}**... probably.")
 
     @commands.command()
+    @_bot_role_check()
     async def selfrole(self, ctx, *, role: SelfRole):
         """Gives or removes a self-assignable role (and only a self-assignable role)
 
@@ -193,6 +205,10 @@ class Roles(Cog):
                             (f"You are now **{role}**... I think.", author.add_roles))
         await role_action(role)
         await ctx.send(msg)
+
+    iam_error = _role_error(iam, 'give you a role')
+    iamnot_error = _role_error(iamnot, 'take away your role')
+    selfrole_error = _role_error(selfrole, 'give or take your role')
 
     # ----------- Auto-Assign Role commands -----------------
     @commands.command(name='autorole', aliases=['aar'])
@@ -242,6 +258,7 @@ class Roles(Cog):
 
     @commands.command(name='addrole', aliases=['ar'])
     @commands.has_permissions(manage_roles=True)
+    @_bot_role_check()
     async def add_role(self, ctx, member: discord.Member, *, role: LowerRole):
         """Adds a role to a user
 
@@ -255,6 +272,7 @@ class Roles(Cog):
 
     @commands.command(name='removerole', aliases=['rr'])
     @commands.has_permissions(manage_roles=True)
+    @_bot_role_check()
     async def remove_role(self, ctx, member: discord.Member, *, role: LowerRole):
         """Removes a role from a user
 
@@ -269,6 +287,7 @@ class Roles(Cog):
 
     @commands.command(name='createrole', aliases=['crr'])
     @commands.has_permissions(manage_roles=True)
+    @_bot_role_check()
     async def create_role(self, ctx, *, name: str):
         """Creates a role with a given name."""
         reason = f'Created through command from {ctx.author} ({ctx.author.id})'
@@ -277,6 +296,7 @@ class Roles(Cog):
 
     @commands.command(name='deleterole', aliases=['delr'])
     @commands.has_permissions(manage_roles=True)
+    @_bot_role_check()
     async def delete_role(self, ctx, *, role: LowerRole):
         """Deletes a role from the server
 
@@ -285,43 +305,10 @@ class Roles(Cog):
         await role.delete()
         await ctx.send(f"Successfully deleted **{role.name}**!")
 
-    @add_role.error
-    @remove_role.error
-    @create_role.error
-    @delete_role.error
-    async def role_error(self, ctx, error):
-        if not isinstance(error, commands.CommandInvokeError):
-            return
-
-        verb = ctx.command.callback.__name__.partition('_')[0]
-        role = ctx.kwargs['name'] if verb == 'create' else ctx.kwargs['role']
-
-        print(type(error.original))
-        if isinstance(error.original, discord.Forbidden):
-            if not ctx.guild.me.permissions_in(ctx.channel).manage_roles:
-                await ctx.send('{ctx.author.mention}, I need the Manage roles permission pls...')
-
-            # We can't modify an add, remove, or delete an integration role, obviously.
-            elif getattr(role, 'managed', False):       # ->createrole uses a string for the role.
-                await ctx.send(f"{role} is an intergration role, I can't do anything with that!")
-
-            # Assume the role was too high otherwise.
-            else:
-                await ctx.send('The role was higher than my highest role. '
-                               'Check the hierachy please! \U0001f605')
-
-        elif isinstance(error.original, discord.HTTPException):      # Something strange happened.
-            # will probably refactor this out into another function later.
-            if verb.endswith('e'):
-                verb = verb[:-1]
-
-            message = (
-                f'{verb.title()}ing {role} failed for some reason... '
-                'Send this error to the dev if you can:\n'
-                f'{type(error).__name__}: {error}'
-            )
-
-            await ctx.send(message)
+    add_role_error = _role_error(add_role, 'give them a role')
+    remove_role_error = _role_error(remove_role, 'take any roles from them')
+    create_role_error = _role_error(create_role, 'create a role')
+    delete_role_error = _role_error(delete_role, 'delete a role')
 
     async def on_member_join(self, member):
         await self._add_auto_role(member)

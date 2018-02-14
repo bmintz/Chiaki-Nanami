@@ -589,9 +589,15 @@ class Trivia(Cog):
 
     if os.path.isdir(POKEMON_PATH):
         @trivia.command(name='pokemon')
+        @commands.bot_has_permissions(attach_files=True)
         async def trivia_pokemon(self, ctx):
             """Starts a game of "Who's That Pokemon?" """
             await self._trivia(ctx, PokemonTriviaSession)
+
+        @trivia_pokemon.error
+        async def trivia_pokemon_error(self, ctx, error):
+            if isinstance(error, commands.BotMissingPermissions):
+                await ctx.bot_missing_perms(error.missing_perms, action='upload Pokemon images')
     else:
         logger.warn(f'{POKEMON_PATH} directory not found. Could not add Pokemon Trivia.')
 

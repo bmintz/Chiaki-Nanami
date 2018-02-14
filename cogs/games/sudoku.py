@@ -674,6 +674,7 @@ class Sudoku(Cog):
         return getattr(Board, difficulties[index])()
 
     @commands.command()
+    @commands.bot_has_permissions(add_reactions=True)
     async def sudoku(self, ctx, difficulty=None):
         if self.sudoku_sessions.session_exists(ctx.author.id):
             return await ctx.send('Please finish your other Sudoku game first.')

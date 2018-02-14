@@ -310,6 +310,7 @@ class OtherStuffs(Cog):
         return _calculate_rating(user, partner)
 
     @commands.command()
+    @commands.bot_has_permissions(attach_files=True)
     async def ship(self, ctx, user1: discord.Member, user2: discord.Member=None):
         """Ships two users together, and scores accordingly."""
         if user2 is None:
@@ -473,6 +474,7 @@ class OtherStuffs(Cog):
         await paginator.interact()
 
     @commands.command(name='10s')
+    @commands.bot_has_permissions(add_reactions=True)
     async def ten_seconds(self, ctx):
         """Starts a 10s test. How well can you judge 10 seconds?"""
         title = f'10 Seconds Test - {ctx.author}'
