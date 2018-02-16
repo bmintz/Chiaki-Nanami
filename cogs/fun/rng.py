@@ -170,6 +170,7 @@ class RNG(Cog):
         self.bot = bot
 
     @commands.command(name="8ball", aliases=['8'])
+    @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def ball(self, ctx, *, question: str):
         """...it's a 8-ball"""
         if not question.endswith('?'):
@@ -285,6 +286,7 @@ class RNG(Cog):
         await ctx.send(f'{build} {cwass}')
 
     @random.command(aliases=['color'])
+    @commands.bot_has_permissions(embed_links=True)
     async def colour(self, ctx):
         """Generates a random colo(u)r."""
         colour = discord.Colour(random.randint(0, 0xFFFFFF))

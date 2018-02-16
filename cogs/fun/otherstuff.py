@@ -210,6 +210,7 @@ class OtherStuffs(Cog):
             _special_pairs = await load_async(os.path.join('data', 'pairings.json'))
 
     @commands.group(invoke_without_command=True, aliases=['c+v'])
+    @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def copypasta(self, ctx, index: int, *, name=None):
         """Returns a copypasta from an index and name"""
         copy_pasta = self.copypastas[index]
@@ -310,7 +311,7 @@ class OtherStuffs(Cog):
         return _calculate_rating(user, partner)
 
     @commands.command()
-    @commands.bot_has_permissions(attach_files=True)
+    @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def ship(self, ctx, user1: discord.Member, user2: discord.Member=None):
         """Ships two users together, and scores accordingly."""
         if user2 is None:
@@ -355,6 +356,7 @@ class OtherStuffs(Cog):
         await message.edit(embed=embed)
 
     @commands.command()
+    @commands.bot_has_permissions(embed_links=True)
     async def slap(self, ctx, target: discord.Member=None):
         """Slaps a user"""
         # This can be refactored somehow...
@@ -474,7 +476,7 @@ class OtherStuffs(Cog):
         await paginator.interact()
 
     @commands.command(name='10s')
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
     async def ten_seconds(self, ctx):
         """Starts a 10s test. How well can you judge 10 seconds?"""
         title = f'10 Seconds Test - {ctx.author}'

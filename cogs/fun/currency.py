@@ -327,7 +327,7 @@ class Money(Cog):
             await ctx.send(file=file, embed=embed)
 
     @commands.command()
-    @commands.bot_has_permissions(attach_files=True)
+    @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def flip(self, ctx, side_or_number: union(Side, int)=None, amount: positive_int = None):
         """Flips a coin.
 
