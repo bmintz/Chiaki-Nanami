@@ -167,6 +167,7 @@ class Help(Cog):
         await ctx.send(embed=tip_embed)
 
     @commands.command()
+    @commands.bot_has_permissions(embed_links=True)
     async def tip(self, ctx, number: positive_index = None):
         """Shows a Chiaki Tip via number.
 
@@ -184,6 +185,7 @@ class Help(Cog):
         await TipPaginator(ctx, self.tips_list[:current_index]).interact()
 
     @commands.command()
+    @commands.bot_has_permissions(embed_links=True)
     async def randomtip(self, ctx):
         """Shows a random tip.
 

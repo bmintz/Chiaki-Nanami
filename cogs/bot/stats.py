@@ -112,6 +112,7 @@ class Stats(Cog):
         await self._show_top_commands(ctx, n, results)
 
     @commands.command(name='stats')
+    @commands.bot_has_permissions(embed_links=True)
     async def stats(self, ctx):
         """Shows some general statistics about the bot.
 

@@ -27,6 +27,7 @@ class Meta(Cog):
     """Need some info about the bot? Here you go!"""
 
     @commands.command()
+    @commands.bot_has_permissions(embed_links=True)
     async def about(self, ctx):
         """Shows some info about the bot."""
         bot = ctx.bot
