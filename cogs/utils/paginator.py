@@ -58,6 +58,16 @@ def page(emoji):
     return decorator
 
 
+paginated = functools.partial(
+    commands.bot_has_permissions,
+    embed_links=True,
+    add_reactions=True,
+)
+
+# Extract the predicate from the check...
+_validate_context = paginated()(lambda: 0).__commands_checks__[0]
+
+
 _extra_remarks = [
     'Does nothing',
     'Does absolutely nothing',
@@ -172,6 +182,8 @@ class BaseReactionPaginator:
     async def interact(self, *, timeout=120, delete_after=True):
         """Creates an interactive session."""
         ctx = self.context
+        _validate_context(ctx)
+
         self._current = starting_embed = await maybe_awaitable(self.default)
         self._message = message = await ctx.send(embed=starting_embed)
 
