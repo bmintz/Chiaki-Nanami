@@ -99,8 +99,6 @@ class BaseReactionPaginator:
         self._paginating = True
         self._message = None
         self._current = None
-        # in case a custom destination was specified, this is meant to be internal
-        self._destination = None
 
     def __init_subclass__(cls, *, stop='\N{BLACK SQUARE FOR STOP}', **kwargs):
         super().__init_subclass__(**kwargs)
@@ -171,12 +169,11 @@ class BaseReactionPaginator:
         # If you would like stop pagination, simply call stop()
         await self._message.add_reaction(self.stop.__reaction_emoji__)
 
-    async def interact(self, destination=None, *, timeout=120, delete_after=True):
+    async def interact(self, *, timeout=120, delete_after=True):
         """Creates an interactive session."""
         ctx = self.context
-        self._destination = destination = destination or ctx
         self._current = starting_embed = await maybe_awaitable(self.default)
-        self._message = message = await destination.send(embed=starting_embed)
+        self._message = message = await ctx.send(embed=starting_embed)
 
         def _put_reactions():
             # We need at least the stop button for killing the pagination
@@ -441,10 +438,10 @@ class ListPaginator(BaseReactionPaginator):
             if not (small and emoji in fast_forwards):
                 await self._message.add_reaction(emoji)
 
-    async def interact(self, destination=None, *, timeout=120, delete_after=True):
+    async def interact(self, *, timeout=120, delete_after=True):
         bot = self.context.bot
         with bot.temp_listener(self.on_reaction_remove):
-            await super().interact(destination, timeout=timeout, delete_after=delete_after)
+            await super().interact(timeout=timeout, delete_after=delete_after)
 
     async def on_reaction_remove(self, reaction, user):
         self._extra.discard(reaction.emoji)
