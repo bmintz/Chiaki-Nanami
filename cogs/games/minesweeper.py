@@ -655,6 +655,9 @@ class MinesweeperSession:
         # This can probably be moved away and cleaned up somehow but whatever
         try:
             await f
+        except commands.BotMissingPermissions as e:
+            await self._ctx.bot_missing_perms(e.missing_perms, action='play Minesweeper')
+            return None, -1
         except asyncio.CancelledError:
             # The future would be cancelled above as any pending futures would
             # be cancelled.
