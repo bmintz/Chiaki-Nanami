@@ -146,6 +146,7 @@ __warned_about_bad_element = set()
 
 def _make_rps_command(name, game_type):
     @commands.command(name=name, help=game_type.title)
+    @commands.bot_has_permissions(embed_links=True)
     async def command(self, ctx, *, elem: RPSElement(game_type) = None):
         if elem is None:
             embed = game_type.element_embed()

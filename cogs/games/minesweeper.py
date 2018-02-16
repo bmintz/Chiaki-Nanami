@@ -1055,7 +1055,7 @@ class Minesweeper(Cog):
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     @not_playing_minesweeper()
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
     async def minesweeper(self, ctx, level: Level = None):
         """Starts a game of Minesweeper"""
         with self._create_session(ctx):
@@ -1078,7 +1078,7 @@ class Minesweeper(Cog):
 
     @minesweeper.command(name='custom')
     @not_playing_minesweeper()
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
     async def minesweeper_custom(self, ctx, width: int, height: int, mines: int):
         """Starts a custom game of Minesweeper"""
         with self._create_session(ctx):

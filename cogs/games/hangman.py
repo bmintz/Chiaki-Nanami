@@ -204,6 +204,7 @@ class Hangman(Cog):
         return c
 
     @commands.group(invoke_without_command=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def hangman(self, ctx, category):
         """Starts a game of hangman.
 

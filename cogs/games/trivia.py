@@ -561,6 +561,7 @@ class Trivia(Cog):
             await session.run()
 
     @commands.group(invoke_without_command=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def trivia(self, ctx):
         """Starts a game of trivia"""
         await self._trivia(ctx, DefaultTriviaSession)
@@ -576,6 +577,7 @@ class Trivia(Cog):
             inst.stop()
 
     @trivia.command(name='otdb', cls=DeprecatedCommand, instead='trivia')
+    @commands.bot_has_permissions(embed_links=True)
     async def trivia_otdb(self, ctx):
         """Deprecated, use `{prefix}trivia` instead"""
         await ctx.invoke(self.trivia)
@@ -583,13 +585,14 @@ class Trivia(Cog):
     if DiepioTriviaSession._questions:
         @commands.check(lambda ctx: ctx.guild.id in ctx.cog.diepio_guilds)
         @trivia.command(name='diepio', hidden=True)
+        @commands.bot_has_permissions(embed_links=True)
         async def trivia_diepio(self, ctx):
             """Starts a game of diep.io trivia"""
             await self._trivia(ctx, DiepioTriviaSession)
 
     if os.path.isdir(POKEMON_PATH):
         @trivia.command(name='pokemon')
-        @commands.bot_has_permissions(attach_files=True)
+        @commands.bot_has_permissions(embed_links=True, attach_files=True)
         async def trivia_pokemon(self, ctx):
             """Starts a game of "Who's That Pokemon?" """
             await self._trivia(ctx, PokemonTriviaSession)

@@ -87,9 +87,13 @@ class TwoPlayerGameCog(Cog):
         cmd_name = cmd or cls.__name__.lower()
 
         group_help = inspect.getdoc(cls._game).format(name=cls.name)
-        group_command = commands.group(
+        # We can't use the decorator because all the check decorator does is
+        # add the predicate to an attribute called __commands_checks__, which
+        # gets deleted after the first command.
+        group = commands.group(
             name=cmd_name, aliases=aliases, help=group_help, invoke_without_command=True
-        )(cls._game)
+        )
+        group_command = group(commands.bot_has_permissions(embed_links=True)(cls._game))
         setattr(cls, f'{cmd_name}', group_command)
 
         gc = group_command.command

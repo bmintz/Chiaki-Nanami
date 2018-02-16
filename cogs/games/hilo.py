@@ -135,7 +135,7 @@ class HigherOrLower(Cog, name='Higher or Lower?'):
         self.user_sessions = SessionManager()     # because only one game per user
 
     @commands.group(invoke_without_command=True)
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
     async def hilo(self, ctx):
         """Starts a game of Higher or Lower"""
         if self.channel_sessions.session_exists(ctx.channel.id):

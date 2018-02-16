@@ -274,6 +274,7 @@ class Racing(Cog):
         self.manager = SessionManager()
 
     @commands.group(invoke_without_command=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def race(self, ctx, amount: int = None):
         """Starts a race. Or if one has already started, joins one.
 
