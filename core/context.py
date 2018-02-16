@@ -2,6 +2,7 @@ import asyncio
 import collections
 import contextlib
 import discord
+import functools
 import random
 import sys
 
@@ -245,3 +246,9 @@ class Context(commands.Context):
         )
 
         return self.send(message)
+
+    def bot_has_permissions(self, **permissions):
+        perms = self.channel.permissions_for(self.me)
+        return all(getattr(perms, perm) == value for perm, value in permissions.items())
+
+    bot_has_embed_links = functools.partialmethod(bot_has_permissions, embed_links=True)
