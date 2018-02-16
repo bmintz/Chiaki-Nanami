@@ -108,9 +108,7 @@ class Help(Cog):
                                 name='plah', aliases=['PLAH'], hidden=True)
     Halp = default_help_command(str.title, name='Halp', hidden=True)
 
-    @commands.command()
-    async def invite(self, ctx):
-        """...it's an invite"""
+    async def _invite_embed(self, ctx):        
         invite = (discord.Embed(description=self.bot.description, title=str(self.bot.user), colour=self.bot.colour)
                   .set_thumbnail(url=self.bot.user.avatar_url_as(format=None))
                   .add_field(name="Want me in your server?",
@@ -123,6 +121,19 @@ class Help(Cog):
                              value="[Check out the source code!](https://github.com/Ikusaba-san/Chiaki-Nanami/tree/rewrite)", inline=False)
                   )
         await ctx.send(embed=invite)
+
+    @commands.command()
+    async def invite(self, ctx):
+        """...it's an invite"""
+        if ctx.bot_has_embed_links():
+            await self._invite_embed()
+        else:
+            content = (
+                'Okay~ Here you go... I think. ^.^'
+                f'Full Permissions: <{self.bot.invite_url}>'
+                f'Minimal Permissions: <{self.bot.minimal_invite_url}>'
+            )
+            await ctx.send(content)
 
     @commands.command(aliases=['cogs', 'mdls'])
     async def modules(self, ctx):

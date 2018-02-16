@@ -377,24 +377,32 @@ class Permissions(Cog):
     async def _display_embed(self, ctx, name=None, *entities, whitelist, type_):
         colour, action, icon = _value_embed_mappings[whitelist]
 
-        embed = (discord.Embed(colour=colour)
-                 .set_author(name=f'{type_} {action}!', icon_url=icon)
-                 )
+        def name_values():
+            sorted_entities = sorted(entities, key=_get_class_name)
+            for k, group in itertools.groupby(sorted_entities, _get_class_name):
+                group = list(group)
+                name = f'{k}{"s" * (len(group) != 1)}'
+                value = truncate(', '.join(map(str, group)), 1024, '...')
+                yield name, value
 
-        if name not in {ALL_MODULES_KEY, None}:
+        if ctx.bot_has_embed_links():
+            embed = (discord.Embed(colour=colour)
+                     .set_author(name=f'{type_} {action}!', icon_url=icon)
+                     )
+
+            if name not in {ALL_MODULES_KEY, None}:
+                cog, _, name = _extract_from_node(name)
+                embed.add_field(name=type_, value=name or cog)
+
+            for name, value in name_values():
+                embed.add_field(name=name, value=value, inline=False)
+
+            await ctx.send(embed=embed)
+        else:
             cog, _, name = _extract_from_node(name)
-            embed.add_field(name=type_, value=name or cog)
-
-        sorted_entities = sorted(entities, key=_get_class_name)
-
-        for k, group in itertools.groupby(sorted_entities, _get_class_name):
-            group = list(group)
-            name = f'{k}{"s" * (len(group) != 1)}'
-            value = truncate(', '.join(map(str, group)), 1024, '...')
-
-            embed.add_field(name=name, value=value, inline=False)
-
-        await ctx.send(embed=embed)
+            joined = '\n'.join(f'**{name}:** {value}' for name, value in name_values())
+            message = f'Successfully {action} {type_.lower()} {name or cog}!\n\n{joined}'
+            await ctx.send(message)
 
     async def _set_permissions_command(self, ctx, name, *entities, whitelist, type_):
         entities = entities or (Server(ctx.guild), )
@@ -537,19 +545,27 @@ class Permissions(Cog):
         # things = channels, members
 
         colour, action = _plonk_embed_mappings[plonk]
-        embed = (discord.Embed(colour=colour)
-                 .set_author(name=f'{action.title()} successful!', icon_url=PLONK_ICON)
-                 )
 
-        for thing in map(list, partition(lambda e: isinstance(e, discord.TextChannel), entries)):
-            if not thing:
-                continue
+        def name_values():
+            for thing in map(list, partition(lambda e: isinstance(e, discord.TextChannel), entries)):
+                if not thing:
+                    continue
 
-            name = f'{_get_class_name(thing[0])}{"s" * (len(thing) != 1)} {action}ed'
-            value = truncate(', '.join(map(str, thing)), 1024, '...')
-            embed.add_field(name=name, value=value, inline=False)
+                name = f'{_get_class_name(thing[0])}{"s" * (len(thing) != 1)}'
+                value = truncate(', '.join(map(str, thing)), 1024, '...')
+                yield name, value
 
-        await ctx.send(embed=embed)
+        if ctx.bot_has_embed_links():
+            embed = (discord.Embed(colour=colour)
+                     .set_author(name=f'{action.title()} successful!', icon_url=PLONK_ICON)
+                     )
+            for name, value in name_values():
+                embed.add_field(name=name, value=value, inline=False)
+            await ctx.send(embed=embed)
+        else:
+            joined = '\n'.join(f'**{name}:** {value}' for name, value in name_values())
+            message = f'Successfully {ctx.command}d\n{joined}'
+            await ctx.send(message)
 
     @commands.command(aliases=['plonk'])
     @commands.has_permissions(manage_guild=True)

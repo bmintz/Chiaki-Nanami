@@ -366,14 +366,20 @@ class Moderator(Cog):
         title = f'{total_deleted} messages{second_part} removed.'
 
         joined = '\n'.join(itertools.starmap('**{0}**: {1}'.format, spammers.most_common()))
-        spammer_stats = joined or discord.Embed.Empty
 
-        embed = (discord.Embed(colour=0x00FF00, description=spammer_stats)
-                 .set_author(name=title)
-                 )
-        embed.timestamp = ctx.message.created_at
+        if ctx.bot_has_embed_links():
+            spammer_stats = joined or discord.Embed.Empty
 
-        await ctx.send(embed=embed, delete_after=20)
+            embed = (discord.Embed(colour=0x00FF00, description=spammer_stats)
+                     .set_author(name=title)
+                     )
+            embed.timestamp = ctx.message.created_at
+
+            await ctx.send(embed=embed, delete_after=20)
+        else:
+            message = f'{title}\n{joined}'
+            await ctx.send(message, delete_after=20)
+
         await asyncio.sleep(20)
         with contextlib.suppress(discord.HTTPException):
             await ctx.message.delete()
