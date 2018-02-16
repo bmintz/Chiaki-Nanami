@@ -9,7 +9,7 @@ from discord.ext import commands
 from ..utils.converter import BotCommand
 from ..utils.formats import truncate
 from ..utils.subprocesses import run_subprocess
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import ListPaginator, paginated
 
 from core.cog import Cog
 
@@ -112,6 +112,7 @@ class Meta(Cog):
         await ctx.send(url)
 
     @commands.command()
+    @paginated()
     async def commits(self, ctx, limit=10):
         """Shows the latest changes made to the bot.
 
