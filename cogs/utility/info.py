@@ -255,6 +255,8 @@ class ChannelPaginator(ListPaginator):
                 .set_footer(text=f'Page {idx + 1}/{len(self)} | Category ID: {category_id}')
                 )
 
+embedded = functools.partial(commands.bot_has_permissions, embed_links=True)
+
 
 class Information(Cog):
     """Info related commands"""
@@ -331,6 +333,7 @@ class Information(Cog):
                 )
 
     @commands.group()
+    @embedded()
     async def info(self, ctx):
         """Super-command for all info-related commands"""
         if ctx.invoked_subcommand is not None:
@@ -349,6 +352,7 @@ class Information(Cog):
 
     @info.command(name='user')
     @commands.guild_only()
+    @embedded()
     async def info_user(self, ctx, *, member: disambiguate.DisambiguateMember=None):
         """Gets some userful info because why not"""
         if member is None:
@@ -357,18 +361,21 @@ class Information(Cog):
 
     @info.command(name='mee6')
     @commands.guild_only()
+    @embedded()
     async def info_mee6(self, ctx, *, member: disambiguate.DisambiguateMember=None):
         """Equivalent to `{prefix}rank`"""
         await ctx.invoke(self.rank, member=member)
 
     @commands.command()
     @commands.guild_only()
+    @embedded()
     async def userinfo(self, ctx, *, member: disambiguate.DisambiguateMember=None):
         """Gets some userful info because why not"""
         await ctx.invoke(self.info_user, member=member)
 
     @commands.command()
     @commands.guild_only()
+    @embedded()
     async def rank(self, ctx, *, member: disambiguate.DisambiguateMember=None):
         """Gets mee6 info... if it exists"""
         if member is None:
@@ -408,6 +415,7 @@ class Information(Cog):
         await ctx.send(embed=mee6_embed)
 
     @info.command(name='role')
+    @embedded()
     async def info_role(self, ctx, *, role: disambiguate.DisambiguateRole):
         """Shows information about a particular role."""
         server = ctx.guild
@@ -492,6 +500,7 @@ class Information(Cog):
                 )
 
     @info.command(name='channel')
+    @embedded()
     async def info_channel(self, ctx, channel: union(discord.TextChannel, discord.VoiceChannel)=None):
         """Shows info about a voice or text channel."""
         if channel is None:
@@ -667,6 +676,7 @@ class Information(Cog):
 
     @commands.command(aliases=['perms'])
     @commands.guild_only()
+    @embedded()
     async def permissions(self, ctx, *, member_or_role: disambiguate.union(discord.Member, discord.Role)=None):
         """Shows either a member's Permissions, or a role's Permissions.
 
@@ -683,6 +693,7 @@ class Information(Cog):
 
     @commands.command(aliases=['permsin'])
     @commands.guild_only()
+    @embedded()
     async def permissionsin(self, ctx, *, member: disambiguate.DisambiguateMember=None):
         """Shows a member's Permissions *in the channel*.
 
