@@ -709,6 +709,7 @@ class Information(Cog):
         await self._display_permissions(ctx, member, permissions, extra=f'in #{ctx.channel}')
 
     @commands.command(aliases=['av'])
+    @embedded()
     async def avatar(self, ctx, *, user: disambiguate.DisambiguateMember=None):
         """Shows a member's avatar.
 
