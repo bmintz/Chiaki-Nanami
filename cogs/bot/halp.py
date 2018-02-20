@@ -1,3 +1,4 @@
+import copy
 import discord
 import json
 import random
@@ -66,11 +67,31 @@ class HelpCommand(BotCommand):
             raise commands.BadArgument(random.choice(self._choices))
 
 
-def default_help_command(func=lambda s: s, **kwargs):
-    @commands.command(help=func("Shows this message and stuff"), **kwargs)
-    async def help_command(self, ctx, *, command: HelpCommand=None):
-        await default_help(ctx, command, func=func)
-    return help_command
+async def _dm_send_fail(ctx, error):
+    old_send = ctx.send
+
+    async def new_send(content, **kwargs):
+        content += ' You can also turn on DMs if you wish.'
+        await old_send(content, **kwargs)
+
+    ctx.send = new_send
+    action = f'send {ctx.invoked_with}'
+    await ctx.bot_missing_perms(error.missing_perms, action=action)
+
+
+async def _maybe_dm_help(ctx, paginator, error):
+    # We need to create a copy of the context object so that we can
+    # keep an old copy if a logger or something wants to use it.
+    new_ctx = copy.copy(ctx)
+    new_ctx.channel = await ctx.author.create_dm()
+    paginator.context = new_ctx
+
+    try:
+        await paginator.interact()
+    except discord.HTTPException:
+        # Avoid making another copy of the context if we don't need to.
+        new_ctx.channel = ctx.channel
+        await _dm_send_fail(new_ctx, error)
 
 
 async def default_help(ctx, command=None, func=lambda s: s):
@@ -79,7 +100,18 @@ async def default_help(ctx, command=None, func=lambda s: s):
     else:
         paginator = HelpCommandPage(ctx, command, func)
 
-    await paginator.interact()
+    try:
+        await paginator.interact()
+    except commands.BotMissingPermissions as e:
+        await _maybe_dm_help(ctx, paginator, e)
+
+
+def default_help_command(func=lambda s: s, **kwargs):
+    @commands.command(help=func("Shows this message and stuff"), **kwargs)
+    async def help_command(self, ctx, *, command: HelpCommand=None):
+        await default_help(ctx, command, func=func)
+    return help_command
+
 
 
 _bracket_repls = {
