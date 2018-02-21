@@ -179,6 +179,7 @@ class TwoPlayerGameCog(Cog):
 
         put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
 
+        await ctx.release()
         with cm:
             await self._invite_member(ctx, member)
             with put_in_running( _TwoPlayerWaiter(ctx.author, member)):

@@ -217,6 +217,7 @@ class Hangman(Cog):
         words = await self._get_category(ctx, category)
         word = random.choice(words)
 
+        await ctx.release()
         with self.manager.temp_session(ctx.channel, HangmanSession(ctx, word)) as inst:
             success, message = await inst.run()
             if success is None:
