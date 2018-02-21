@@ -184,6 +184,12 @@ class RussianRoulette(Cog):
             except InvalidGameState as e:
                 return await ctx.send(e)
 
+            # Release the connection here because there's a possibility of a high
+            # volume of people invoking this command. If we run into a rate-limit,
+            # this can prove fatal, as Chiaki has to sleep for a certain amount
+            # of time. This can cause her to hang the connection longer that she
+            # needs to.
+            await ctx.release()
             await ctx.send(f'Alright {ctx.author.mention}. Good luck.')
 
 
