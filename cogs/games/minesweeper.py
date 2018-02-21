@@ -426,8 +426,10 @@ class _Controller(BaseReactionPaginator):
         """Help"""
         if self._help_future.done():
             await self._game.edit(0x90A4AE, header='Currently on the help page...')
-            coro = _MinesweeperHelp(self.context, self._game).interact(timeout=300)
-            self._help_future = asyncio.ensure_future(coro)
+            paginator = _MinesweeperHelp(self.context, self._game)
+            self._help_future = asyncio.ensure_future(paginator.interact(
+                timeout=300, release_connection=False
+            ))
 
     @page('\N{BLACK SQUARE FOR STOP}')
     def stop(self):
@@ -638,7 +640,7 @@ class MinesweeperSession:
         f = asyncio.ensure_future(self._loop())
         tasks = [
             f,
-            self._controller.interact(timeout=None, delete_after=False)
+            self._controller.interact(timeout=None, delete_after=False, release_connection=False)
         ]
 
         # TODO: Timing context manager?
@@ -705,7 +707,7 @@ class _Leaderboard(BaseReactionPaginator):
                        ORDER BY time
                        LIMIT 10;
                     """
-            records = await self.context.db.fetch(query, difficulty.value)
+            records = await self.context.pool.fetch(query, difficulty.value)
             if not records:
                 embed.description = 'No records, yet. \N{WINKING FACE}'
             else:

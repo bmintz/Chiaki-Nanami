@@ -592,7 +592,7 @@ class SudokuSession:
     async def run(self):
         coros = [
            self._loop(),
-           self._controller.interact(timeout=None, delete_after=False),
+           self._controller.interact(timeout=None, delete_after=False, release_connection=False),
         ]
 
         await self._ctx.release()

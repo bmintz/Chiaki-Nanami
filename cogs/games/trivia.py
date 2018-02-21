@@ -556,6 +556,7 @@ class Trivia(Cog):
                 "A trivia game's in progress right now. Join in and have some fun!"
             )
 
+        await ctx.release()
         session = cls(ctx)
         with self._create_session(ctx, session):
             await session.run()
