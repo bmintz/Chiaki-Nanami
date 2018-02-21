@@ -11,6 +11,7 @@ import uuid
 from discord.ext import commands
 
 from ..utils.converter import number
+from ..utils.misc import emoji_url
 
 from core.cog import Cog
 from core.errors import InvalidUserArgument
@@ -122,6 +123,14 @@ BALL_ANSWERS = [
 
 _8default = _8BallAnswer('...\N{THINKING FACE}', 0x009688)
 
+_8s = ['Eight', '8', 'Ate', 'Chiaki', '9']
+_balls = ['ball', 'bool', 'bowl', 'bulli', 'smol']
+
+def _random_8ball_name():
+    eight = random.choice(_8s)
+    ball = random.choices(_balls, weights=[.5] + [.1] * (len(_balls) - 1))[0]
+    return eight + ball
+
 
 _default_letters = string.ascii_letters + string.digits
 
@@ -173,28 +182,27 @@ class RNG(Cog):
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def ball(self, ctx, *, question: str):
         """...it's a 8-ball"""
-        if not question.endswith('?'):
-            return await ctx.send(f"{ctx.author.mention}, that's not a question, I think.")
+        name = _random_8ball_name()
+        answer = random.choice(BALL_ANSWERS)
+        description = (
+            f'\N{BLACK QUESTION MARK ORNAMENT}: {question}\n'
+            '\N{BILLIARDS}: {}'
+        )
 
-        colour = discord.Colour(random.randint(0, 0xFFFFFF))
-
-        eight_ball_field_name = '\N{BILLIARDS} 8-ball'
-        embed = (discord.Embed(colour=colour)
-                 .add_field(name='\N{BLACK QUESTION MARK ORNAMENT} Question', value=question)
-                 .add_field(name=eight_ball_field_name, value='\u200b', inline=False)
+        embed = (discord.Embed(colour=random.randint(0, 0xFFFFFF))
+                 .set_author(name=name, icon_url=emoji_url('\N{BILLIARDS}'))
                  )
 
-        msg = await ctx.send(content=ctx.author.mention, embed=embed)
-
-        new_colour = discord.Colour.from_rgb(*(round(c * 0.7) for c in colour.to_rgb()))
-        default = _8default._replace(colour=new_colour)
+        await ctx.release()
 
         async with ctx.typing():
-            for answer in (default, random.choice(BALL_ANSWERS)):
-                await asyncio.sleep(random.uniform(0.75, 1.25) * 2)
-                embed.colour = answer.colour
-                embed.set_field_at(-1, name=eight_ball_field_name, value=answer.answer, inline=False)
-                await msg.edit(embed=embed)
+            embed.description = description.format('\N{THINKING FACE}')
+            msg = await ctx.send(content=ctx.author.mention, embed=embed)
+            await asyncio.sleep(random.uniform(0.75, 2))
+
+            embed.description = description.format(answer.answer)
+            embed.colour = answer.colour
+            await msg.edit(embed=embed)
 
     @commands.command(usage='Nadeko Salt PvPCraft mee6 "Chiaki Nanami"')
     async def choose(self, ctx, *choices: commands.clean_content):
