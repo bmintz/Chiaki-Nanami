@@ -655,13 +655,17 @@ class MinesweeperSession:
         # This can probably be moved away and cleaned up somehow but whatever
         try:
             await f
-        except commands.BotMissingPermissions as e:
-            await self._ctx.bot_missing_perms(e.missing_perms, action='play Minesweeper')
-            return None, -1
         except asyncio.CancelledError:
             # The future would be cancelled above as any pending futures would
-            # be cancelled.
-            await delete_edit(0, 'Minesweeper Stopped')
+            # be cancelled. This will only be executed if the controller had
+            # finished polling, either cleanly or with error, instead of the
+            # game loop.
+            try:
+                await next(iter(done))
+            except commands.BotMissingPermissions as e:
+                await self._ctx.bot_missing_perms(e.missing_perms, action='play Minesweeper')
+            else:
+                await delete_edit(0, 'Minesweeper Stopped')
             return None, -1
         except asyncio.TimeoutError:
             await delete_edit(0, 'Out of time!')
