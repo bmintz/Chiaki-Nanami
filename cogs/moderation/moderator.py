@@ -808,7 +808,7 @@ class Moderator(Cog):
         @command.error
         async def error(self, ctx, error):
             if isinstance(error, commands.BotMissingPermissions):
-                await ctx.bot_missing_perms(error.missing_permissions, action=action)
+                await ctx.bot_missing_perms(error.missing_perms, action=action)
         return error
 
     mute_error = _error(mute, 'mute members')
