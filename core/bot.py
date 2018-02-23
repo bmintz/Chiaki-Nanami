@@ -337,6 +337,9 @@ class Chiaki(commands.Bot):
         if not isinstance(error, commands.CommandNotFound):
             self.command_counter['failed'] += 1
 
+        if hasattr(ctx.command, 'on_error'):
+            return
+
         cause = error.__cause__
         if isinstance(error, errors.ChiakiException):
             await ctx.send(str(error))
