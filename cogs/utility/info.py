@@ -733,6 +733,4 @@ class Information(Cog):
 
 
 def setup(bot):
-    if not hasattr(bot, 'command_leaderboard'):
-        bot.command_leaderboard = collections.Counter()
     bot.add_cog(Information(bot))

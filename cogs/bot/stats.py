@@ -1,3 +1,4 @@
+import collections
 import discord
 import datetime
 import itertools
@@ -245,4 +246,6 @@ class Stats(Cog):
 
 
 def setup(bot):
+    if not hasattr(bot, 'command_leaderboard'):
+        bot.command_leaderboard = collections.Counter()
     bot.add_cog(Stats(bot))
