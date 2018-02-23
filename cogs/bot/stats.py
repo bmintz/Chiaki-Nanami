@@ -180,6 +180,10 @@ class Stats(Cog):
         # TODO
 
     async def on_command_error(self, ctx, error):
+        # command_counter['failed'] += 0 sets the 'failed' key. We don't want that.
+        if not isinstance(error, commands.CommandNotFound):
+            self.bot.command_counter['failed'] += 1
+
         error = getattr(error, 'original', error)
 
         if isinstance(error, _ignored_exceptions):

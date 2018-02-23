@@ -333,10 +333,6 @@ class Chiaki(commands.Bot):
                 await ctx.command.dispatch_error(ctx, exc)
             return
 
-        # command_counter['failed'] += 0 sets the 'failed' key. We don't want that.
-        if not isinstance(error, commands.CommandNotFound):
-            self.command_counter['failed'] += 1
-
         if hasattr(ctx.command, 'on_error'):
             return
 
