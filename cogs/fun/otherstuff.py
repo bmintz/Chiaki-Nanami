@@ -179,13 +179,6 @@ def _calculate_rating(user1, user2):
 
 # --------------- End ship stuffs ---------------------
 
-PRE_PING_REMARKS = [
-    # 'Pinging b1nzy',
-    'hacking the mainframe...',
-    'We are being rate-limited.',
-    'Pong?',
-]
-
 TEN_SEC_REACTION = '\N{BLACK SQUARE FOR STOP}'
 
 
@@ -287,44 +280,6 @@ class OtherStuffs(Cog):
                  .set_image(url='attachment://test.png')
                  )
         await ctx.send(file=file, embed=embed)
-
-    @commands.command()
-    async def ping(self, ctx):
-        """Your average ping command."""
-        # Set the embed for the pre-ping
-        clock = random.randint(0x1F550, 0x1F567)  # pick a random clock
-        remark, icon = random.choice(PRE_PING_REMARKS), chr(clock)
-        can_embed = ctx.bot_has_embed_links()
-
-        if can_embed:
-            embed = discord.Embed(colour=0xFFC107)
-            embed.set_author(name=remark, icon_url=emoji_url(icon))
-            coro = ctx.send(embed=embed)
-        else:
-            coro = ctx.send(f"{icon} {remark}")
-
-        # Do the classic ping
-        start = time.perf_counter()     # fuck time.monotonic()
-        message = await coro
-        end = time.perf_counter()       # fuck time.monotonic()
-        ms = (end - start) * 1000
-
-        if can_embed:
-            # If the bot can't embed this won't be defined, but this
-            # path won't be reached anyways.
-            embed.colour = 0x4CAF50
-            embed.set_author(name='Poing!', icon_url=emoji_url('\U0001f3d3'))
-            embed.add_field(name='Latency', value=f'{ctx.bot.latency * 1000 :.0f} ms')
-            embed.add_field(name='Classic', value=f'{ms :.0f} ms', inline=False)
-
-            await message.edit(embed=embed)
-        else:
-            content = (
-                f'Poing!\n----------\n'
-                f'Latency: **{ctx.bot.latency * 1000 :.0f}** ms\n'
-                f'Classic: **{ms :.0f}** ms'
-            )
-            await message.edit(content=content)
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
