@@ -158,7 +158,7 @@ class Help(Cog):
     async def invite(self, ctx):
         """...it's an invite"""
         if ctx.bot_has_embed_links():
-            await self._invite_embed()
+            await self._invite_embed(ctx)
         else:
             content = (
                 'Okay~ Here you go... I think. ^.^'
