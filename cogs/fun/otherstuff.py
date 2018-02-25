@@ -204,54 +204,9 @@ class OtherStuffs(Cog):
 
     async def _load(self):
         global _special_pairs
-        self.copypastas = await load_async(os.path.join('data', 'copypastas.json'))
 
         with suppress(FileNotFoundError):
             _special_pairs = await load_async(os.path.join('data', 'pairings.json'))
-
-    @commands.group(invoke_without_command=True, aliases=['c+v'])
-    @commands.bot_has_permissions(embed_links=True, attach_files=True)
-    async def copypasta(self, ctx, index: int, *, name=None):
-        """Returns a copypasta from an index and name"""
-        copy_pasta = self.copypastas[index]
-        category, copypastas = copy_pasta['category'], copy_pasta['copypastas']
-
-        pasta = (
-            random.choice(list(copypastas.values())) if name is None else
-            copypastas[name.title()]
-        )
-
-        embed = discord.Embed(title=f"{category} {name}", description=pasta, colour=0x00FF00)
-        await ctx.send(embed=embed)
-
-    @copypasta.command(name="groups")
-    async def copypasta_groups(self, ctx):
-        """Shows all the copypasta catergoies"""
-        pastas = itertools.starmap(
-            '`{0}.` {1}'.format, enumerate(c['category'] for c in self.copypastas)
-        )
-
-        embed = discord.Embed(title="All the categories (and their indices)", description='\n'.join(pastas))
-        await ctx.send(embed=embed)
-
-    @copypasta.command(name="pastas")
-    async def copypasta_pastas(self, ctx, index: int):
-        """Shows all the copypastas in a given category."""
-        pastas = self.copypastas[index]
-        category, copypastas = pastas['category'], pastas['copypastas']
-        description = '\n'.join([f'\N{BULLET} {c}' for c in copypastas])
-        embed = discord.Embed(title=category, description=description)
-        await ctx.send(embed=embed)
-
-    @copypasta.error
-    @copypasta_pastas.error
-    async def copypasta_error(self, ctx, error):
-        cause = error.__cause__
-        if isinstance(cause, IndexError):
-            await ctx.send(f'Index {ctx.args[2]} is out of range.')
-        elif isinstance(cause, KeyError):
-            await ctx.send(f"Category \"{self.copypastas[ctx.args[2]]['category']}\" "
-                           f"doesn't have pasta called \"{ctx.kwargs['name']}\"")
 
     # -------------------- SHIP -------------------
     async def _load_user_avatar(self, user):
