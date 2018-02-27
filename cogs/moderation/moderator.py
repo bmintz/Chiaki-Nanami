@@ -582,9 +582,10 @@ class Moderator(Cog):
 
         return discord.utils.get(guild.roles, id=row['role_id'])
 
-    async def _update_muted_role(self, guild, new_role, connection=None):
+    async def _update_muted_role(self, guild, new_role, connection=None, *, fix_perms=True):
         connection = connection or self.bot.pool
-        await self._regen_muted_role_perms(new_role, *guild.channels)
+        if fix_perms:
+            await self._regen_muted_role_perms(new_role, *guild.channels)
 
         query = """INSERT INTO muted_roles (guild_id, role_id) VALUES ($1, $2)
                    ON CONFLICT (guild_id)
@@ -733,7 +734,7 @@ class Moderator(Cog):
         when I attempt to mute someone. This is just in case you already have a
         muted role and would like to use that one instead.
         """
-        await self._update_muted_role(ctx.guild, role, ctx.db)
+        await self._update_muted_role(ctx.guild, role, ctx.db, fix_perms=False)
         await ctx.send(f'Set the muted role to **{role}**!')
 
     @commands.command(name='muterole', aliases=['mur'])
