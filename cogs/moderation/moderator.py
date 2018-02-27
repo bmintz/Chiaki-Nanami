@@ -810,13 +810,6 @@ class Moderator(Cog):
 
         await ctx.send(f"Done. What happened...?")
 
-    mute._required_perms    = 'Manage Roles'
-    unmute._required_perms  = 'Manage Roles'
-    kick._required_perms    = 'Kick Members'
-    for cmd in (softban, tempban, ban, unban):
-        cmd._required_perms = 'Ban Members'
-    del cmd     # cmd still exists outside the for loop, (which is named as unban...)
-
     def _error(command, action=None):
         @command.error
         async def error(self, ctx, error):
