@@ -5,6 +5,7 @@ import discord
 import functools
 import heapq
 import itertools
+import random
 
 from collections import Counter, namedtuple
 from discord.ext import commands
@@ -593,45 +594,49 @@ class Moderator(Cog):
 
         return discord.utils.find(probably_mute_role, guild.role_hierarchy)
 
-    async def _update_muted_role(self, guild, new_role, connection=None, *, fix_perms=True):
+    async def _update_muted_role(self, guild, new_role, connection=None):
         connection = connection or self.bot.pool
-        if fix_perms:
-            await self._regen_muted_role_perms(new_role, *guild.channels)
-
         query = """INSERT INTO muted_roles (guild_id, role_id) VALUES ($1, $2)
                    ON CONFLICT (guild_id)
                    DO UPDATE SET role_id = $2
                 """
         await connection.execute(query, guild.id, new_role.id)
 
-    async def _create_muted_role(self, guild, connection=None):
-        role = await guild.create_role(name='Chiaki-Muted', colour=discord.Colour.red())
-        await self._update_muted_role(guild, role, connection)
-        return role
-
-    async def _setdefault_muted_role(self, server, connection=None):
-        # Role could've been deleted, which means it will be None.
-        # So we have to account for that.
-        return (
-            await self._get_muted_role(server, connection)
-            or await self._create_muted_role(server, connection)
-        )
-
     @staticmethod
     async def _regen_muted_role_perms(role, *channels):
         muted_permissions = dict.fromkeys(['send_messages', 'manage_messages', 'add_reactions',
                                            'speak', 'connect', 'use_voice_activation'], False)
         for channel in channels:
+            await asyncio.sleep(random.uniform(0, 0.5))
             await channel.set_permissions(role, **muted_permissions)
 
-    async def _do_mute(self, member, when, *, connection=None, reason=None):
-        mute_role = await self._setdefault_muted_role(member.guild, connection=None)
-        if mute_role in member.roles:
+    async def _do_mute(self, member, when, role, *, connection=None, reason=None):
+        if role in member.roles:
             raise errors.InvalidUserArgument(f'{member.mention} is already been muted... ;-;')
 
-        await member.add_roles(mute_role, reason=reason)
-        args = (member.guild.id, member.id, mute_role.id)
+        await member.add_roles(role, reason=reason)
+        args = (member.guild.id, member.id, role.id)
         await self.bot.db_scheduler.add_abs(when, 'mute_complete', args)
+
+    async def _create_muted_role(self, ctx):
+        await ctx.release()
+        async with ctx.typing():
+            await ctx.send('Creating muted role. Please wait...')
+            # Needs to be released as the process of creating a new role
+            # and creating the overwrites can take a hell of a long time
+            role = await ctx.guild.create_role(
+                name='Chiaki-Muted',
+                colour=discord.Colour.red(),
+                reason='Creating new muted role'
+            )
+
+            with contextlib.suppress(discord.HTTPException):
+                await role.edit(position=ctx.me.top_role.position - 1)
+
+            await self._regen_muted_role_perms(role, *ctx.guild.channels)
+            await ctx.acquire()
+            await self._update_muted_role(ctx.guild, role, ctx.db)
+            return role
 
     @commands.command(usage=['192060404501839872 stfu about your gf'])
     @commands.has_permissions(manage_messages=True)
@@ -650,8 +655,12 @@ class Moderator(Cog):
         """
         reason = reason or f'By {ctx.author}'
 
+        role = await self._get_muted_role(ctx.guild, ctx.db)
+        if role is None:
+            role = await self._create_muted_role(ctx)
+
         when = ctx.message.created_at + duration.delta
-        await self._do_mute(member, when, connection=ctx.db, reason=reason)
+        await self._do_mute(member, when, role, connection=ctx.db, reason=reason)
         await ctx.send(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
@@ -723,19 +732,6 @@ class Moderator(Cog):
         await ctx.send(f'{member.mention} can now speak again... '
                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
-    @commands.command(name='regenmutedperms', aliases=['rmp'])
-    @commands.is_owner()
-    @commands.guild_only()
-    async def regen_muted_perms(self, ctx):
-        """Creates a muted role (if one wasn't made already) and sets the
-        permissions for that role.
-
-        This is mainly a debug command. Which is why it's owner-only. A muted
-        role is automatically created when you when first mute a user.
-        """
-        await self._setdefault_muted_role(ctx.guild)
-        await ctx.send('\N{THUMBS UP SIGN}')
-
     @commands.command(name='setmuterole', aliases=['smur'], usage=['My Cooler Mute Role'])
     @commands.has_permissions(manage_roles=True, manage_guild=True)
     async def set_muted_role(self, ctx, *, role: discord.Role):
@@ -745,7 +741,7 @@ class Moderator(Cog):
         when I attempt to mute someone. This is just in case you already have a
         muted role and would like to use that one instead.
         """
-        await self._update_muted_role(ctx.guild, role, ctx.db, fix_perms=False)
+        await self._update_muted_role(ctx.guild, role, ctx.db)
         await ctx.send(f'Set the muted role to **{role}**!')
 
     @commands.command(name='muterole', aliases=['mur'])
@@ -862,14 +858,23 @@ class Moderator(Cog):
     async def on_member_join(self, member):
         # Prevent mute-evasion
         expires = await self._remove_time_entry(member.guild, member)
-        if expires:
-            # mute them for an extra 60 mins
-            await self._do_mute(
-                member,
-                expires + datetime.timedelta(seconds=3600),
-                # TODO: Perhaps I should put the new date in the reason?
-                reason='Mute Evasion'
-            )
+        if not expires:
+            return
+
+        role = await self._get_muted_role(member.guild)
+        if not role:
+            return
+
+        # Mute them for an extra 60 mins. There might be some edge case
+        # where a member leaves the server and the muted role gets set to
+        # a different role but I'm far too lazy to figure that edge case out.
+        await self._do_mute(
+            member,
+            expires + datetime.timedelta(seconds=3600),
+            role,
+            # TODO: Perhaps I should put the new date in the reason?
+            reason='Mute Evasion'
+        )
 
     async def on_member_update(self, before, after):
         # In the event of a manual unmute, this has to be covered.
