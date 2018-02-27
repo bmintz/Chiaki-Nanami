@@ -96,6 +96,9 @@ class CheckedMember(commands.Converter):
 
     async def convert(self, ctx, arg):
         member = await self.converter.convert(ctx, arg)
+
+        # e.g. ->ban returning a discord.Object in order to ban someone
+        # not in the server
         if not isinstance(member, discord.Member):
             return member
 
@@ -103,6 +106,16 @@ class CheckedMember(commands.Converter):
             raise commands.BadArgument("Please don't hurt yourself. :(")
         if member.id == ctx.bot.user.id:
             raise commands.BadArgument("Hey, what did I do??")
+        if member == ctx.guild.owner:
+            raise commands.BadArgument(f"Hey hey, don't try to {ctx.command} the server owner!")
+        if member.top_role >= ctx.me.top_role:
+            if ctx.author != ctx.guild.owner and member.top_role >= ctx.author.top_role:
+                extra = 'the both of us'
+            else:
+                extra = 'me'
+            raise commands.BadArgument(f"{member} is higher than {extra}.")
+        if member.top_role >= ctx.author.top_role:
+            raise commands.BadArgument(f"{member} is higher than you.")
 
         return member
 
