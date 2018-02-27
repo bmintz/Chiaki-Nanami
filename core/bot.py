@@ -305,7 +305,7 @@ class Chiaki(commands.Bot):
         if not hasattr(self, 'start_time'):
             self.start_time = datetime.utcnow()
 
-    async def on_command_error(self, ctx, error):
+    async def on_command_error(self, ctx, error, *, bypass=False):
         if (
             isinstance(error, commands.CheckFailure)
             and not isinstance(error, commands.BotMissingPermissions)
@@ -333,7 +333,7 @@ class Chiaki(commands.Bot):
                 await ctx.command.dispatch_error(ctx, exc)
             return
 
-        if hasattr(ctx.command, 'on_error'):
+        if not bypass and hasattr(ctx.command, 'on_error'):
             return
 
         cause = error.__cause__
