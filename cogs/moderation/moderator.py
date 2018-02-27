@@ -606,9 +606,24 @@ class Moderator(Cog):
     async def _regen_muted_role_perms(role, *channels):
         muted_permissions = dict.fromkeys(['send_messages', 'manage_messages', 'add_reactions',
                                            'speak', 'connect', 'use_voice_activation'], False)
+
+        permissions_in = channels[0].guild.me.permissions_in
         for channel in channels:
+            if not permissions_in(channel).manage_roles:
+                # Save discord the HTTP request
+                continue
+
             await asyncio.sleep(random.uniform(0, 0.5))
-            await channel.set_permissions(role, **muted_permissions)
+
+            try:
+                await channel.set_permissions(role, **muted_permissions)
+            except discord.NotFound as e:
+                # The role could've been deleted midway while Chiaki was
+                # setting up the overwrites.
+                if 'Unknown Overwrite' in str(e):
+                    raise
+            except discord.HTTPException:
+                pass
 
     async def _do_mute(self, member, when, role, *, connection=None, reason=None):
         if role in member.roles:
@@ -621,7 +636,7 @@ class Moderator(Cog):
     async def _create_muted_role(self, ctx):
         await ctx.release()
         async with ctx.typing():
-            await ctx.send('Creating muted role. Please wait...')
+            ctx.__new_mute_role_message__ = await ctx.send('Creating muted role. Please wait...')
             # Needs to be released as the process of creating a new role
             # and creating the overwrites can take a hell of a long time
             role = await ctx.guild.create_role(
@@ -655,13 +670,22 @@ class Moderator(Cog):
         """
         reason = reason or f'By {ctx.author}'
 
+        async def try_edit(content):
+            try:
+                await ctx.__new_mute_role_message__.edit(content=content)
+            except (AttributeError, discord.NotFound):
+                await ctx.send(content)
+
         role = await self._get_muted_role(ctx.guild, ctx.db)
         if role is None:
-            role = await self._create_muted_role(ctx)
+            try:
+                role = await self._create_muted_role(ctx)
+            except discord.NotFound:
+                return await try_edit("Please don't delete the role while I'm setting it up.")
 
         when = ctx.message.created_at + duration.delta
         await self._do_mute(member, when, role, connection=ctx.db, reason=reason)
-        await ctx.send(f"Done. {member.mention} will now be muted for "
+        await try_edit(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
     @commands.command(usage=['80528701850124288', '@R. Danny#6348'])
