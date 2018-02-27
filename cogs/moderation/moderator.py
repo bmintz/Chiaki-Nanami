@@ -572,7 +572,7 @@ class Moderator(Cog):
             'after their oldest warn, bad things will happen.'
         )
 
-    async def _get_muted_role(self, guild, connection=None):
+    async def _get_muted_role_from_db(self, guild, *, connection=None):
         connection = connection or self.bot.pool
 
         query = 'SELECT role_id FROM muted_roles WHERE guild_id = $1'
@@ -581,6 +581,17 @@ class Moderator(Cog):
             return None
 
         return discord.utils.get(guild.roles, id=row['role_id'])
+
+    async def _get_muted_role(self, guild, connection=None):
+        role = await self._get_muted_role_from_db(guild, connection=connection)
+        if role is not None:
+            return role
+
+        def probably_mute_role(r):
+            lowered = r.name.lower()
+            return lowered == 'muted' or 'mute' in lowered
+
+        return discord.utils.find(probably_mute_role, guild.role_hierarchy)
 
     async def _update_muted_role(self, guild, new_role, connection=None, *, fix_perms=True):
         connection = connection or self.bot.pool
@@ -842,7 +853,7 @@ class Moderator(Cog):
         # people might just want to create a channel without having to deal
         # with moderation commands. Only when people want to use the actual
         # mute command should we create the muted role if there isn't one.
-        role = await self._get_muted_role(server)
+        role = await self._get_muted_role_from_db(server)
         if role is None:
             return
 
