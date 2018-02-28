@@ -918,32 +918,6 @@ class GeneralHelpPaginator(ListPaginator):
                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
                 )
 
-    def how_to_use(self):
-        """How to use the bot"""
-        description = (
-            'The signature is actually pretty simple!\n'
-            "It's always there in the \"Signature\" field when\n"
-            f'you do `{self.context.clean_prefix} help command`.'
-        )
-
-        note = textwrap.dedent('''
-            **Don't type in the brackets!**
-            --------------------------------
-            This means you must type the commands like this:
-            YES: `->inrole My Role`
-            NO: `->inrole <My Role>` 
-            (unless your role is actually named "<My Role>"...)
-        ''')
-
-        return (discord.Embed(colour=self.colour, description=description)
-                .set_author(name='So... how do I use this bot?')
-                .add_field(name='<argument>', value='The argument is **required**. \nYou must specify this.', inline=False)
-                .add_field(name='[argument]', value="The argument is **optional**. \nYou don't have to specify this..", inline=False)
-                .add_field(name='[A|B]', value='You can type either **A** or **B**.', inline=False)
-                .add_field(name='[arguments...]', value='You can have multiple arguments.', inline=False)
-                .add_field(name='Note', value=note, inline=False)
-                )
-
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Exit"""
@@ -970,17 +944,6 @@ class GeneralHelpPaginator(ListPaginator):
     ]
     _num_extra_pages = len(_extra_pages)
 
-    @page('\N{WHITE QUESTION MARK ORNAMENT}')
-    def signature(self):
-        """How to use the bot"""
-        return self.how_to_use()
-
     async def interact(self, **kwargs):
         self._start_time = time.monotonic()
         await super().interact(**kwargs)
-
-
-rmap = GeneralHelpPaginator._reaction_map
-# signature is currently at the beginning so we need to move it to the end
-rmap.move_to_end('\N{WHITE QUESTION MARK ORNAMENT}')
-del rmap
