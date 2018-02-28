@@ -841,7 +841,7 @@ class Moderator(Cog):
         reason = reason or f'By {ctx.author}'
 
         await ctx.guild.unban(user.user)
-        await self._remove_time_entry(ctx.guild, user, ctx.db, event='tempban_complete')
+        await self._remove_time_entry(ctx.guild, user.user, ctx.db, event='tempban_complete')
         await ctx.send(f"Done. What did {user.user} do to get banned in the first place...?")
 
     @commands.command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
