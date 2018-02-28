@@ -149,6 +149,16 @@ class Moderator(Cog):
         self.slowmodes = JSONFile('slowmodes.json')
         self.slowmode_bucket = {}
 
+        if hasattr(self.bot, '__mod_mute_role_create_bucket__'):
+            self._mute_role_create_cooldowns = self.bot.__mod_mute_role_create_bucket__
+        else:
+            self._mute_role_create_cooldowns = commands.CooldownMapping.from_cooldown(
+                rate=2, per=600, type=commands.BucketType.guild
+            )
+
+    def __unload(self):
+        self.bot.__mod_mute_role_create_bucket__ = self._mute_role_create_cooldowns
+
     async def call_mod_log_invoke(self, invoke, ctx):
         mod_log = ctx.bot.get_cog('ModLog')
         if mod_log:
@@ -636,6 +646,11 @@ class Moderator(Cog):
     async def _create_muted_role(self, ctx):
         await ctx.release()
 
+        bucket = self._mute_role_create_cooldowns.get_bucket(ctx.message)
+        if not bucket.get_tokens():
+            retry_after = bucket.update_rate_limit() or 0  # e d g e c a s e s
+            raise commands.CommandOnCooldown(bucket, retry_after)
+
         if not await ctx.ask_confirmation('No muted role found. Create a new one?', delete_after=False):
             await ctx.send(
                 "A muted role couldn't be found. "
@@ -643,6 +658,7 @@ class Moderator(Cog):
             )
             return None
 
+        bucket.update_rate_limit()
         async with ctx.typing():
             ctx.__new_mute_role_message__ = await ctx.send('Creating muted role. Please wait...')
             # Needs to be released as the process of creating a new role
@@ -682,7 +698,12 @@ class Moderator(Cog):
                 return await try_edit("Please don't delete the role while I'm setting it up.")
             except asyncio.TimeoutError:
                 return await ctx.send('Sorry. You took too long...')
-
+            except commands.CommandOnCooldown as e:
+                return await ctx.send(
+                    "You're deleting the muted role too much.\n"
+                    f'Please wait {time.duration_units(e.retry_after)} before trying again, '
+                    f'or set a muted role with `{ctx.clean_prefix}setmuterole Role`'
+                )
             if role is None:
                 return
 
