@@ -769,7 +769,7 @@ class Moderator(Cog):
         await ctx.send(f'{member.mention} can now speak again... '
                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
-    @commands.command(name='setmuterole', aliases=['smur'], usage=['My Cooler Mute Role'])
+    @commands.command(name='setmuterole', aliases=['muterole', 'smur'], usage=['My Cooler Mute Role'])
     @commands.has_permissions(manage_roles=True, manage_guild=True)
     async def set_muted_role(self, ctx, *, role: discord.Role):
         """Sets the muted role for the server.
@@ -780,14 +780,6 @@ class Moderator(Cog):
         """
         await self._update_muted_role(ctx.guild, role, ctx.db)
         await ctx.send(f'Set the muted role to **{role}**!')
-
-    @commands.command(name='muterole', aliases=['mur'])
-    async def muted_role(self, ctx):
-        """Gets the current muted role."""
-        role = await self._get_muted_role(ctx.guild, ctx.db)
-        msg = ("There is no muted role, either set one now or let me create one for you."
-               if role is None else f"The current muted role is **{role}**")
-        await ctx.send(msg)
 
     @commands.command(usage='@Salt#3514 Inferior bot')
     @commands.has_permissions(kick_members=True)
