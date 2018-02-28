@@ -139,36 +139,10 @@ class Context(commands.Context):
             await message.delete()
             await self.acquire()
 
-    # Nommed from Danny again.
-    async def ask_confirmation(self, message, *, timeout=60.0, delete_after=True, reacquire=True,
-                               author_id=None, destination=None):
-        """An interactive reaction confirmation dialog.
-
-        Parameters
-        -----------
-        message: Union[str, discord.Embed]
-            The message to show along with the prompt.
-        timeout: float
-            How long to wait before returning.
-        delete_after: bool
-            Whether to delete the confirmation message after we're done.
-        reacquire: bool
-            Whether to release the database connection and then acquire it
-            again when we're done.
-        author_id: Optional[int]
-            The member who should respond to the prompt. Defaults to the author of the
-            Context's message.
-        destination: Optional[discord.abc.Messageable]
-            Where the prompt should be sent. Defaults to the channel of the
-            Context's message.
-
-        Returns
-        --------
-        Optional[bool]
-            ``True`` if explicit confirm,
-            ``False`` if explicit deny,
-            ``None`` if deny due to timeout
-        """
+    # Credit to Danny#0007 for making the original
+    async def confirm(self, message, *, timeout=60.0, delete_after=True, reacquire=True,
+                      author_id=None, destination=None):
+        """Prompts the user with either yes or no."""
 
         # We can also wait for a message confirmation as well. This is faster, but
         # it's risky if there are two prompts going at the same time.
@@ -183,10 +157,10 @@ class Context(commands.Context):
         confirm_emoji, deny_emoji = emojis = [config.confirm, config.deny]
         is_valid_emoji = frozenset(map(str, emojis)).__contains__
 
-        instructions = f'React with {confirm_emoji} to confirm or {deny_emoji} to deny\n'
+        instructions = f'{confirm_emoji} \N{EM DASH} Yes\n{deny_emoji} \N{EM DASH} No'
 
         if isinstance(message, discord.Embed):
-            message.add_field(name="Instructions", value=instructions, inline=False)
+            message.add_field(name="Choices", value=instructions, inline=False)
             msg = await destination.send(embed=message)
         else:
             message = f'{message}\n\n{instructions}'
@@ -214,6 +188,8 @@ class Context(commands.Context):
 
             if delete_after:
                 await msg.delete()
+
+    ask_confirmation = confirm
 
     def can_use_chiaki_repo_emojis(self):
         """Return True if the bot can use emojis from the Chiaki Emoji Repository.
