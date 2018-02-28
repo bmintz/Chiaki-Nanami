@@ -783,6 +783,8 @@ CHIAKI_MOTIVATION_URL = 'http://pa1.narvii.com/6186/3d315c4d1d8f249a392fd7740c70
 
 
 class GeneralHelpPaginator(ListPaginator):
+    first = None
+    last = None
     help_page = None
 
     def __init__(self, *args, **kwargs):
@@ -868,16 +870,7 @@ class GeneralHelpPaginator(ListPaginator):
                 .set_image(url=CHIAKI_INTRO_URL)
                 )
 
-    # Needed to table_of_contents will set the _index properly
-    @page('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
-    def first(self):
-        """Table of contents"""
-        return self[0]
-
     def default(self):
-        # Delete the first page so the Table of Contents will be the first page.
-        # XXX: Deal with pressing the previous page button
-        self.default = self.first
         return self.intro()
 
     def instructions(self):
