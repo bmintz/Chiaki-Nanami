@@ -635,6 +635,14 @@ class Moderator(Cog):
 
     async def _create_muted_role(self, ctx):
         await ctx.release()
+
+        if not await ctx.ask_confirmation('No muted role found. Create a new one?', delete_after=False):
+            await ctx.send(
+                "A muted role couldn't be found. "
+                f'Set one with `{ctx.clean_prefix}setmuterole Role`'
+            )
+            return None
+
         async with ctx.typing():
             ctx.__new_mute_role_message__ = await ctx.send('Creating muted role. Please wait...')
             # Needs to be released as the process of creating a new role
@@ -682,6 +690,11 @@ class Moderator(Cog):
                 role = await self._create_muted_role(ctx)
             except discord.NotFound:
                 return await try_edit("Please don't delete the role while I'm setting it up.")
+            except asyncio.TimeoutError:
+                return await ctx.send('Sorry. You took too long...')
+
+            if role is None:
+                return
 
         when = ctx.message.created_at + duration.delta
         await self._do_mute(member, when, role, connection=ctx.db, reason=reason)
