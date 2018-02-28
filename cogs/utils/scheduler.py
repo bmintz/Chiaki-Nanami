@@ -127,7 +127,7 @@ class BaseScheduler:
         # XXX: Is it a good idea to use self._loop.call_later? It's short enough,
         #      and self._dispatch is not a coroutine.
         await asyncio.sleep(delta)
-        self._dispatch(event)
+        await self._dispatch(event)
 
     async def add_abs(self, when, action, args=(), kwargs=None, id=None):
         """Enter a new event in the queue at an absolute time.
