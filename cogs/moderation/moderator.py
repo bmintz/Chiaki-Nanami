@@ -644,6 +644,8 @@ class Moderator(Cog):
         await self.bot.db_scheduler.add_abs(when, 'mute_complete', args)
 
     async def _create_muted_role(self, ctx):
+        # Needs to be released as the process of creating a new role
+        # and creating the overwrites can take a hell of a long time
         await ctx.release()
 
         bucket = self._mute_role_create_cooldowns.get_bucket(ctx.message)
@@ -661,8 +663,6 @@ class Moderator(Cog):
         bucket.update_rate_limit()
         async with ctx.typing():
             ctx.__new_mute_role_message__ = await ctx.send('Creating muted role. Please wait...')
-            # Needs to be released as the process of creating a new role
-            # and creating the overwrites can take a hell of a long time
             role = await ctx.guild.create_role(
                 name='Chiaki-Muted',
                 colour=discord.Colour.red(),
