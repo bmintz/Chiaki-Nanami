@@ -665,17 +665,7 @@ class Moderator(Cog):
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
-        """Mutes a user (obviously)
-
-        This command might take a while when this is used for the
-        first time, as, I have to create a role, and update the
-        channel permissions accordingly.
-
-        If you want to speed up this process, create a muted
-        role yourself and use `{prefix}setmuterole`. However,
-        this only happens once.
-        (not so obviously)
-        """
+        """Mutes a user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
         async def try_edit(content):
@@ -772,12 +762,7 @@ class Moderator(Cog):
     @commands.command(name='setmuterole', aliases=['muterole', 'smur'], usage=['My Cooler Mute Role'])
     @commands.has_permissions(manage_roles=True, manage_guild=True)
     async def set_muted_role(self, ctx, *, role: discord.Role):
-        """Sets the muted role for the server.
-
-        Ideally you shouldn't have to do this, as I already create a muted role
-        when I attempt to mute someone. This is just in case you already have a
-        muted role and would like to use that one instead.
-        """
+        """Sets the muted role for the server."""
         await self._update_muted_role(ctx.guild, role, ctx.db)
         await ctx.send(f'Set the muted role to **{role}**!')
 
