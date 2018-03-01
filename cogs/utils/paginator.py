@@ -522,7 +522,7 @@ import sys
 import textwrap
 import time
 
-from more_itertools import ilen, sliced, spy
+from more_itertools import chunked, ilen, sliced, spy
 
 from .context_managers import temp_attr
 
@@ -825,22 +825,16 @@ class GeneralHelpPaginator(ListPaginator):
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
 
-    def __len__(self):
-        return self._num_extra_pages + super().__len__()
-
     def __getitem__(self, idx):
-        if 0 <= idx < self._num_extra_pages:
+        if idx == 0:
             self._index = idx
-            return self._page_footer_embed(self._extra_pages[idx](self))
+            return self.instructions()
 
-        result = super().__getitem__(idx - self._num_extra_pages)
+        result = super().__getitem__(idx - 1)
         # Properly set the index, because ListPagination.__getitem__ sets
         # _index to two pages before, breaking it
-        self._index += self._num_extra_pages
+        self._index += 1
         return result
-
-    def _page_footer_embed(self, embed, *, offset=0):
-        return embed.set_footer(text=f'Page {self._index + offset + 1}/{len(self)}')
 
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
@@ -849,12 +843,46 @@ class GeneralHelpPaginator(ListPaginator):
         # ZWS is needed for mobile where they like to strip blank lines for no reason.
         commands = f'{formatted}\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
 
-        return self._page_footer_embed(
-            discord.Embed(colour=self.colour, description=description)
-            .set_author(name=name)
-            .add_field(name='Commands', value=commands),
-            offset=self._num_extra_pages
-        )
+        return (discord.Embed(colour=self.colour, description=description)
+                .set_author(name=name)
+                .add_field(name='Commands', value=commands)
+                .set_footer(text=f'Page {self._index + 1}/{len(self)}')
+                )
+
+    # These methods are overridden the way they are because we want the
+    # go-to-page to be offset by one. However, the issue is that next and
+    # previous use ListPaginator.page_at too, so they have to be
+    # overridden as well.
+    def __page_at(self, index):
+        if 0 <= index <= len(self):
+            return self[index]
+        return None
+
+    @page('\N{BLACK LEFT-POINTING TRIANGLE}')
+    def previous(self):
+        """Back"""
+        return self.__page_at(self._index - 1)
+
+    @page('\N{BLACK RIGHT-POINTING TRIANGLE}')
+    def next(self):
+        """Next"""
+        index = self._index + 1
+        if index == len(self):  # edge cases...
+            return self[index]
+        return self.__page_at(index)
+
+    @page('\N{INPUT SYMBOL FOR NUMBERS}')
+    async def numbered(self):
+        """Goto"""
+        return super().numbered()
+
+    def page_at(self, index):
+        # This will only be used by go-to-page so we're ok
+        if 0 <= index < len(self):
+            return self[index + 1]
+        return None
+
+    # End of this overriding silliness
 
     def intro(self):
         """The intro, ie the thing you just saw."""
@@ -874,21 +902,8 @@ class GeneralHelpPaginator(ListPaginator):
         return self.intro()
 
     def instructions(self):
-        """Instructions"""
-        description = (
-            f'**Click one of the reactions below**\n'
-            '-------------------------------------\n'
-            + self.reaction_help
-        )
-        return (discord.Embed(colour=self.colour, description=description)
-                .set_author(name='Instructions')
-                )
-
-    def table_of_contents(self):
         """Table of Contents"""
         bot = self.context.bot
-        extra_docs = enumerate(map(inspect.getdoc, self._extra_pages), start=1)
-        extra_lines = itertools.starmap('`{0}` - {1}'.format, extra_docs)
 
         def cog_pages(iterable, start):
             for name, g in itertools.groupby(iterable, key=operator.itemgetter(0)):
@@ -900,15 +915,23 @@ class GeneralHelpPaginator(ListPaginator):
                 start += count
 
         # create the page numbers for the cogs
-        pairs = list(cog_pages(self.entries, self._num_extra_pages + 1))
+        pairs = list(cog_pages(self.entries, 1))
         padding = max(len(p[0]) for p in pairs)
         lines = (f'`\u200b{numbers:<{padding}}\u200b` - {name}' for numbers, name in pairs)
+
+        # create the compacted controls field
+        emoji_docs = ((emoji, func.__doc__) for emoji, func in self._reaction_map.items())
+        controls = '\n'.join(
+            f'{p1[0]} `{p1[1]}` | `{p2[1]}` {p2[0]}'
+            for p1, p2 in chunked(emoji_docs, 2)
+        )
 
         description = f'For more help, go to the **[support server]({bot.support_invite})**'
         return (discord.Embed(colour=self.colour, description=description)
                 .set_author(name='Help', icon_url=self.context.bot.user.avatar_url)
-                .add_field(name='Table of Contents', value='\n'.join(extra_lines))
                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
+                .add_field(name='Controls', value=controls, inline=False)
+                .set_footer(text='Click one of the reactions below <3')
                 )
 
     @page('\N{BLACK SQUARE FOR STOP}')
@@ -930,12 +953,6 @@ class GeneralHelpPaginator(ListPaginator):
         # haaaaaaaaaaaack
         await self._message.edit(embed=final_embed)
         return await asyncio.sleep(10)
-
-    _extra_pages = [
-        table_of_contents,
-        instructions,
-    ]
-    _num_extra_pages = len(_extra_pages)
 
     async def interact(self, **kwargs):
         self._start_time = time.monotonic()
