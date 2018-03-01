@@ -780,6 +780,7 @@ class CogPages(ListPaginator):
 # TODO: Save these images in the event of a deletion
 CHIAKI_INTRO_URL = 'https://66.media.tumblr.com/feb7b9be75025afadd5d03fe7ad63aba/tumblr_oapg2wRooV1vn8rbao10_r2_500.gif'
 CHIAKI_MOTIVATION_URL = 'http://pa1.narvii.com/6186/3d315c4d1d8f249a392fd7740c7004f28035aca9_hq.gif'
+EASTER_EGG_COLOUR = 0xE91E63
 
 
 class GeneralHelpPaginator(ListPaginator):
@@ -789,8 +790,8 @@ class GeneralHelpPaginator(ListPaginator):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._start_time = None
         self._index = -1
+        self._do_easter_egg = False
 
     @classmethod
     async def create(cls, ctx):
@@ -843,7 +844,13 @@ class GeneralHelpPaginator(ListPaginator):
         # ZWS is needed for mobile where they like to strip blank lines for no reason.
         commands = f'{formatted}\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
 
-        return (discord.Embed(colour=self.colour, description=description)
+        if self._do_easter_egg:
+            colour = EASTER_EGG_COLOUR
+            description = f'\N{HEAVY BLACK HEART}{description}\N{HEAVY BLACK HEART}'
+        else:
+            colour = self.colour
+
+        return (discord.Embed(colour=colour, description=description)
                 .set_author(name=name)
                 .add_field(name='Commands', value=commands)
                 .set_footer(text=f'Page {self._index + 1}/{len(self)}')
@@ -874,7 +881,7 @@ class GeneralHelpPaginator(ListPaginator):
     @page('\N{INPUT SYMBOL FOR NUMBERS}')
     async def numbered(self):
         """Goto"""
-        return super().numbered()
+        return await maybe_awaitable(super().numbered)
 
     def page_at(self, index):
         # This will only be used by go-to-page so we're ok
@@ -939,10 +946,7 @@ class GeneralHelpPaginator(ListPaginator):
         """Exit"""
         super().stop()
 
-        # Only do it for a minute, so if someone does a quick stop,
-        # we'll grant them their wish of stopping early.
-        end = time.monotonic()
-        if end - self._start_time < 60:
+        if not self._do_easter_egg:
             return
 
         final_embed = (discord.Embed(colour=self.colour, description='*Remember...* \N{HEAVY BLACK HEART}')
@@ -954,6 +958,22 @@ class GeneralHelpPaginator(ListPaginator):
         await self._message.edit(embed=final_embed)
         return await asyncio.sleep(10)
 
-    async def interact(self, **kwargs):
-        self._start_time = time.monotonic()
-        await super().interact(**kwargs)
+    # Stuff that affects the easter egg flag
+    async def on_reaction_remove(self, reaction, user):
+        self._set_easter_egg(reaction, user, False)
+
+    def _set_easter_egg(self, reaction, user, boo):
+        if not (
+            reaction.message.id == self._message.id
+            and user.id == self.context.author.id
+            and reaction.emoji in '\N{HEAVY BLACK HEART}'
+        ):
+            return
+
+        self._do_easter_egg = boo
+
+    def check(self, reaction, user):
+        if super().check(reaction, user):
+            return True
+
+        self._set_easter_egg(reaction, user, True)
