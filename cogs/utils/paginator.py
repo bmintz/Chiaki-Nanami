@@ -778,7 +778,6 @@ class CogPages(ListPaginator):
 
 
 # TODO: Save these images in the event of a deletion
-CHIAKI_INTRO_URL = 'https://66.media.tumblr.com/feb7b9be75025afadd5d03fe7ad63aba/tumblr_oapg2wRooV1vn8rbao10_r2_500.gif'
 CHIAKI_MOTIVATION_URL = 'http://pa1.narvii.com/6186/3d315c4d1d8f249a392fd7740c7004f28035aca9_hq.gif'
 EASTER_EGG_COLOUR = 0xE91E63
 
@@ -790,7 +789,6 @@ class GeneralHelpPaginator(ListPaginator):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._index = -1
         self._do_easter_egg = False
 
     @classmethod
@@ -826,17 +824,6 @@ class GeneralHelpPaginator(ListPaginator):
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self
 
-    def __getitem__(self, idx):
-        if idx == 0:
-            self._index = idx
-            return self.instructions()
-
-        result = super().__getitem__(idx - 1)
-        # Properly set the index, because ListPagination.__getitem__ sets
-        # _index to two pages before, breaking it
-        self._index += 1
-        return result
-
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
         note = f'For more help on a command,\ntype `{self.context.clean_prefix}help "a command"`.'
@@ -856,60 +843,29 @@ class GeneralHelpPaginator(ListPaginator):
                 .set_footer(text=f'Page {self._index + 1}/{len(self)}')
                 )
 
-    # These methods are overridden the way they are because we want the
-    # go-to-page to be offset by one. However, the issue is that next and
-    # previous use ListPaginator.page_at too, so they have to be
-    # overridden as well.
-    def __page_at(self, index):
-        if 0 <= index <= len(self):
-            return self[index]
-        return None
+    # These methods are overridden because docstrings are annoying
 
     @page('\N{BLACK LEFT-POINTING TRIANGLE}')
     def previous(self):
         """Back"""
-        return self.__page_at(self._index - 1)
+        return super().previous() or (self.instructions() if self._index == 0 else None)
 
     @page('\N{BLACK RIGHT-POINTING TRIANGLE}')
     def next(self):
         """Next"""
-        index = self._index + 1
-        if index == len(self):  # edge cases...
-            return self[index]
-        return self.__page_at(index)
+        return super().next()
 
     @page('\N{INPUT SYMBOL FOR NUMBERS}')
     async def numbered(self):
         """Goto"""
         return await maybe_awaitable(super().numbered)
 
-    def page_at(self, index):
-        # This will only be used by go-to-page so we're ok
-        if 0 <= index < len(self):
-            return self[index + 1]
-        return None
-
     # End of this overriding silliness
-
-    def intro(self):
-        """The intro, ie the thing you just saw."""
-        ctx = self.context
-        bot = ctx.bot
-        instructions = (
-            'To see all the categories, click \N{BLACK RIGHT-POINTING TRIANGLE}.\n'
-            f'For more help, go to the **[support server]({bot.support_invite})**'
-        )
-
-        return (discord.Embed(colour=self.colour, description=instructions)
-                .set_author(name=f"\u2764 Hi, {ctx.author.display_name}. Welcome to Chiaki Help!")
-                .set_image(url=CHIAKI_INTRO_URL)
-                )
-
-    def default(self):
-        return self.intro()
 
     def instructions(self):
         """Table of Contents"""
+        self._index = -1
+        ctx = self.context
         bot = self.context.bot
 
         def cog_pages(iterable, start):
@@ -933,13 +889,19 @@ class GeneralHelpPaginator(ListPaginator):
             for p1, p2 in chunked(emoji_docs, 2)
         )
 
-        description = f'For more help, go to the **[support server]({bot.support_invite})**'
+        description = (
+            f'For help on a command, type `{ctx.clean_prefix}help command`.\n'
+            f'For more help, go to the **[support server]({bot.support_invite})**'
+        )
+
         return (discord.Embed(colour=self.colour, description=description)
-                .set_author(name='Help', icon_url=self.context.bot.user.avatar_url)
+                .set_author(name='Chiaki Nanami Help', icon_url=bot.user.avatar_url)
                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
                 .add_field(name='Controls', value=controls, inline=False)
                 .set_footer(text='Click one of the reactions below <3')
                 )
+
+    default = instructions
 
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
