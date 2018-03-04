@@ -826,7 +826,11 @@ class GeneralHelpPaginator(ListPaginator):
 
     def _create_embed(self, idx, page):
         name, description, lines = page[0]
-        note = f'For more help on a command,\ntype `{self.context.clean_prefix}help "a command"`.'
+        random_command = random.choice(next(zip(*lines)))
+        note = (
+            f'For more help on a command,\ntype `{self.context.clean_prefix}help "a command"`.\n'
+            f'**Example:** `{self.context.clean_prefix}help {random_command}`'
+        )
         formatted = '\n'.join(_command_lines(lines))
         # ZWS is needed for mobile where they like to strip blank lines for no reason.
         commands = f'{formatted}\n{"-" * 30}\n{note}\n\u200b\n{CROSSED_NOTE}'
