@@ -594,45 +594,56 @@ class HelpCommandPage(BaseReactionPaginator):
         super().__init__(ctx)
         self.command = command
         self.func = func
-        self._toggle = True
-        self._on_subcommand_page = False
+        self._toggle = False
+        self._old_footer_text = None
+        self._show_subcommands = False
+
         if not _requires_extra_page(command):
             self._reaction_map = self._normal_reaction_map
+            self._show_subcommands = True
 
     @page('\N{INFORMATION SOURCE}')
-    def default(self):
-        if self._on_subcommand_page:
-            self._on_subcommand_page = toggle = False
-        else:
-            self._toggle = toggle = not self._toggle
+    async def show_example(self):
+        self._toggle = toggle = not self._toggle
 
-        meth = self._example if toggle else self._command_info
-        return meth()
+        command, bot, current = self.command, self.context.bot, self._current
+        if toggle:
+            image_url = bot.command_image_urls.get(command.qualified_name)
+            if not image_url:
+                return None
+            current.set_image(url=image_url)
+            current.add_field(name='\u200b', value='**Example**', inline=False)
+        else:
+            if hasattr(current, '_image'):
+                del current._image
+                current.remove_field(-1)
+        return current
 
     @page('\N{DOWNWARDS BLACK ARROW}')
-    def subcommands(self):
-        if self._on_subcommand_page:
-            return None
-
-        ctx, command = self.context, self.command
-
+    def show_subcommands(self, embed=None):
+        embed = embed or self._current
+        command, func = self.command, self.func
         assert isinstance(command, commands.GroupMixin), "command has no subcommands"
-        self._on_subcommand_page = True
-        subs = _list_subcommands_and_descriptions(command)
-        random_command = random.choice(list(command.walk_commands()))
 
-        note = (
-            f'Type `{ctx.clean_prefix}{ctx.invoked_with} {command} subcommand`'
-            f' for more info on a subcommand.\n'
-            f'(e.g. type `{ctx.clean_prefix}{ctx.invoked_with} {random_command}`)'
+        if self._show_subcommands:
+            value = func(_list_subcommands_and_descriptions(command))
+        else:
+            value = func('Click \N{DOWNWARDS BLACK ARROW} to see all the subcommands!')
+
+        self._show_subcommands = not self._show_subcommands
+
+        see_also = func('See also')
+        field_index = discord.utils.find(
+            lambda idx_field: idx_field[1].name == see_also,
+            enumerate(embed.fields)
         )
 
-        return (discord.Embed(colour=self.colour, description=subs)
-                .set_author(name=f'See also')
-                .add_field(name='\u200b', value=note, inline=False)
-                )
+        if field_index is not None:
+            return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
+        else:
+            return embed.add_field(name=see_also, value=value, inline=False)
 
-    def _command_info(self):
+    def default(self):
         command, ctx, func = self.command, self.context, self.func
         clean_prefix = ctx.clean_prefix
         # usages = self.command_usage
@@ -652,32 +663,13 @@ class HelpCommandPage(BaseReactionPaginator):
                      )
 
         if _has_subcommands(command):
-            if _at_least(command.walk_commands(), 6):
-                prompt = func('Click \N{DOWNWARDS BLACK ARROW} to see all the subcommands!')
-                cmd_embed.add_field(name=func('See Also'), value=prompt, inline=False)
-            else:
-                subs = func(_list_subcommands_and_descriptions(command))
-                cmd_embed.add_field(name=func('See Also'), value=subs, inline=False)
+            self.show_subcommands(embed=cmd_embed)
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
         category = _command_category(command)
         footer = f'Category: {category} | Click the info button below to see an example.'
         return cmd_embed.set_footer(text=func(footer))
-
-    def _example(self):
-        command, bot = self.command, self.context.bot
-
-        embed = discord.Embed(colour=self.colour).set_author(name=f'Example for {command}')
-
-        try:
-            image_url = bot.command_image_urls[self.command.qualified_name]
-        except (KeyError, AttributeError):
-            embed.description = f"`{self.command}` doesn't have an image.\nContact MIkusaba#4553 to fix that!"
-        else:
-            embed.set_image(url=image_url)
-
-        return embed.set_footer(text='Click the info button to go back.')
 
 
 HelpCommandPage._normal_reaction_map = HelpCommandPage._reaction_map.copy()
