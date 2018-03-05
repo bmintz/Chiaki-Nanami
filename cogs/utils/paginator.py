@@ -662,10 +662,10 @@ class HelpCommandPage(BaseReactionPaginator):
         if requirements:
             cmd_embed.add_field(name=func("Requirements"), value=func(requirements))
 
-        cmd_embed.add_field(name=func("Usage"), value=f'`{func(signature)}`', inline=False)
-
         if _has_subcommands(command):
             self.show_subcommands(embed=cmd_embed)
+
+        cmd_embed.add_field(name=func("Usage"), value=f'`{func(signature)}`', inline=False)
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
