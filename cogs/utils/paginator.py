@@ -652,15 +652,17 @@ class HelpCommandPage(BaseReactionPaginator):
         with temp_attr(command, 'usage', None):
             signature = command.signature
 
-        requirements = _make_command_requirements(command) or 'None'
         cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(_all_names(command))}`"
 
         description = (command.help or '').format(prefix=clean_prefix)
 
-        cmd_embed = (discord.Embed(title=func(cmd_name), description=func(description), colour=self.colour)
-                     .add_field(name=func("Requirements"), value=func(requirements))
-                     .add_field(name=func("Usage"), value=f'`{func(signature)}`', inline=False)
-                     )
+        cmd_embed = discord.Embed(title=func(cmd_name), description=func(description), colour=self.colour)
+
+        requirements = _make_command_requirements(command)
+        if requirements:
+            cmd_embed.add_field(name=func("Requirements"), value=func(requirements))
+
+        cmd_embed.add_field(name=func("Usage"), value=f'`{func(signature)}`', inline=False)
 
         if _has_subcommands(command):
             self.show_subcommands(embed=cmd_embed)
