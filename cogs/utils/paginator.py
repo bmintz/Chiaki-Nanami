@@ -628,7 +628,7 @@ class HelpCommandPage(BaseReactionPaginator):
         if self._show_subcommands:
             value = func(_list_subcommands_and_descriptions(command))
         else:
-            value = func('Click \N{DOWNWARDS BLACK ARROW} to see all the subcommands!')
+            value = func('Click \N{DOWNWARDS BLACK ARROW} to expand')
 
         self._show_subcommands = not self._show_subcommands
 
