@@ -589,6 +589,13 @@ def _requires_extra_page(command):
     return _has_subcommands(command) and _at_least(command.walk_commands(), 6)
 
 
+def _rreplace(s, old, new, occurrence=1):
+    return new.join(s.rsplit(old, occurrence))
+
+SEE_EXAMPLE = 'For an example, click \N{INFORMATION SOURCE}'
+EXAMPLE_HEADER = '**Example**'
+
+
 class HelpCommandPage(BaseReactionPaginator):
     def __init__(self, ctx, command, func=None):
         super().__init__(ctx)
@@ -605,18 +612,25 @@ class HelpCommandPage(BaseReactionPaginator):
     @page('\N{INFORMATION SOURCE}')
     async def show_example(self):
         self._toggle = toggle = not self._toggle
+        command, bot, current, func = self.command, self.context.bot, self._current, self.func
 
-        command, bot, current = self.command, self.context.bot, self._current
+        def swap_fields(direction):
+            to_replace = (func(SEE_EXAMPLE), func(EXAMPLE_HEADER))[::direction]
+            field = current.fields[-1]
+            replaced = _rreplace(field.value, *to_replace)
+            current.set_field_at(-1, name=field.name, value=replaced, inline=False)
+
         if toggle:
             image_url = bot.command_image_urls.get(command.qualified_name)
             if not image_url:
                 return None
+
             current.set_image(url=image_url)
-            current.add_field(name='\u200b', value='**Example**', inline=False)
+            swap_fields(1)
         else:
             if hasattr(current, '_image'):
                 del current._image
-                current.remove_field(-1)
+                swap_fields(-1)
         return current
 
     @page('\N{DOWNWARDS BLACK ARROW}')
@@ -665,12 +679,13 @@ class HelpCommandPage(BaseReactionPaginator):
         if _has_subcommands(command):
             self.show_subcommands(embed=cmd_embed)
 
-        cmd_embed.add_field(name=func("Usage"), value=f'`{func(signature)}`', inline=False)
+        usage = func(f'`{signature}`\n\n{SEE_EXAMPLE}')
+        cmd_embed.add_field(name=func("Usage"), value=usage, inline=False)
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
         category = _command_category(command)
-        footer = f'Category: {category} | Click the info button below to see an example.'
+        footer = f'Category: {category}'
         return cmd_embed.set_footer(text=func(footer))
 
 
