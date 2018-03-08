@@ -586,7 +586,7 @@ def _at_least(iterable, n):
     return any(True for _ in itertools.islice(iterable, n, None))
 
 def _requires_extra_page(command):
-    return _has_subcommands(command) and _at_least(command.walk_commands(), 6)
+    return _has_subcommands(command) and _at_least(command.walk_commands(), 4)
 
 
 def _rreplace(s, old, new, occurrence=1):
