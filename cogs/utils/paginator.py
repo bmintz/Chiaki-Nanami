@@ -592,7 +592,10 @@ def _requires_extra_page(command):
 def _rreplace(s, old, new, occurrence=1):
     return new.join(s.rsplit(old, occurrence))
 
-SEE_EXAMPLE = 'For an example, click \N{INFORMATION SOURCE}'
+
+_example_key = '\N{INFORMATION SOURCE}'
+_see_also_key = '\N{DOWNWARDS BLACK ARROW}'
+SEE_EXAMPLE = f'For an example, click {_example_key}'
 EXAMPLE_HEADER = '**Example**'
 
 
@@ -605,14 +608,22 @@ class HelpCommandPage(BaseReactionPaginator):
         self._old_footer_text = None
         self._show_subcommands = False
 
+        has_example, needs_see_also = False, True
+
         if not _requires_extra_page(command):
-            self._reaction_map = self._normal_reaction_map
+            needs_see_also = False
             self._show_subcommands = True
 
-    @page('\N{INFORMATION SOURCE}')
+        self._example = ctx.bot.command_image_urls.get(command.qualified_name)
+        if self._example:
+            has_example = True
+
+        self._reaction_map = self._reaction_maps[has_example, needs_see_also]
+
+    @page(_example_key)
     async def show_example(self):
         self._toggle = toggle = not self._toggle
-        command, bot, current, func = self.command, self.context.bot, self._current, self.func
+        current, func = self._current, self.func
 
         def swap_fields(direction):
             to_replace = (func(SEE_EXAMPLE), func(EXAMPLE_HEADER))[::direction]
@@ -621,11 +632,7 @@ class HelpCommandPage(BaseReactionPaginator):
             current.set_field_at(-1, name=field.name, value=replaced, inline=False)
 
         if toggle:
-            image_url = bot.command_image_urls.get(command.qualified_name)
-            if not image_url:
-                return None
-
-            current.set_image(url=image_url)
+            current.set_image(url=self._example)
             swap_fields(1)
         else:
             if hasattr(current, '_image'):
@@ -633,7 +640,7 @@ class HelpCommandPage(BaseReactionPaginator):
                 swap_fields(-1)
         return current
 
-    @page('\N{DOWNWARDS BLACK ARROW}')
+    @page(_see_also_key)
     def show_subcommands(self, embed=None):
         embed = embed or self._current
         command, func = self.command, self.func
@@ -642,7 +649,7 @@ class HelpCommandPage(BaseReactionPaginator):
         if self._show_subcommands:
             value = func(_list_subcommands_and_descriptions(command))
         else:
-            value = func('Click \N{DOWNWARDS BLACK ARROW} to expand')
+            value = func(f'Click {_see_also_key} to expand')
 
         self._show_subcommands = not self._show_subcommands
 
@@ -679,8 +686,13 @@ class HelpCommandPage(BaseReactionPaginator):
         if _has_subcommands(command):
             self.show_subcommands(embed=cmd_embed)
 
-        usage = func(f'`{signature}`\n\n{SEE_EXAMPLE}')
-        cmd_embed.add_field(name=func("Usage"), value=usage, inline=False)
+        usage = f'`{signature}`'
+        if self._example:
+            usage = f'{usage}\n\n{SEE_EXAMPLE}'
+        else:
+            usage = f'{usage}\n\nNo example for {command}... yet'
+
+        cmd_embed.add_field(name=func("Usage"), value=func(usage), inline=False)
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
@@ -689,8 +701,17 @@ class HelpCommandPage(BaseReactionPaginator):
         return cmd_embed.set_footer(text=func(footer))
 
 
-HelpCommandPage._normal_reaction_map = HelpCommandPage._reaction_map.copy()
-del HelpCommandPage._normal_reaction_map['\N{DOWNWARDS BLACK ARROW}']
+def _without_keys(mapping, *keys):
+    return OrderedDict((key, value) for key, value in mapping.items() if key not in keys)
+_rmap_without = functools.partial(_without_keys, HelpCommandPage._reaction_map)
+
+HelpCommandPage._reaction_maps = {
+    (True, True): HelpCommandPage._reaction_map,
+    (True, False): _rmap_without(_see_also_key),
+    (False, True): _rmap_without(_example_key),
+    (False, False): _rmap_without(_example_key, _see_also_key),
+}
+del _rmap_without, _without_keys
 
 
 async def _can_run(command, ctx):
