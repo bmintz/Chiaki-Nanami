@@ -266,6 +266,43 @@ PRE_PING_REMARKS = [
     'Pong?',
 ]
 
+
+def _format_activity(activity):
+    if not activity:
+        return 'Not playing anything...'
+
+    if activity.type is discord.ActivityType.streaming:
+        return f'Streaming [**{activity}**]({activity.url})'
+
+    name = activity.type.name.title()
+    # We want "Listening to", not "Listening"
+    if activity.type is discord.ActivityType.listening:
+        name += ' to'
+
+    if activity.__class__.__str__ is object.__str__:
+        # Activity.__str__ isn't a thing because we don't know what
+        # str(Activity) should return. This is just a hack to fix
+        # that for now.
+        activity_name = activity.name
+    else:
+        activity_name = str(activity)
+
+    playing = f"{name} **{activity_name}**"
+
+    if isinstance(activity, discord.Spotify):
+        # Spotify why must you be so different
+        url = f'https://open.spotify.com/track/{activity.track_id}'
+        playing = (
+            f'{playing}\n'
+            f'[**{activity.title}**]({url})\n'
+            f'by **{",".join(activity.artists)}**'
+        )
+    elif activity.details:
+        playing = f'{playing}\n{activity.details}\n{activity.state or ""}'
+
+    return playing
+
+
 class Information(Cog):
     """Info related commands"""
 
@@ -309,27 +346,23 @@ class Information(Cog):
 
     def _user_embed(self, member):
         avatar_url = member.avatar_url
+        activity = member.activity
 
-        is_streaming = member.game and member.game.type == 1
+        result = _format_activity(activity)
         status = 'bot_tag' if member.bot else member.status.value
         icon = getattr(self.bot.emoji_config, status)
+
+        is_streaming = activity and activity.type == 1
         if icon:
             colour = member.colour
         else:
             icon = discord.Embed.Empty
             colour = 0x593695 if is_streaming else _status_colors[member.status]
 
-        if not member.game:
-            playing = 'Not playing anything...'
-        elif is_streaming:
-            playing = f'Streaming [**{member.game}**]({member.game.url})'
-        else:
-            playing = f"Playing **{member.game}**"
-
         roles = sorted(member.roles, reverse=True)[:-1]  # last role is @everyone
         roles_field = ', '.join(role.mention for role in roles) or "-no roles-"
 
-        return (discord.Embed(colour=colour, description=playing)
+        return (discord.Embed(colour=colour, description=result)
                 .set_thumbnail(url=avatar_url)
                 .set_author(name=str(member), icon_url=icon.url)
                 .add_field(name="Display Name", value=member.display_name)
