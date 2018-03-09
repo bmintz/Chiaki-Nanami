@@ -124,6 +124,30 @@ def _callable_prefix(bot, message):
 VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro')
 
 
+# Activity-related stuffs...
+def _parse_type(type_):
+    with contextlib.suppress(AttributeError):
+        type_ = type_.lower()
+
+    try:
+        return discord.ActivityType[type_]
+    except KeyError:
+        pass
+
+    typ_ = discord.enums.try_enum(discord.ActivityType, type_)
+    if typ_ is type_:
+        raise ValueError(f'inappropriate activity type passed: {type_!r}')
+    return typ_
+
+def _get_proper_activity(type, name, url=''):
+    if type is discord.ActivityType.playing:
+        return discord.Game(name=name)
+    if type is discord.ActivityType.streaming:
+        # TODO: Validate twitch.tv url
+        return discord.Streaming(name=name, url=url)
+    return discord.Activity(type=type, name=name)
+
+
 class Chiaki(commands.Bot):
     __version__ = '1.1.0'
     version_info = VersionInfo(major=1, minor=1, micro=0)
@@ -229,18 +253,51 @@ class Chiaki(commands.Bot):
         finally:
             self.remove_listener(func)
 
+    def __format_name_for_activity(self, name):
+        return name.format(
+            server_count=self.guild_count,
+            user_count=self.user_count,
+            version=self.__version__,
+        )
+
+    def __parse_activity(self, game):
+        if isinstance(game, str):
+            return discord.Game(name=self.__format_name_for_activity(game))
+
+        if isinstance(game, collections.abc.Sequence):
+            type_, name, url = (*game, config.twitch_url)[:3]  # not accepting a seq of just "[type]"
+            type_ = _parse_type(type_)
+            name = self.__format_name_for_activity(name)
+            return _get_proper_activity(type_, name, url)
+
+        if isinstance(game, collections.abc.Mapping):
+            def get(key):
+                try:
+                    return game[key]
+                except KeyError:
+                    raise ValueError(f"game mapping must have a {key!r} key, got {game!r}")
+
+            data = {
+                **game,
+                'type': _parse_type(get('type')),
+                'name': self.__format_name_for_activity(get('name'))
+            }
+            data.setdefault('url', config.twitch_url)
+            return _get_proper_activity(**data)
+
+        raise TypeError(f'expected a str, sequence, or mapping for game, got {type(game).__name__!r}')
+
     async def change_game(self):
         await self.wait_until_ready()
         while True:
-            name = random.choice(config.games)
-            formatted = name.format(
-                server_count=self.guild_count, 
-                user_count=self.user_count,
-                version=self.__version__,
+            pick = random.choice(config.games)
+            try:
+                activity = self.__parse_activity(pick)
+            except (TypeError, ValueError):
+                log.exception(f'inappropriate game {pick!r}, removing it from the list.')
+                config.games.remove(pick)
 
-            )
-
-            await self.change_presence(game=discord.Game(name=formatted, type=0))
+            await self.change_presence(activity=activity)
             await asyncio.sleep(random.uniform(0.5, 2) * 60)
 
     def run(self):

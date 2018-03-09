@@ -48,14 +48,35 @@ extensions = []
 # The possible games the bot will randomly choose from for the playing status.
 # These are not cycled.
 #
-# There are a few formats you can put in your playing status. Such as:
+# To cover the new activity types, an entry in this list can be one of
+# three types:
+# str = just the name of the game, this will default to the "playing" status.
+# tuple/list of (activity_type, name, Optional[url])
+# dict of {'type': activity_type, 'name': name}
+#
+# The activity_type can be one of 4 types:
+# * 0 - 'Playing'
+# * 1 - 'Streaming' (Requires a twitch.tv url)
+# * 2 - 'Listening'
+# * 3 - 'Watching'
+# You can either use the number (e.g. 2), or the name (e.g. 'listening')
+#
+# There are a few formats you can put in your playing status. These are:
 # {server_count} = how many servers the bot is in
 # {user_count} = how many users the bots shares a server with
 # {version} = the bot's version number
 #
-# Note that if you want to have either { or } in your string you have
+# Note that if you want to have either { or } in your name you have
 # to double them up. For e.g. {{status}}
 games = []
+
+# Twitch URL, you only need to provide this as a default if you use
+# streaming status.
+#
+# This must be a valid twitch.tv URL, meaning it needs to include
+# the https:// part as well
+# (e.g. https://twitch.tv/Chiaki)
+twitch_url = ''
 
 # ----------------------- COLOURS ---------------------
 
