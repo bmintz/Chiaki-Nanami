@@ -368,7 +368,7 @@ class Information(Cog):
                 .add_field(name="Display Name", value=member.display_name)
                 .add_field(name="Created at", value=nice_time(member.created_at))
                 .add_field(name=f"Joined server at", value=nice_time(member.joined_at))
-                .add_field(name=f"Avatar link", value=f'[Click Here!](avatar_url)')
+                .add_field(name=f"Avatar link", value=f'[Click Here!]({avatar_url})')
                 .add_field(name=f"Roles - {len(roles)}", value=roles_field, inline=False)
                 .set_footer(text=f"ID: {member.id}")
                 )
