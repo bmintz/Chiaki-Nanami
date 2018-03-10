@@ -111,7 +111,7 @@ class WelcomeMessages(Cog):
         colour, prefix = (0x4CAF50, 'en') if config.enabled else (0xf44336, 'dis')
         message = (f'**Message:**\n{config.message}'
                    if config.message else
-                   f"You haven't even set the message...\nUse `{thing.command_name} message` to set it.")
+                   f"Set one using `{thing.command_name} message`.")
 
         embed = (discord.Embed(colour=colour, description=message)
                  .set_author(name=f'{thing.name.title()} Status: {prefix}abled')
@@ -119,22 +119,25 @@ class WelcomeMessages(Cog):
 
         ch_id = config.channel_id
         if ch_id == -1:
-            ch_field = f"You haven't even set this! Use `{thing.command_name} channel your_channel` right now!"
+            ch_field = f"Set a channel using `{thing.command_name} channel channel`."
         else:
             channel = ctx.bot.get_channel(ch_id)
             if channel:
                 ch_field = channel.mention
             else:
-                ch_field = (f"{config.channel_id} has been deleted, pls reset it with "
-                            f"`{thing.command_name} channel your_channel`")
+                ch_field = (
+                    "Deleted.\nSet a new one using\n"
+                    f"`{ctx.clean_prefix}{thing.command_name} channel your_channel`"
+                )
 
         embed.add_field(name='Channel', value=ch_field, inline=False)
 
-        delete_after = (time.duration_units(config.delete_after)
-                        if config.delete_after > 0 else
-                        "Actually wait, I won't delete it at all...")
-
-        embed.add_field(name='I will delete it after', value=delete_after, inline=False)
+        if config.delete_after > 0:
+            embed.add_field(
+                name='Message will be deleted after',
+                value=time.duration_units(config.delete_after),
+                inline=False
+            )
 
         await ctx.send(embed=embed)
 
