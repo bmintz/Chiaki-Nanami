@@ -13,9 +13,8 @@ class DeprecatedCommand(commands.Command):
 
     @discord.utils.cached_property
     def warning(self):
-        base = f'`{self}` has been deprecated'
-        if self._removed_version:
-            base = f'{base} and will be removed in {self._removed_version}'
+        version = self._removed_version or 'the future'
+        base = f'\N{WARNING SIGN} `{self}` will be removed in {version}'
         if self._instead:
             base = f'{base}, use `{self._instead}` instead'
         return base + '.'
