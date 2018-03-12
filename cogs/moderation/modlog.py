@@ -134,7 +134,11 @@ class CaseNumber(commands.Converter):
             raise commands.BadArgument("This has to be an actual number... -.-")
 
         if num < 0:
-            num += await _get_number_of_cases(ctx.db, ctx.guild.id) + 1
+            num_cases = await _get_number_of_cases(ctx.db, ctx.guild.id)
+            if not num_cases:
+                raise commands.BadArgument('There are no cases... yet.')
+
+            num += num_cases + 1
             if num < 0:
                 # Consider it out of bounds, because accessing a negative
                 # index is out of bounds anyway.
@@ -498,7 +502,15 @@ class ModLog(Cog):
         the most recent case. e.g. -1 will show the newest case,
         and -10 will show the 10th newest case.
         """
-        num = num or await _get_number_of_cases(ctx.db, ctx.guild.id)
+
+        # Solving some weird nasty edge cases first
+        if num is None:
+            cases = await _get_number_of_cases(ctx.db, ctx.guild.id)
+            if not cases:
+                return await ctx.send('There are no cases here.')
+
+        if num == 0:
+            num = 1
 
         case = await self._get_case(ctx.guild.id, num, connection=ctx.db)
         if case is None:
