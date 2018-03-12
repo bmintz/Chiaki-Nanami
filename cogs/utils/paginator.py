@@ -10,6 +10,7 @@ from collections import OrderedDict
 from discord.ext import commands
 from more_itertools import unique_everseen
 
+from .deprecated import DeprecatedCommand
 from .misc import maybe_awaitable
 
 
@@ -676,6 +677,8 @@ class HelpCommandPage(BaseReactionPaginator):
         cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(_all_names(command))}`"
 
         description = (command.help or '').format(prefix=clean_prefix)
+        if isinstance(command, DeprecatedCommand):
+            description = f'*{command.warning}*\n\n{description}'
 
         cmd_embed = discord.Embed(title=func(cmd_name), description=func(description), colour=self.colour)
 
