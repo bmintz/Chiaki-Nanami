@@ -383,7 +383,7 @@ class ModLog(Cog):
                 connection=ctx.db
             )
         except ModLogError as e:
-            await ctx.send(f'{ctx.author.mention}, {e}')
+            pass
         else:
             if query_args:
                 query, args = query_args
