@@ -236,7 +236,7 @@ class ModLog(Cog):
 
         if extra is None:
             duration_string = ''
-        elif isinstance(extra, float):
+        elif isinstance(extra, (float, int)):
             duration_string = f' for {duration_units(extra)}'
         else:
             duration_string = f' for {parse_delta(extra.delta)}'
