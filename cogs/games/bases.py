@@ -8,7 +8,6 @@ import random
 from discord.ext import commands
 
 from core.cog import Cog
-from core.deprecated import DeprecatedCommand
 
 from ..utils.converter import CheckedMember, NoSelfArgument
 

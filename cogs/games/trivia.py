@@ -18,8 +18,8 @@ from discord.ext import commands
 from PIL import Image
 
 from core.cog import Cog
-from core.deprecated import DeprecatedCommand
 from ..utils import cache
+from ..utils.deprecated import DeprecatedCommand
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
 
