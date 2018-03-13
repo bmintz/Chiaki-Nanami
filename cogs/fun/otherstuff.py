@@ -289,9 +289,7 @@ class OtherStuffs(Cog):
         slapper = ctx.author
         if target is None:
             msg1 = f"{slapper} is just flailing their arms around, I think."
-            slaps = ["http://media.tumblr.com/tumblr_lw6rfoOq481qln7el.gif",
-                     "http://i46.photobucket.com/albums/f104/Anime_Is_My_Anti-Drug/KururuFlail.gif",
-                     ]
+            slaps = ["http://media.tumblr.com/tumblr_lw6rfoOq481qln7el.gif"]
             msg2 = "(Hint: specify a user.)"
         elif target.id == slapper.id:
             msg1 = f"{slapper} is slapping themself, I think."
@@ -310,8 +308,6 @@ class OtherStuffs(Cog):
             slaps = ["https://media.giphy.com/media/jLeyZWgtwgr2U/giphy.gif",
                      "https://media.giphy.com/media/RXGNsyRb1hDJm/giphy.gif",
                      "https://media.giphy.com/media/zRlGxKCCkatIQ/giphy.gif",
-                     "https://media.giphy.com/media/MelHtIx2kmZz2/giphy.gif",
-                     "https://media.giphy.com/media/147iq4Fk1IGvba/giphy.gif",
                      "http://i.imgur.com/dzefPFL.gif",
                      "https://s-media-cache-ak0.pinimg.com/originals/fc/e1/2d/fce12d3716f05d56549cc5e05eed5a50.gif",
                      ]
