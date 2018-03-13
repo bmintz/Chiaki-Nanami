@@ -9,3 +9,4 @@ parsedatetime
 psutil
 python-dateutil
 webcolors
+websockets>=3.1,<4.0  # needed because 4.0 is really fucky
