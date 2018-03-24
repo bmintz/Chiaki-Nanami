@@ -3,7 +3,6 @@ import collections
 import colorsys
 import discord
 import functools
-import itertools
 import random
 import secrets
 import string
@@ -165,9 +164,6 @@ def _make_maze(w=16, h=8):
     return(''.join(a + ['\n'] + b) for (a, b) in zip(hor, ver))
 
 
-# We have to make a custom converter class because we need to properly
-# validate if low < high. Later on when we generate examples this will become
-# an issue.
 def range_(arg):
     low = high = original_high = None
     view = commands.view.StringView(arg)
