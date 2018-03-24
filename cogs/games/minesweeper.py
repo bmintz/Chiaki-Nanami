@@ -652,7 +652,7 @@ class MinesweeperSession:
             p.cancel()
 
         edit = self.edit
-        delete_edit = partial(edit, delete_after=7)
+        delete_edit = partial(edit, delete_after=45)
 
         # This can probably be moved away and cleaned up somehow but whatever
         try:
