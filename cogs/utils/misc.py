@@ -28,13 +28,6 @@ def nice_time(time):
     return time.strftime("%d/%m/%Y %H:%M")
 
 
-def parse_int(maybe_int, base=10):
-    try:
-        return int(maybe_int, base)
-    except ValueError:
-        return None
-
-
 def ordinal(num):
     # pay no attention to this ugliness
     return "%d%s" % (num, "tsnrhtdd"[(num//10%10!=1)*(num%10<4)*num%10::4])
@@ -52,10 +45,6 @@ def file_handler(name, path='./logs', *, format='%(asctime)s/%(levelname)s: %(na
 
     handler.setFormatter(logging.Formatter(format))
     return handler
-
-
-def base_filename(name):
-    return os.path.splitext(os.path.basename(name))[0]
 
 
 def emoji_url(emoji):
