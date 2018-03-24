@@ -164,14 +164,6 @@ def _make_maze(w=16, h=8):
     return(''.join(a + ['\n'] + b) for (a, b) in zip(hor, ver))
 
 
-_available_distributions = {
-    'uniform': random.uniform,
-    'int': random.randint,
-    'range': random.randrange,
-    'triangular': random.triangular,
-    }
-
-
 class RNG(Cog):
     __aliases__ = "Random",
 
@@ -219,25 +211,22 @@ class RNG(Cog):
             await msg.edit(content=random.choice(choices))
 
     @commands.group(aliases=['rand'], invoke_without_command=True)
-    async def random(self, ctx, lo: number, hi: number=None, dist='range'):
-        """Super-command for all the random commands. Or generates a value between lo and hi given"""
-        distribution = _available_distributions.get(dist)
-        if distribution is None:
-            raise commands.BadArgument(f"{dist} is not a distribution for random numbers")
+    async def random(self, ctx, low: number, high: number=None):
+        """Gives a random number between low and high"""
 
-        if hi is None:
-            lo, hi = 0, lo
-        result = distribution(lo, hi)
+        if high is None:
+            low, high = 0, low
 
-        msg = await ctx.send(f"Your random {distribution.__name__} number between is...")
+        if isinstance(low, int) and isinstance(high, int):
+            distribution = random.randint
+        else:
+            distribution = random.uniform
+
+        result = distribution(low, high)
+
+        msg = await ctx.send(f"Your random number is...")
         await asyncio.sleep(random.uniform(0, 1))
         await msg.edit(content=msg.content + f'**{result}!!**')
-
-    @random.command(aliases=['dists'])
-    async def distributions(self, ctx):
-        """Shows all the distributions one can use for the random command"""
-        dists = ', '.join(_available_distributions)
-        await ctx.send(f"Available random distributions```\n{dists}```")
 
     @random.command(aliases=['dice'], enabled=False)
     async def diceroll(self, ctx, amt):
