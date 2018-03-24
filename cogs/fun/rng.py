@@ -3,6 +3,7 @@ import collections
 import colorsys
 import discord
 import functools
+import itertools
 import random
 import secrets
 import string
@@ -164,6 +165,31 @@ def _make_maze(w=16, h=8):
     return(''.join(a + ['\n'] + b) for (a, b) in zip(hor, ver))
 
 
+# We have to make a custom converter class because we need to properly
+# validate if low < high. Later on when we generate examples this will become
+# an issue.
+def range_(arg):
+    low = high = original_high = None
+    view = commands.view.StringView(arg)
+    word1 = commands.view.quoted_word(view)
+    low = number(word1)
+
+    word2 = commands.view.quoted_word(view)
+    if word2:
+        original_high = high = number(word2)
+    else:
+        low, high = 0, low
+
+    if low >= high:
+        if original_high is None:
+            message = 'Your number should be higher than 0'
+        else:
+            message = 'The second number should be higher than the first'
+        raise commands.BadArgument(message)
+
+    return low, high
+
+
 class RNG(Cog):
     __aliases__ = "Random",
 
@@ -210,12 +236,10 @@ class RNG(Cog):
             await asyncio.sleep(random.uniform(0.25, 1))
             await msg.edit(content=random.choice(choices))
 
-    @commands.group(aliases=['rand'], invoke_without_command=True)
-    async def random(self, ctx, low: number, high: number=None):
+    @commands.group(aliases=['rand'], invoke_without_command=True, usage='<low> [high]')
+    async def random(self, ctx, *, low_high: range_):
         """Gives a random number between low and high"""
-
-        if high is None:
-            low, high = 0, low
+        low, high = low_high
 
         if isinstance(low, int) and isinstance(high, int):
             distribution = random.randint
