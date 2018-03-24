@@ -1,4 +1,3 @@
-import argparse
 import difflib
 import discord
 
@@ -20,13 +19,6 @@ class NoOfflineMembers(commands.BadArgument):
 
 class NoSelfArgument(commands.BadArgument):
     """Exception raised in CheckedMember when the author passes themself as an argument"""
-
-
-# Custom ArgumentParser because the one in argparse raises SystemExit upon
-# failure, which kills the bot
-class ArgumentParser(argparse.ArgumentParser):
-    def error(self, message):
-        raise commands.BadArgument(f'Failed to parse args.```\n{message}```')
 
 
 class CheckedMember(commands.MemberConverter):
@@ -95,27 +87,3 @@ class union(commands.Converter):
         type_names = ', '.join([t.__name__ for t in self.types])
         raise commands.BadArgument(f"I couldn't parse {arg} successfully, "
                                    f"given these types: {type_names}")
-
-
-def in_(*choices):
-    def in_converter(arg):
-        lowered = arg.lower()
-        if lowered in choices:
-            return lowered
-        raise commands.BadArgument(f"{lowered} is not valid option. "
-                                   f"Available options:\n{', '.join(choices)}")
-    return in_converter
-
-
-def ranged(low, high=None, *, type=int):
-    'Converter to check if an argument is in a certain range INCLUSIVELY'
-    if high is None:
-        low, high = 0, low
-
-    def ranged_argument(arg):
-        result = type(arg)
-        if low <= result <= high:
-            return result
-        raise commands.BadArgument(f'Value must be between {low} and {high}, '
-                                   f'or equal to {low} or {high}.')
-    return ranged_argument
