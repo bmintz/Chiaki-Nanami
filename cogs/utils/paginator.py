@@ -575,7 +575,7 @@ def _make_command_requirements(command):
     return '\n'.join(requirements)
 
 def _list_subcommands_and_descriptions(command):
-    name_docs = sorted((str(sub), sub.short_doc) for sub in set(command.walk_commands()))
+    name_docs = sorted((str(sub), sub.short_doc) for sub in set(_visible_sub_commands(command)))
     padding = max(len(name) for name, _ in name_docs)
 
     return '\n'.join(
@@ -583,11 +583,14 @@ def _list_subcommands_and_descriptions(command):
         for name, doc in name_docs
     )
 
+def _visible_sub_commands(command):
+    return (c for c in command.walk_commands() if not c.hidden and c.enabled)
+
 def _at_least(iterable, n):
     return any(True for _ in itertools.islice(iterable, n, None))
 
 def _requires_extra_page(command):
-    return _has_subcommands(command) and _at_least(command.walk_commands(), 4)
+    return _has_subcommands(command) and _at_least(_visible_sub_commands(command), 4)
 
 
 def _rreplace(s, old, new, occurrence=1):
