@@ -10,9 +10,9 @@ import re
 
 from datetime import datetime, timedelta
 from discord.ext import commands
-from functools import reduce
+from functools import partial, reduce
 
-from ..utils import cache
+from ..utils import cache, varpos
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import EmbedFieldPages
 from ..utils.time import duration_units, parse_delta
@@ -704,7 +704,9 @@ class ModLog(Cog):
 
         await self._check_modlog_channel(ctx, channel_id, embed=embed)
 
-    @mod_actions.command(name='enable')
+    _mod_action_command = partial(mod_actions.command, cls=varpos.RequireVarArgCommand)
+
+    @_mod_action_command(name='enable')
     @commands.has_permissions(manage_guild=True)
     async def macts_enable(self, ctx, *actions: ActionFlag):
         """Enables case creation for all the given mod-actions."""
@@ -718,7 +720,7 @@ class ModLog(Cog):
 
         await self._set_actions(ctx, query, actions, colour=0x4CAF50)
 
-    @mod_actions.command(name='disable')
+    @_mod_action_command(name='disable')
     @commands.has_permissions(manage_guild=True)
     async def macts_disable(self, ctx, *actions: ActionFlag):
         """Disables case creation for all the given mod-actions."""
@@ -731,6 +733,8 @@ class ModLog(Cog):
         """
 
         await self._set_actions(ctx, query, actions, colour=0xF44336)
+
+    del _mod_action_command
 
     @commands.command(name='pollauditlog')
     @commands.has_permissions(manage_guild=True)

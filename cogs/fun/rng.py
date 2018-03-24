@@ -10,6 +10,7 @@ import uuid
 
 from discord.ext import commands
 
+from ..utils import varpos
 from ..utils.converter import number
 from ..utils.misc import emoji_url
 
@@ -218,7 +219,7 @@ class RNG(Cog):
             embed.colour = answer.colour
             await msg.edit(embed=embed)
 
-    @commands.command(usage='Nadeko Salt PvPCraft mee6 "Chiaki Nanami"')
+    @varpos.require_va_command(usage='Nadeko Salt PvPCraft mee6 "Chiaki Nanami"')
     async def choose(self, ctx, *choices: commands.clean_content):
         """Chooses between a list of choices.
 

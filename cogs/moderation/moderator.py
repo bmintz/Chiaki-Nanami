@@ -11,7 +11,7 @@ from collections import Counter, namedtuple
 from discord.ext import commands
 from operator import attrgetter
 
-from ..utils import formats, time
+from ..utils import formats, time, varpos
 from ..utils.context_managers import temp_attr
 from ..utils.converter import union
 from ..utils.jsonf import JSONFile
@@ -844,7 +844,7 @@ class Moderator(Cog):
         await self._remove_time_entry(ctx.guild, user.user, ctx.db, event='tempban_complete')
         await ctx.send(f"Done. What did {user.user} do to get banned in the first place...?")
 
-    @commands.command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
+    @varpos.require_va_command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
     @commands.has_permissions(ban_members=True)
     async def massban(self, ctx, reason: Reason, *members: CheckedMember(MemberID)):
         """Bans multiple users from the server (obviously)"""

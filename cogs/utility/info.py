@@ -14,7 +14,7 @@ from math import log10
 from more_itertools import sliced
 from operator import attrgetter
 
-from ..utils import cache, disambiguate
+from ..utils import cache, disambiguate, varpos
 from ..utils.colours import url_color, user_color
 from ..utils.context_managers import temp_message
 from ..utils.converter import union
@@ -652,7 +652,7 @@ class Information(Cog):
         """
         await self._inrole(ctx, role, members=role.members)
 
-    @commands.command()
+    @varpos.require_va_command()
     @commands.guild_only()
     async def inanyrole(self, ctx, *roles: disambiguate.DisambiguateRole):
         """Checks which members have any of the given role(s).
@@ -664,7 +664,7 @@ class Information(Cog):
         await self._inrole(ctx, *roles, members=set(chain.from_iterable(map(attrgetter('members'), roles))),
                            final='or')
 
-    @commands.command()
+    @varpos.require_va_command()
     @commands.guild_only()
     async def inallrole(self, ctx, *roles: disambiguate.DisambiguateRole):
         """Checks which members have all of the given role(s).
