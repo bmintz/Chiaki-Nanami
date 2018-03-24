@@ -47,6 +47,10 @@ def file_handler(name, path='./logs', *, format='%(asctime)s/%(levelname)s: %(na
     return handler
 
 
+def base_filename(name):
+    return os.path.splitext(os.path.basename(name))[0]
+
+
 def emoji_url(emoji):
     return f'https://twemoji.maxcdn.com/2/72x72/{hex(ord(emoji))[2:]}.png'
 
