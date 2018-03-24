@@ -78,17 +78,6 @@ _letters = 'abcdefghi'
 
 
 DEFAULT_CLUE_EMOJIS = tuple(_number_markers)
-CUSTOM_CLUE_EMOJIS = (
-    '<:clue1:411056517312151573>',
-    '<:clue2:411097959342669824>',
-    '<:clue3:411099996289499136>',
-    '<:clue4:411103926197420032>',
-    '<:clue5:411103970279292928>',
-    '<:clue6:411103996376514570>',
-    '<:clue7:411106238236196865>',
-    '<:clue8:411108321567834133>',
-    '<:clue9:411108337153867776>',
-)
 
 
 class Board:
@@ -513,8 +502,8 @@ class SudokuSession:
     def __init__(self, ctx, board):
         self._board = board
         self._ctx = ctx
-        if ctx.can_use_chiaki_repo_emojis():
-            self._board._clue_markers = CUSTOM_CLUE_EMOJIS
+        if ctx.bot_has_permissions(external_emojis=True):
+            self._board._clue_markers = ctx.bot.emoji_config.sudoku_clues
 
         self._controller = Controller(ctx, self)
 

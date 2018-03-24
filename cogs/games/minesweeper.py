@@ -476,6 +476,8 @@ def _range_row(strings):
     )
 
 
+_number_emojis = [f'{i}\u20e3' for i in range(1, 10)] + ['\N{KEYCAP TEN}']
+
 class ControlScheme(collections.namedtuple('ControlScheme', 'x y x_row y_row pattern')):
     __slots__ = ()
 
@@ -486,32 +488,18 @@ class ControlScheme(collections.namedtuple('ControlScheme', 'x y x_row y_row pat
         return _range_row(self.y[:limit])
 
 
-_number_emojis = [f'{i}\u20e3' for i in range(1, 10)] + ['\N{KEYCAP TEN}']
-
 DEFAULT_CONTROL_SCHEME = ControlScheme(
     ascii_lowercase, [*map(str, range(1, 11)), *'abcdefgh'],
     REGIONAL_INDICATORS, [*_number_emojis, *REGIONAL_INDICATORS[:7]],
     '([a-q])\s{0,1}(10|[1-9a-g])\s{0,1}(flag|unsure|u|f)?',
 )
 
-# Control scheme with custom emojis
-_emojis = [
-    *_number_emojis,
-    '<:eleven:409305887682068480>',
-    '<:twelve:409324947945553932>',
-    '<:thirteen:409325803948605440>',
-    '<:fourteen:409328295147208725>',
-    '<:fifteen:409331600476733440>',
-    '<:sixteen:409332191542247426>',
-    '<:seventeen:409336343097901066>',
-]
 
 CUSTOM_EMOJI_CONTROL_SCHEME = ControlScheme(
     ascii_lowercase, list(map(str, range(1, 18))),
-    REGIONAL_INDICATORS, _emojis,
+    REGIONAL_INDICATORS, [],
     '([a-q])\s{0,1}(1?[0-9])\s{0,1}(flag|unsure|u|f)?',
 )
-del _number_emojis, _emojis
 
 
 class MinesweeperSession:
@@ -744,8 +732,12 @@ class Minesweeper(Cog):
     # we need to properly set the control scheme, otherwise we'll have
     # ":bad emojis:" messing up the player.
     async def __before_invoke(self, ctx):
-        if ctx.can_use_chiaki_repo_emojis():
-            scheme = CUSTOM_EMOJI_CONTROL_SCHEME
+        config = ctx.bot.emoji_config
+        if ctx.bot_has_permissions(external_emojis=True) and config.msw_use_external_emojis:
+            scheme = CUSTOM_EMOJI_CONTROL_SCHEME._replace(
+                x_row=list(map(str, config.msw_x_row)),
+                y_row=list(map(str, config.msw_y_row)),
+            )
         else:
             scheme = DEFAULT_CONTROL_SCHEME
 

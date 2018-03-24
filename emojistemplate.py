@@ -34,3 +34,52 @@ bot_tag = '\N{ROBOT FACE}'
 # ------- Currency Emoji -------------
 
 money = '\N{BANKNOTE WITH DOLLAR SIGN}'
+
+
+# ------ Numbers -----
+
+# Right now it uses the default key-caps
+# However, you may specify custom emojis if needed
+#
+# Note: The numbers are what *Discord sees them as*. Technically the
+# actual keycap number emoji would be {number}\ufe0f\u20e3. But discord
+# instead sends it as {number}\u20e3 (without the \ufe0f). Do not add the
+# \fe0f in, otherwise it won't send as an actual number.
+numbers = [
+    f'{n}\u20e3' for n in range(10)
+]
+
+
+# ------- Minesweeper -------
+
+# Not an emoji per se but set to True if you want to be able to use external
+# emojis for Minesweeper. This only applies to Minesweeper as this changes
+# the control scheme if she's able to use external emojis.
+#
+# Note that if Chiaki doesn't have Use External Emojis she'll be forced to
+# use the default control scheme by default.
+msw_use_external_emojis = False
+
+msw_y_row = [
+    # Should have emojis representing 1-17.
+    # If you set msw_use_external_emojis to True this *must* be filled.
+]
+
+msw_letters = [
+    # Should have emojis representing A-Q or some equivalent.
+    # If you set msw_use_external_emojis to True this *must* be filled.
+]
+
+# ------ Connect-Four -------
+
+c4_winning_tiles = [
+    '\N{HEAVY BLACK HEART}',
+    '\N{BLUE HEART}'
+]
+
+
+# ------- Sudoku ------
+
+sudoku_clues = [
+    f'{n}\u20e3' for n in range(1, 9)
+]

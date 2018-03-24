@@ -49,13 +49,13 @@ def _is_full(line):
     return len(line) == 1 and Tile.NONE not in line
 
 
-_winning_tiles = {
-    Tile.X: '\N{HEAVY BLACK HEART}',
-    Tile.O: '\N{BLUE HEART}'
-}
+_winning_tile_indices = {Tile.X: 0, Tile.O: 1}
 
 
 class Board:
+    _numbers = [f'{i}\U000020e3' for i in range(1, NUM_COLS + 1)]
+    _winning_tiles = ['\N{HEAVY BLACK HEART}', '\N{BLUE HEART}']
+
     def __init__(self):
         self._board = [[Tile.NONE] * NUM_ROWS for _ in range(NUM_COLS)]
         self._last_column = None
@@ -79,7 +79,7 @@ class Board:
         for line_idx in locate(lines, _is_full):
             indices = _default_indices[line_idx]
             winner = b[indices[0][0]][indices[0][1]]
-            emoji = _winning_tiles[winner]
+            emoji = self._winning_tiles[_winning_tile_indices[winner]]
 
             for c, r in indices:
                 # TODO: Custom emojis for tiles?
@@ -118,6 +118,11 @@ class ConnectFourSession:
         self._turn = random.random() > 0.5
         self._runner = None
         self._board = Board()
+
+        if ctx.bot_has_permissions(external_emojis=True):
+            config = self.ctx.bot.emoji_config
+            self._board._numbers = config.numbers[:7]
+            self._board._winning_tiles = config.c4_winning_tiles
 
         instructions = ('Type the number of the column to play!\n'
                         'Or `quit` to stop the game (you will lose though).')

@@ -196,20 +196,36 @@ class Chiaki(commands.Bot):
         import emojis
 
         d = {}
+
+        # These are not recognized by the Unicode or Emoji standard, but
+        # discord never really was one to follow standards.
+        is_edge_case_emoji = {
+           *(chr(i + 0x1f1e6) for i in range(26)),
+           *(f'{i}\u20e3' for i in [*range(10), '#', '*']),
+        }.__contains__
+
+        def parse_emoji(em):
+            if isinstance(em, int) and not isinstance(em, bool):
+                return self.get_emoji(em)
+
+            if isinstance(em, str):
+                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
+                if match:
+                    return self.get_emoji(int(match[1]))
+                if em in emoji.UNICODE_EMOJI or is_edge_case_emoji(em):
+                    return _UnicodeEmoji(name=em)
+                log.warn('Unknown Emoji: %r', em)
+
+            return em
+
         for name, em in inspect.getmembers(emojis):
             if name[0] == '_':
                 continue
 
-            if isinstance(em, int):
-                em = self.get_emoji(em)
-            elif isinstance(em, str):
-                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
-                if match:
-                    em = self.get_emoji(int(match[1]))
-                elif em in emoji.UNICODE_EMOJI:
-                    em = _UnicodeEmoji(name=em)
-                elif em:
-                    log.warn('Unknown Emoji: %r', em)
+            if hasattr(em, '__iter__') and not isinstance(em, str):
+                em = list(map(parse_emoji, em))
+            else:
+                em = parse_emoji(em)
 
             d[name] = em
 

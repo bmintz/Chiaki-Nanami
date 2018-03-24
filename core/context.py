@@ -12,8 +12,6 @@ from itertools import starmap
 from cogs.utils.formats import human_join
 
 
-CHIAKI_EMOJI_REPO_GUILD_ID = 409305485720944651
-
 _DEFAULT_MISSING_PERMS_ACTIONS = {
     'embed_links': 'embeds',
     'attach_files': 'upload stuffs',
@@ -190,14 +188,6 @@ class Context(commands.Context):
                 await msg.delete()
 
     ask_confirmation = confirm
-
-    def can_use_chiaki_repo_emojis(self):
-        """Return True if the bot can use emojis from the Chiaki Emoji Repository.
-
-        This is used for Minesweeper and Sudoku.
-        """
-        return (self.bot.get_guild(CHIAKI_EMOJI_REPO_GUILD_ID) is not None
-                and self.me.permissions_in(self.channel).external_emojis)
 
     def bot_missing_perms(self, missing_perms, *, action=None):
         """Send a message that the bot is missing permssions.
