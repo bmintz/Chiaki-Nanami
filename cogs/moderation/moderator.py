@@ -132,7 +132,7 @@ class Reason(commands.Converter):
         if len(result) > 512:
             max_ = 512 - len(result) - len(arg)
             raise commands.BadArgument(
-                f'Maximum reason length is {max_} characters (got {len(argument)})'
+                f'Maximum reason length is {max_} characters (got {len(arg)})'
             )
 
         return result
