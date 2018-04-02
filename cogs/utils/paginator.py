@@ -523,7 +523,7 @@ import sys
 import textwrap
 import time
 
-from more_itertools import chunked, ilen, sliced, spy
+from more_itertools import chunked, ilen, iterate, sliced, spy
 
 from .context_managers import temp_attr
 
@@ -549,6 +549,21 @@ def _command_category(command):
     return category.title()
 
 
+def _walk_parents(command):
+    """Walks up a command's parent chain."""
+    return iter(iterate(operator.attrgetter('parent'), command).__next__, None)
+
+def _all_checks(command):
+    # The main command's checks will be run regardless of if it's a group
+    # and if command.invoke_without_command is True
+    yield from command.checks
+    if not command.parent:
+        return
+
+    for parent in _walk_parents(command.parent):
+        if not parent.invoke_without_command:
+            yield from parent.checks
+
 def _make_command_requirements(command):
     requirements = []
     # All commands in this cog are owner-only anyway.
@@ -558,7 +573,7 @@ def _make_command_requirements(command):
     def make_pretty(p):
         return p.replace('_', ' ').title().replace('Guild', 'Server')
 
-    for check in command.checks:
+    for check in _all_checks(command):
         name = getattr(check, '__qualname__', '')
 
         if name.startswith('is_owner'):
