@@ -7,6 +7,7 @@ from discord.ext import commands
 from datetime import datetime
 
 from ..utils.converter import BotCogConverter, BotCommand
+from ..utils.deprecated import deprecated
 from ..utils.formats import multi_replace
 from ..utils.misc import emoji_url, truncate
 from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
@@ -167,7 +168,7 @@ class Help(Cog):
             )
             await ctx.send(content)
 
-    @commands.command(aliases=['cogs', 'mdls'])
+    @deprecated(aliases=['cogs', 'mdls'], instead='help')
     async def modules(self, ctx):
         """Shows all the *visible* modules that I have loaded"""
         visible_cogs = (
