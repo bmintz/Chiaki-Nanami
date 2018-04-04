@@ -1,4 +1,4 @@
-import collections
+import collections.abc
 from reprlib import recursive_repr
 
 
@@ -12,7 +12,7 @@ from reprlib import recursive_repr
 #
 # See also: https://stackoverflow.com/questions/3387691/how-to-perfectly-override-a-dict
 
-class TransformedDict(collections.MutableMapping):
+class TransformedDict(collections.abc.MutableMapping):
     """A dictionary that applies an arbitrary key-altering
     function before accessing the keys.
     """

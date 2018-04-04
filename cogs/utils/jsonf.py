@@ -1,5 +1,5 @@
 import asyncio
-import collections
+import collections.abc
 import contextlib
 import json
 import os
@@ -11,7 +11,7 @@ os.makedirs(JSONS_PATH, exist_ok=True)
 
 
 # Shamelessly copied from Danny because he's Danny and he's cool.
-class JSONFile(collections.MutableMapping):
+class JSONFile(collections.abc.MutableMapping):
     """The "database" object. Internally based on ``json``.
 
     Basically a wrapper for persistent data, whenever I don't want to use a DB,
