@@ -4,10 +4,12 @@ import datetime
 import itertools
 import math
 import psutil
+import random
 import traceback
 
 from discord.ext import commands
-from more_itertools import ilen, partition
+from functools import partial
+from more_itertools import all_equal, ilen, partition, repeatfunc
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
@@ -16,6 +18,7 @@ from ..utils.time import human_timedelta
 
 from core import errors
 from core.cog import Cog
+
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS commands (
@@ -45,6 +48,7 @@ _ignored_exceptions = (
 
 ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
 
+_celebration = partial(repeatfunc, random.choice, 8, '\U0001f38a\U0001f389')
 
 class Stats(Cog):
     def __init__(self, bot):
@@ -211,13 +215,43 @@ class Stats(Cog):
 
         return checker.is_bot_farm(guild)
 
+    @staticmethod
+    def _is_guild_count_landmark(guild_count):
+        """Return True if the bot is in a special number of guilds"""
+        # TODO: Put this in config.py
+        guild_count_string = str(guild_count)
+        return (
+            # 1111, 22222, 55555, etc.
+            all_equal(guild_count_string)
+            # 2000, 30000, 40000, etc
+            or (guild_count_string[0] != '1' and set(guild_count_string[1:]) == {'0'})
+            or Stats._is_guild_count_milestone(guild_count - 1)
+            or Stats._is_guild_count_milestone(guild_count + 1)
+        )
+
+    @staticmethod
+    def _is_guild_count_milestone(guild_count):
+        """Return True if the bot is in a *really* special number of guilds"""
+        # TODO: Put this in config.py
+        guild_count_string = str(guild_count)
+        return guild_count_string[0] in {'1', '5'} and set(guild_count_string[1:]) == {'0'}
+
     async def send_guild_stats(self, guild, colour, header, *, check_bot_farm=True):
         bots = sum(m.bot for m in guild.members)
         total = guild.member_count
         online = sum(m.status is discord.Status.online for m in guild.members)
 
+        guild_count = self.bot.guild_count
+        guild_count_message = f'Now in **{guild_count}** servers!'
+
+        if self._is_guild_count_milestone(guild_count):
+            message = f'\N{BIRTHDAY CAKE} {guild_count_message}!! \N{BIRTHDAY CAKE}'
+            guild_count_message = f'{"".join(_celebration())}\n{message}\n{"".join(_celebration())}'
+        elif self._is_guild_count_landmark(guild_count):
+            guild_count_message = f'\N{PARTY POPPER} {guild_count_message}!! \N{PARTY POPPER}'
+
         info = (
-            f'Now in **{self.bot.guild_count}** servers!\n\u200b\n'
+            f'{guild_count_message}\n\u200b\n'
             f'\N{NAME BADGE} **Name**: {guild.name}\n'
             f'\N{SQUARED ID} **ID**: {guild.id}\n'
             f'\N{CROWN} **Owner**: {guild.owner} ({guild.owner.mention})\n'
