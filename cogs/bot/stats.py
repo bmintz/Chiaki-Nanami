@@ -216,15 +216,16 @@ class Stats(Cog):
         total = guild.member_count
         online = sum(m.status is discord.Status.online for m in guild.members)
 
-        e = (discord.Embed(colour=colour)
-             .set_author(name=f'{header} server.')
-             .add_field(name='Name', value=guild.name)
-             .add_field(name='ID', value=guild.id)
-             .add_field(name='Owner', value=f'{guild.owner} (ID: {guild.owner.id})')
-             .add_field(name='Members', value=str(total))
-             .add_field(name='Bots', value=f'{bots} ({bots/total :.2%})')
-             .add_field(name='Online', value=f'{online} ({online/total :.2%})')
-             )
+        info = (
+            f'Now in **{self.bot.guild_count}** servers!\n\u200b\n'
+            f'\N{NAME BADGE} **Name**: {guild.name}\n'
+            f'\N{SQUARED ID} **ID**: {guild.id}\n'
+            f'\N{CROWN} **Owner**: {guild.owner} ({guild.owner.mention})\n'
+            f'\u2022 **{total}** Members \u2022 **{bots}** Bots \u2022 **{online}** Online ({online/total :.2%})\n'
+        )
+
+        e = discord.Embed(colour=colour, description=info)
+        e.set_author(name=f'{header} server')
 
         if guild.icon:
             e.set_thumbnail(url=guild.icon_url)
@@ -233,7 +234,8 @@ class Stats(Cog):
             e.timestamp = guild.me.joined_at
 
         if check_bot_farm and self._is_bot_farm(guild):
-            e.description = '\N{WARNING SIGN} This server **might** be a bot collection server.'
+            e.colour = 0xFFC107
+            e.description += f'\n\N{WARNING SIGN} **Might** be a bot collection server.'
 
         await self.bot.webhook.send(embed=e)
 
