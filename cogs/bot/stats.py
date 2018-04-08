@@ -9,7 +9,7 @@ import traceback
 
 from discord.ext import commands
 from functools import partial
-from more_itertools import all_equal, ilen, partition, repeatfunc
+from more_itertools import all_equal, ilen, partition
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
@@ -48,7 +48,7 @@ _ignored_exceptions = (
 
 ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
 
-_celebration = partial(repeatfunc, random.choice, 8, '\U0001f38a\U0001f389')
+_celebration = partial(random.choices, '\U0001f38a\U0001f389', k=8)
 
 class Stats(Cog):
     def __init__(self, bot):
