@@ -18,7 +18,7 @@ else:
 
 
 @contextlib.contextmanager
-def log():
+def log(stream=False):
     logging.getLogger('discord').setLevel(logging.INFO)
 
     os.makedirs(os.path.join(os.path.dirname(__file__), 'logs'), exist_ok=True)
@@ -33,6 +33,11 @@ def log():
     fmt = logging.Formatter('[{asctime}] ({levelname:<7}) {name}: {message}', '%Y-%m-%d %H:%M:%S', style='{')
     handler.setFormatter(fmt)
     root.addHandler(handler)
+
+    if stream:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(fmt)
+        root.addHandler(stream_handler)
 
     try:
         yield
@@ -49,11 +54,13 @@ bot = Chiaki()
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--create-tables', action='store_true', help='Create the tables before running the bot.')
+    parser.add_argument('--log-stream', action='store_true', help='Adds a stderr stream-handler for logging')
+
     args = parser.parse_args()
     if args.create_tables:
         bot.loop.run_until_complete(bot.run_sql())
 
-    with log():
+    with log(args.log_stream):
         bot.run()
     return 69 * bot.reset_requested
 
