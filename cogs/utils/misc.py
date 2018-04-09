@@ -33,20 +33,6 @@ def ordinal(num):
     return "%d%s" % (num, "tsnrhtdd"[(num//10%10!=1)*(num%10<4)*num%10::4])
 
 
-def file_handler(name, path='./logs', *, format='%(asctime)s/%(levelname)s: %(name)s: %(message)s'):
-    now = datetime.now()
-    os.makedirs(path, exist_ok=True)
-
-    handler = logging.FileHandler(
-        filename=f'{path}/{name}{now : %Y-%m-%d %H.%M.%S.%f.txt}.log',
-        encoding='utf-8',
-        mode='w'
-    )
-
-    handler.setFormatter(logging.Formatter(format))
-    return handler
-
-
 def base_filename(name):
     return os.path.splitext(os.path.basename(name))[0]
 

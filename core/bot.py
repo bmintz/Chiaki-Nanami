@@ -22,7 +22,6 @@ from . import context, errors
 from .cog import Cog
 
 from cogs.utils.jsonf import JSONFile
-from cogs.utils.misc import file_handler
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
 from cogs.utils.transformdict import CIDict
@@ -31,10 +30,7 @@ from cogs.utils.transformdict import CIDict
 import config
 
 log = logging.getLogger(__name__)
-log.addHandler(file_handler('chiakinanami'))
-
 command_log = logging.getLogger('commands')
-command_log.addHandler(file_handler('commands'))
 
 
 def _is_submodule(parent, child):
