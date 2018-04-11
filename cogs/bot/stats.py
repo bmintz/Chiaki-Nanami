@@ -137,7 +137,7 @@ class Stats(Cog):
 
         uptime_seconds = bot.uptime.total_seconds()
         average_messages = bot.message_counter / uptime_seconds
-        message_field = f'{bot.message_counter} messages\n({average_messages :.2f} messages/sec)'
+        message_field = f'{bot.message_counter}\n({average_messages :.2f}/sec)'
 
         presence = (
             f'{bot.guild_count} Servers\n'
