@@ -128,8 +128,7 @@ class Stats(Cog):
         bot = self.bot
         command_map = itertools.starmap('{1} {0}'.format, bot.command_counter.most_common())
         command_stats = '\n'.join(command_map) or 'No stats yet.'
-        extension_stats = '\n'.join(f'{len(set(getattr(bot, attr).values()))} {attr}'
-                                    for attr in ('cogs', 'extensions'))
+        commands = f'{len(bot.commands)}\n({len(set(bot.walk_commands()))} total)'
 
         with self.process.oneshot():
             memory_usage_in_mb = self.process.memory_full_info().uss / 1024**2
@@ -147,7 +146,7 @@ class Stats(Cog):
 
         chiaki_embed = (discord.Embed(description=bot.appinfo.description, colour=self.bot.colour)
                         .set_author(name=str(ctx.bot.user), icon_url=bot.user.avatar_url)
-                        .add_field(name='Modules', value=extension_stats)
+                        .add_field(name='Commands', value=commands)
                         .add_field(name='CPU Usage', value=f'{cpu_usage}%\n{memory_usage_in_mb :.2f}MB')
                         .add_field(name='Messages', value=message_field)
                         .add_field(name='Presence', value=presence)
