@@ -9,7 +9,7 @@ import traceback
 
 from discord.ext import commands
 from functools import partial
-from more_itertools import all_equal, ilen, partition
+from more_itertools import all_equal, ilen
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
@@ -139,9 +139,11 @@ class Stats(Cog):
         average_messages = bot.message_counter / uptime_seconds
         message_field = f'{bot.message_counter} messages\n({average_messages :.2f} messages/sec)'
 
-        text, voice = partition(lambda c: isinstance(c, discord.TextChannel), bot.get_all_channels())
-        presence = (f"{bot.guild_count} Servers\n{ilen(text)} Text Channels\n"
-                    f"{ilen(voice)} Voice Channels\n{bot.user_count} Users")
+        presence = (
+            f'{bot.guild_count} Servers\n'
+            f'{ilen(bot.get_all_channels())} Channels\n'
+            f'{bot.user_count} Users'
+        )
 
         chiaki_embed = (discord.Embed(description=bot.appinfo.description, colour=self.bot.colour)
                         .set_author(name=str(ctx.bot.user), icon_url=bot.user.avatar_url)
