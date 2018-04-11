@@ -150,7 +150,7 @@ class Stats(Cog):
                         .add_field(name='CPU Usage', value=f'{cpu_usage}%\n{memory_usage_in_mb :.2f}MB')
                         .add_field(name='Messages', value=message_field)
                         .add_field(name='Presence', value=presence)
-                        .add_field(name='Commands', value=command_stats)
+                        .add_field(name='Commands Run', value=command_stats)
                         .add_field(name='Uptime', value=self.bot.str_uptime.replace(', ', '\n'))
                         )
         await ctx.send(embed=chiaki_embed)
