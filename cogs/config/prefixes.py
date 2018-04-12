@@ -91,12 +91,11 @@ class Prefixes(Cog):
     async def reset_prefix(self, ctx):
         """Removes all the server's prefixes.
 
-        After this, the only way to get my commands to work
-        is by mentioning me.
+        I will only respond to mentions after this.
         """
 
         await ctx.bot.set_guild_prefixes(ctx.guild, [])
-        await ctx.send(f"Done. **{ctx.guild}** no longer has any custom prefixes")
+        await ctx.send(f"Done. Please mention me if you need anything.")
 
 
 def setup(bot):
