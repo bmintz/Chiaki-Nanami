@@ -166,10 +166,10 @@ class Context(commands.Context):
 
         author_id = author_id or self.author.id
 
-        def check(emoji, message_id, channel_id, user_id):
-            return (message_id == msg.id
-                    and user_id == author_id
-                    and is_valid_emoji(str(emoji)))
+        def check(data):
+            return (data.message_id == msg.id
+                    and data.user_id == author_id
+                    and is_valid_emoji(str(data.emoji)))
 
         for em in emojis:
             await msg.add_reaction(em)
@@ -178,8 +178,8 @@ class Context(commands.Context):
             await self.release()
 
         try:
-            emoji, *_, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
-            return str(emoji) == str(confirm_emoji)
+            data = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
+            return str(data.emoji) == str(confirm_emoji)
         finally:
             if reacquire:
                 await self.acquire()
