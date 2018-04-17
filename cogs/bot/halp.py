@@ -209,8 +209,13 @@ class Help(Cog):
         await ctx.send(embed=modules_embed)
 
     @commands.command(name='commands', aliases=['cmds'])
-    async def commands_(self, ctx, category: Category):
-        """Shows all the commands in a given category"""
+    async def commands_(self, ctx, category: Category = None):
+        """Shows all the commands in a given category.
+
+        If no category is given, all commands are shown.
+        """
+        if category is None:
+            return await ctx.invoke(self.help)
         paginator = await CogPages.create(ctx, category)
         await paginator.interact()
 
