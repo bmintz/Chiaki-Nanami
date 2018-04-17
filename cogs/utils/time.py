@@ -1,5 +1,8 @@
+import calendar
 import collections
 import datetime
+import functools
+import random
 import re
 import parsedatetime as pdt
 
@@ -38,6 +41,33 @@ def _get_short_time_match(arg):
     return match
 
 
+# We don't want ridiculous examples so we're capping this.
+_short_time_ranges = [
+    (1,  60, 'second', 's'),
+    (2,  60, 'minute', 'm'),
+    (3,  24, 'hour', 'h'),
+    (2,  30, 'day', 'd'),
+    (1,  4,  'week', 'w'),
+    (1,  12, 'month', 'mo'),
+    (.5, 10, 'year', 'y'),
+]
+_short_time_range_weights = [r[0] for r in _short_time_ranges]
+
+
+def _random_short_time():
+    _, end, full_unit, short_unit = random.choices(
+        _short_time_ranges,
+        weights=_short_time_range_weights
+    )[0]
+
+    num = random.randint(1, end)
+
+    unit = random.choice((full_unit, short_unit))
+    if unit is full_unit and num != 1:
+        unit += 's'
+    return f'{num}{unit}'
+
+
 class Delta(collections.namedtuple('Delta', 'delta')):
     __slots__ = ()
 
@@ -54,12 +84,67 @@ class Delta(collections.namedtuple('Delta', 'delta')):
         attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
         return sum(getattr(self.delta, attr, 0) * DURATION_MULTIPLIERS[attr] for attr in attrs)
 
+    @staticmethod
+    def random_example(ctx):
+        return _random_short_time()
+
 
 # ----------------------- Time --------------------
 
 _TimeBase = collections.namedtuple('Delta', 'dt')
 
 _calendar = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
+
+
+# Some strf time formats I guess
+# TODO, support other locales
+_strftime_date_formats = (
+    '%d/%m/%Y',
+    '%Y-%m-%d',
+    '%b %d, %Y',
+    '%A',
+)
+
+_strftime_time_formats = (
+    '%H:%M',
+    '%I:%M %p',
+)
+
+
+def _datetime_to_timestamp(dt):
+    return calendar.timegm(dt.timetuple()) + dt.microsecond
+
+
+_START_TIMEDELTA = datetime.timedelta(days=365.24 * 30)
+
+# TODO: Timezones
+def _random_datetime(start=_START_TIMEDELTA, end=None):
+    now = datetime.datetime.utcnow()
+    if start is None:
+        start = datetime.timedelta(0)
+    if end is None:
+        end = datetime.timedelta(0)
+
+    start_date = _datetime_to_timestamp(now + start)
+    end_date = _datetime_to_timestamp(now + end)
+
+    if end_date - start_date <= 1:
+        ts = start_date + random.random()
+    else:
+        ts = random.randint(start_date, end_date)
+
+    return datetime.datetime.utcfromtimestamp(ts)
+
+def _random_datetime_example(start=_START_TIMEDELTA, end=None):
+    now = datetime.datetime.utcnow()
+    dt = _random_datetime(start=start, end=end)
+
+    if now.date() == dt.date():
+        choices = _strftime_time_formats  # we don't need the date here
+    else:
+        choices = _strftime_date_formats
+
+    return dt.strftime(random.choice(choices))
 
 
 class HumanTime(_TimeBase):
@@ -83,6 +168,10 @@ class HumanTime(_TimeBase):
 
         return super().__new__(cls, dt)
 
+    @staticmethod
+    def random_example(ctx):
+        return _random_datetime_example()
+
 
 class Time(HumanTime):
     __slots__ = ()
@@ -96,6 +185,16 @@ class Time(HumanTime):
             now = datetime.datetime.utcnow()
             return _TimeBase.__new__(cls, now + delta.delta)
 
+    @staticmethod
+    def random_example(ctx):
+        return random.choice([Delta, HumanTime]).random_example(ctx)
+
+
+_future_datetime_example = functools.partial(
+    _random_datetime_example,
+    start=datetime.timedelta(seconds=10),
+    end=datetime.timedelta(days=30)
+)
 
 class FutureTime(Time):
     __slots__ = ()
@@ -108,6 +207,12 @@ class FutureTime(Time):
             raise commands.BadArgument('This time is in the past.')
 
         return self
+
+    @staticmethod
+    def random_example(ctx):
+        if random.random() > 0.5:
+            return Delta.random_example(ctx)
+        return _future_datetime_example()
 
 
 # TODO: User-friendly Time?

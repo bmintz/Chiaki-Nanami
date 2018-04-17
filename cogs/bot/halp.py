@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ..utils.converter import BotCogConverter, BotCommand
 from ..utils.deprecated import deprecated
+from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
 from ..utils.misc import emoji_url, truncate
 from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
@@ -36,6 +37,10 @@ def positive_index(s):
     if num <= 0:
         raise commands.BadArgument('Value must be positive.')
     return num
+
+@wrap_example(positive_index)
+def _positive_index_example(ctx):
+    return random.randint(1, len(ctx.bot.get_cog('Help').tips_list))
 
 
 class TipPaginator(ListPaginator):

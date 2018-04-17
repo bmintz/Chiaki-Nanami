@@ -1,43 +1,13 @@
 import difflib
-import discord
+import random
 
 from collections import OrderedDict
 from discord.ext import commands
 
+from .examples import get_example, wrap_example
 
 def _unique(iterable):
     return iter(OrderedDict.fromkeys(iterable))
-
-
-class NoBots(commands.BadArgument):
-    """Exception raised in CheckedMember when the author passes a bot"""
-
-
-class NoOfflineMembers(commands.BadArgument):
-    """Exception raised in CheckedMember when the author passes a user who is offline"""
-
-
-class NoSelfArgument(commands.BadArgument):
-    """Exception raised in CheckedMember when the author passes themself as an argument"""
-
-
-class CheckedMember(commands.MemberConverter):
-    def __init__(self, *, offline=True, bot=True, include_self=False):
-        super().__init__()
-        self.self = include_self
-        self.offline = offline
-        self.bot = bot
-
-    async def convert(self, ctx, arg):
-        member = await super().convert(ctx, arg)
-        if member.status is discord.Status.offline and not self.offline:
-            raise NoOfflineMembers(f'{member} is offline...')
-        if member.bot and not self.bot:
-            raise NoBots(f"{member} is a bot. You can't use a bot here.")
-        if member == ctx.author:
-            raise NoSelfArgument("You can't use yourself. lol.")
-
-        return member
 
 
 class BotCogConverter(commands.Converter):
@@ -47,6 +17,10 @@ class BotCogConverter(commands.Converter):
             raise commands.BadArgument(f"Module {arg} not found")
 
         return result
+
+    @staticmethod
+    def random_example(ctx):
+        return random.sample(ctx.bot.cogs.keys(), 1)[0]
 
 
 class BotCommand(commands.Converter):
@@ -62,6 +36,10 @@ class BotCommand(commands.Converter):
 
         return cmd
 
+    @staticmethod
+    def random_example(ctx):
+        return random.sample(set(ctx.bot.walk_commands()), 1)[0]
+
 
 def number(s):
     for typ in (int, float):
@@ -70,6 +48,10 @@ def number(s):
         except ValueError:
             continue
     raise commands.BadArgument(f"{s} is not a number.")
+
+@wrap_example(number)
+def _number_example(ctx):
+    return get_example(random.choice([int, float]), ctx)
 
 
 class union(commands.Converter):
@@ -87,3 +69,6 @@ class union(commands.Converter):
         type_names = ', '.join([t.__name__ for t in self.types])
         raise commands.BadArgument(f"I couldn't parse {arg} successfully, "
                                    f"given these types: {type_names}")
+
+    def random_example(self, ctx):
+        return get_example(random.choice(self.types), ctx)

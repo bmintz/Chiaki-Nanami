@@ -167,6 +167,22 @@ def _load_hangman(filename):
     with open(filename) as f:
         return [line for line in map(str.strip, f) if line and line[0] != '#' and len(line) > 4]
 
+
+class Category(commands.Converter):
+    async def convert(self, ctx, arg):
+        lowered = arg.lower()
+        hangman = ctx.bot.get_cog('Hangman')
+        c = hangman.categories.get(lowered)
+        if not c:
+            raise commands.BadArgument(f"Category {arg} doesn't exist... :(")
+        return c
+
+    @staticmethod
+    def random_example(ctx):
+        hangman = ctx.bot.get_cog('Hangman')
+        return random.choice(list(hangman.categories))
+
+
 class Hangman(Cog):
     """So you don't have to hang people in real life."""
     FILE_PATH = os.path.join('.', 'data', 'words')
@@ -175,7 +191,7 @@ class Hangman(Cog):
         self.bot = bot
         self.manager = SessionManager()
         self.bot.loop.create_task(self._load_categories())
-        self.default_categories = {}
+        self.categories = {}
 
     def __unload(self):
         self.manager.cancel_all()
@@ -186,7 +202,7 @@ class Hangman(Cog):
         load_tasks = (load_async(name) for name in files)
         file_names = (base_filename(name) for name in files)
 
-        categories = self.default_categories
+        categories = self.categories
         categories.update(zip(file_names, await asyncio.gather(*load_tasks)))
 
         # Delete any empty categories
@@ -196,16 +212,9 @@ class Hangman(Cog):
 
         print('everything is ok now')
 
-    async def _get_category(self, ctx, category):
-        lowered = category.lower()
-        c = self.default_categories.get(lowered)
-        if not c:
-            raise commands.BadArgument(f"Category {category} doesn't exist... :(")
-        return c
-
     @commands.group(invoke_without_command=True)
     @commands.bot_has_permissions(embed_links=True)
-    async def hangman(self, ctx, category):
+    async def hangman(self, ctx, category: Category):
         """Starts a game of hangman.
 
         To see all the categories you can choose, 
@@ -214,8 +223,7 @@ class Hangman(Cog):
         if self.manager.session_exists(ctx.channel):
             return await ctx.send("A hangman game is already running in this channel...")
 
-        words = await self._get_category(ctx, category)
-        word = random.choice(words)
+        word = random.choice(category)
 
         await ctx.release()
         with self.manager.temp_session(ctx.channel, HangmanSession(ctx, word)) as inst:
@@ -238,9 +246,12 @@ class Hangman(Cog):
     @hangman.command(name='categories')
     async def hangman_categories(self, ctx):
         """Stops a running hangman game."""
-        categories = self.default_categories
-        embeds = ListPaginator(ctx, sorted(categories), title=f'List of Categories for {ctx.guild}',
-                               colour=discord.Colour.blurple())
+        embeds = ListPaginator(
+            ctx,
+            sorted(self.categories),
+            title=f'List of Categories for {ctx.guild}',
+            colour=discord.Colour.blurple()
+        )
         await embeds.interact()
 
 def setup(bot):

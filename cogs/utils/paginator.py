@@ -526,6 +526,7 @@ import time
 from more_itertools import chunked, ilen, iterate, sliced, spy
 
 from .context_managers import temp_attr
+from .examples import command_example
 
 
 def _unique(iterable):
@@ -688,10 +689,6 @@ class HelpCommandPage(BaseReactionPaginator):
         clean_prefix = ctx.clean_prefix
         # usages = self.command_usage
 
-        # if usage is truthy, it will immediately return with that usage. We don't want that.
-        with temp_attr(command, 'usage', None):
-            signature = command.signature
-
         cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(_all_names(command))}`"
 
         description = (command.help or '').format(prefix=clean_prefix)
@@ -707,7 +704,7 @@ class HelpCommandPage(BaseReactionPaginator):
         if _has_subcommands(command):
             self.show_subcommands(embed=cmd_embed)
 
-        usage = f'`{signature}`'
+        usage = command_example(command, ctx)
         if self._example:
             usage = f'{usage}\n\n{SEE_EXAMPLE}'
         else:

@@ -4,16 +4,26 @@ import discord
 import inspect
 import io
 import itertools
+import random
 import textwrap
 import traceback
 
 from discord.ext import commands
+from functools import partial
 
 from ..utils.context_managers import temp_attr
 from ..utils.disambiguate import DisambiguateGuild
+from ..utils.examples import wrap_example
 from ..utils.subprocesses import run_subprocess
 
 from core.cog import Cog
+
+
+_extension = partial(str)
+@wrap_example(_extension)
+def _extension_example(ctx):
+    # TODO: Make this search in the cogs directory
+    return random.choice(list(ctx.bot.extensions))
 
 
 def _tabulate(rows, headers=()):
@@ -211,19 +221,19 @@ class Owner(Cog, hidden=True):
         await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()
-    async def load(self, ctx, cog: str):
+    async def load(self, ctx, cog: _extension):
         """Loads a bot-extension (one with a setup method)"""
         ctx.bot.load_extension(cog)
         await ctx.send('Ok onii-chan~')
 
     @commands.command()
-    async def unload(self, ctx, cog: str):
+    async def unload(self, ctx, cog: _extension):
         """Unloads a bot-extension (one with a setup method)"""
         ctx.bot.unload_extension(cog)
         await ctx.send('Ok onii-chan~')
 
     @commands.group(invoke_without_command=True)
-    async def reload(self, ctx, cog: str):
+    async def reload(self, ctx, cog: _extension):
         """Reloads a bot-extension (one with a setup method)"""
         ctx.bot.unload_extension(cog)
         ctx.bot.load_extension(cog)

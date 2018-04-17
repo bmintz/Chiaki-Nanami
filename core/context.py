@@ -32,6 +32,9 @@ class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
 
 
 class Context(commands.Context):
+    # Used for getting the current parameter when generating an example
+    _current_parameter = None
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.db = None

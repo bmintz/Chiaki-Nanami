@@ -6,6 +6,7 @@ import enum
 import json
 import logging
 import operator
+import random
 import re
 
 from datetime import datetime, timedelta
@@ -86,6 +87,10 @@ class EnumConverter(enum.IntFlag):
         except KeyError:
             raise commands.BadArgument(f'{arg} is not a valid {cls.__name__}')
 
+    @classmethod
+    def random_example(cls, ctx):
+        return random.choice(list(cls)).name
+
 
 ActionFlag = enum.IntFlag('ActionFlag', list(_mod_actions), type=EnumConverter)
 _default_flags = (2 ** len(_mod_actions) - 1) & ~ActionFlag.hackban
@@ -145,6 +150,10 @@ class CaseNumber(commands.Converter):
                 raise commands.BadArgument("I think you're travelling a little "
                                            "too far in the past there...")
         return num
+
+    @staticmethod
+    def random_example(ctx):
+        return random.choice([-1, *range(1, 10)])
 
 
 class ModLog(Cog):

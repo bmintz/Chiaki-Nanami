@@ -79,6 +79,11 @@ class Level(enum.Enum):
                 f'"{arg}"" is not a difficulty. Valid difficulties:\n{difficulties}'
             ) from None
 
+    @classmethod
+    def random_example(cls, ctx):
+        return random.choice(list(cls._member_map_))
+
+
 class FlagType(enum.Enum):
     default = 'show'
     f = 'flag'

@@ -5,6 +5,7 @@ import logging
 
 from discord.ext import commands
 
+from ..utils.examples import _get_static_example
 from ..utils.paginator import ListPaginator
 from ..utils import formats
 
@@ -52,7 +53,6 @@ class ServerTagPaginator(ListPaginator):
             return embed.set_author(name=embed.author.name, icon_url=guild.icon_url)
         return embed
 
-
 class TagName(commands.clean_content):
     async def convert(self, ctx, argument):
         converted = await super().convert(ctx, argument)
@@ -69,6 +69,16 @@ class TagName(commands.clean_content):
             raise commands.BadArgument('This tag name starts with a reserved word.')
 
         return lower
+
+    @staticmethod
+    def random_example(ctx):
+        ctx.__tag_example__ = example = _get_static_example('tag_examples')
+        return example[0]
+
+
+class TagContent(commands.clean_content):
+    def random_example(ctx):
+        return ctx.__tag_example__[1]
 
 
 class Tags(Cog):
@@ -132,7 +142,7 @@ class Tags(Cog):
         await ctx.db.execute(query, tag['name'], ctx.guild.id)
 
     @tag.command(name='create', aliases=['add'])
-    async def tag_create(self, ctx, name: TagName, *, content):
+    async def tag_create(self, ctx, name: TagName, *, content: TagContent):
         """Creates a new tag."""
         query = """INSERT INTO tags (is_alias, name, content, owner_id, location_id)
                    VALUES (FALSE, $1, $2, $3, $4)
@@ -146,7 +156,7 @@ class Tags(Cog):
             await ctx.send(f'Successfully created tag {name}! ^.^')
 
     @tag.command(name='edit')
-    async def tag_edit(self, ctx, name, *, new_content):
+    async def tag_edit(self, ctx, name: TagName, *, new_content: TagContent):
         """Edits a tag that *you* own.
 
         You can only edit actual tags. i.e. you can't edit aliases.
@@ -249,7 +259,7 @@ class Tags(Cog):
         await ctx.send(embed=embed)
 
     @tag.command(name='search')
-    async def tag_search(self, ctx, *, name):
+    async def tag_search(self, ctx, *, name: commands.clean_content):
         """Searches and shows up to the 50 closest matches for a given name."""
         query = """SELECT   name
                    FROM     tags

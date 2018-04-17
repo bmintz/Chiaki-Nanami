@@ -3,6 +3,7 @@ import copy
 from discord.ext import commands
 from itertools import starmap
 
+from ..utils.examples import _get_static_example
 from ..utils.paginator import ListPaginator
 
 from core.cog import Cog
@@ -39,6 +40,22 @@ class AliasName(commands.Converter):
 
         return lowered
 
+    @staticmethod
+    def random_example(ctx):
+        ctx.__alias_example__ = example = _get_static_example('alias_examples')
+        return example[0]
+
+
+class AliasCommand(commands.Converter):
+    async def convert(self, ctx, arg):
+        if not _first_word_is_command(ctx.bot, arg):
+            raise commands.BadArgument(f"{arg} isn't an actual command...")
+        return arg
+
+    @staticmethod
+    def random_example(ctx):
+        return ctx.__alias_example__[1]
+
 
 class Aliases(Cog):
     def __init__(self, bot):
@@ -52,7 +69,7 @@ class Aliases(Cog):
 
     @commands.command()
     @commands.has_permissions(manage_guild=True)
-    async def alias(self, ctx, alias: AliasName, *, command):
+    async def alias(self, ctx, alias: AliasName, *, command: AliasCommand):
         """Creates an alias for a certain command.
 
         Aliases are case insensitive.
@@ -63,9 +80,6 @@ class Aliases(Cog):
 
         For multi-word aliases you must use quotes.
         """
-        if not _first_word_is_command(ctx.bot, command):
-            return await ctx.send(f"{command} isn't an actual command...")
-
         query = """INSERT INTO command_aliases (guild_id, alias, command)
                    VALUES ($1, $2, $3)
                    ON CONFLICT (guild_id, alias)
@@ -77,7 +91,7 @@ class Aliases(Cog):
 
     @commands.command()
     @commands.has_permissions(manage_guild=True)
-    async def delalias(self, ctx, *, alias):
+    async def delalias(self, ctx, *, alias: AliasName):
         """Deletes an alias."""
         query = 'DELETE FROM command_aliases WHERE guild_id = $1 AND alias = $2;'
         await ctx.db.execute(query, ctx.guild.id, alias)

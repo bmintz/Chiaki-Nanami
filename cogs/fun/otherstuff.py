@@ -16,6 +16,7 @@ from discord.ext import commands
 from more_itertools import always_iterable
 from PIL import Image
 
+from ..utils.examples import wrap_example
 from ..utils.paginator import ListPaginator
 from ..utils.misc import emoji_url, load_async
 
@@ -159,6 +160,10 @@ def score(num):
     if num > MAX_SCORE:
         raise commands.BadArgument(f'Score should be less than {MAX_SCORE}.')
     return num
+
+@wrap_example(score)
+def _score_example(ctx):
+    return random.choice([0, 1, 50, 99, 100])
 
 
 # List of possible ratings when someone attempts to ship themself

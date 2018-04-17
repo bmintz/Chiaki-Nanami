@@ -9,6 +9,7 @@ from discord.ext import commands
 from PIL import Image
 
 from ..utils.converter import union
+from ..utils.examples import get_example, wrap_example
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
 
@@ -96,6 +97,10 @@ class Side(enum.Enum):
         except KeyError:
             raise commands.BadArgument(f'{arg} is not a valid side...')
 
+    @classmethod
+    def random_example(cls, ctx):
+        return random.choice(list(cls._member_map_))
+
 
 SIDES = list(Side)[:2]
 WEIGHTS = [0.4999, 0.4999, 0.0002][:2]
@@ -116,6 +121,13 @@ def positive_int(arg):
         return value
     raise NotNegative('expected a positive value')
 
+@wrap_example(positive_int)
+def _positive_int_example(ctx):
+    if random.random() > 0.5:
+        return random.choice([1, 5, 10])
+    num = random.randint(2, 5)
+    return random.choice(['9' * num, '1' + '0' * num])
+
 
 class NonBlacklistedMember(commands.MemberConverter):
     async def convert(self, ctx, arg):
@@ -126,6 +138,10 @@ class NonBlacklistedMember(commands.MemberConverter):
             if await blacklist.get_blacklist(member, connection=ctx.db):
                 raise commands.BadArgument("This user is blacklisted.")
         return member
+
+    @staticmethod
+    def random_example(ctx):
+        return get_example(discord.Member, ctx)
 
 
 class Money(Cog):
@@ -326,6 +342,7 @@ class Money(Cog):
 
             await ctx.send(file=file, embed=embed)
 
+    # XXX: Solve the edge case of {prefix}flip number number
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def flip(self, ctx, side_or_number: union(Side, int)=None, amount: positive_int = None):

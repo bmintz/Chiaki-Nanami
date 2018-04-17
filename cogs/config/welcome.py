@@ -8,6 +8,7 @@ from datetime import datetime
 from more_itertools import one
 
 from ..utils import time
+from ..utils.examples import static_example
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
 
@@ -66,6 +67,7 @@ _lookup = {
 }
 
 
+@static_example
 def special_message(message):
     return message if '{user}' in message else f'{{user}}{message}'
 

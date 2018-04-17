@@ -9,8 +9,6 @@ from discord.ext import commands
 
 from core.cog import Cog
 
-from ..utils.converter import CheckedMember, NoSelfArgument
-
 
 class _TwoPlayerWaiter:
     def __init__(self, author, recipient):
@@ -56,6 +54,34 @@ class _TwoPlayerWaiter:
         return bool(self._future and self._future.done())
 
 
+class NoSelfArgument(commands.BadArgument):
+    """Exception raised in CheckedMember when the author passes themself as an argument"""
+
+
+class _MemberConverter(commands.MemberConverter):
+    async def convert(self, ctx, arg):
+        member = await super().convert(ctx, arg)
+        if member.status is discord.Status.offline:
+            raise commands.BadArgument(f'{member} is offline.')
+        if member.bot:
+            raise commands.BadArgument(f"{member} is a bot. You can't use a bot here.")
+        if member == ctx.author:
+            raise NoSelfArgument("You can't use yourself. lol.")
+
+        return member
+
+    @staticmethod
+    def random_example(ctx):
+        members = [
+            member for member in ctx.guild.members
+            if member.status is not discord.Status.offline
+            and not member.bot
+            and member != ctx.author
+        ]
+        member = random.choice(members) if members else 'SomeGuy'
+        return f'@{member}'
+
+
 @contextlib.contextmanager
 def _swap_item(obj, item, new_val):
     obj[item] = new_val
@@ -69,8 +95,6 @@ def _swap_item(obj, item, new_val):
 @contextlib.contextmanager
 def _dummy_cm(*args, **kwargs):
     yield
-
-_MemberConverter = CheckedMember(offline=False, bot=False, include_self=False)
 
 
 class TwoPlayerGameCog(Cog):
@@ -116,8 +140,6 @@ class TwoPlayerGameCog(Cog):
                 "Self inviting, huh... :eyes:",
             ))
             await ctx.send(message)
-        elif issubclass(type(error), commands.BadArgument) and not type(error) is commands.BadArgument:
-            await ctx.send(error)
 
     def _create_invite(self, ctx, member):
         action = 'invited you to' if member else 'created'

@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import enum
 import itertools
 import random
 import re
@@ -228,6 +229,30 @@ class Board:
                 return i
 
         return -1
+
+
+class _EnumConverter:
+    def __str__(self):
+        return self.name.title()
+
+    @classmethod
+    async def convert(cls, ctx, arg):
+        lowered = arg.lower()
+        try:
+            return cls[lowered].name
+        except KeyError:
+            difficulties = '\n'.join(str(m).lower() for m in cls)
+            raise commands.BadArgument(
+                f'"{arg}"" is not a difficulty. Valid difficulties:\n{difficulties}'
+            ) from None
+
+    @classmethod
+    def random_example(cls, ctx):
+        return random.choice(list(cls._member_map_))
+
+_difficulties = [n for n, v in Board.__dict__.items() if isinstance(v, classmethod)]
+_difficulties.remove('from_data')
+Difficulty = enum.Enum('Difficulty', _difficulties, type=_EnumConverter)
 
 
 class LockedMessage:
@@ -606,7 +631,6 @@ class SudokuSession:
         self._ctx.bot.loop.create_task(task())
 
 
-
 class Sudoku(Cog):
     def __init__(self, bot):
         super().__init__(bot)
@@ -669,7 +693,7 @@ class Sudoku(Cog):
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, add_reactions=True)
-    async def sudoku(self, ctx, difficulty=None):
+    async def sudoku(self, ctx, difficulty: Difficulty=None):
         if self.sudoku_sessions.session_exists(ctx.author.id):
             return await ctx.send('Please finish your other Sudoku game first.')
 

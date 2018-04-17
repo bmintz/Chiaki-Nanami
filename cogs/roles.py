@@ -2,6 +2,7 @@ import asyncio
 import asyncpg
 import copy
 import discord
+import random
 
 from discord.ext import commands
 from functools import partial
@@ -26,6 +27,14 @@ __schema__ = """
 """
 
 
+def _pick_random_role(ctx):
+    roles = ctx.guild.roles[1:]
+    if ctx.author != ctx.guild.owner:
+        top_role = ctx.author.top_role
+        roles = [r for r in roles if r >= top_role]
+
+    return random.choice([r for r in roles if not r.managed] or roles)
+
 class LowerRole(commands.RoleConverter):
     async def convert(self, ctx, arg):
         role = await super().convert(ctx, arg)
@@ -38,9 +47,11 @@ class LowerRole(commands.RoleConverter):
 
         return role
 
+    random_example = _pick_random_role
+
 
 class LowerRoleSearch(disambiguate.DisambiguateRole, LowerRole):
-    pass
+    random_example = _pick_random_role  # needed because the MRO is weird
 
 
 async def _check_role(ctx, role, thing):
@@ -97,6 +108,13 @@ class SelfRole(disambiguate.DisambiguateRole):
             except commands.BadArgument:
                 raise commands.BadArgument(f'{arg} is not a self-assignable role...')
 
+    @staticmethod
+    def random_example(ctx):
+        # At the moment querying existing self-assignable roles requires
+        # querying the database which means this has to be async. The
+        # trouble is that causes every other thing to be async as well.
+        return 'Cool Role'
+
 
 class AutoRole(disambiguate.DisambiguateRole):
     async def convert(self, ctx, arg):
@@ -106,6 +124,8 @@ class AutoRole(disambiguate.DisambiguateRole):
         role = await super().convert(ctx, arg)
         await _check_role(ctx, role, thing='an auto-assign')
         return role
+
+    random_example = _pick_random_role
 
 
 _bot_role_check = partial(commands.bot_has_permissions, manage_roles=True)

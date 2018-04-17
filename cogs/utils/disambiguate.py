@@ -8,21 +8,37 @@ This becomes especially important when the args are case-insensitive.
 """
 
 import discord
+import functools
+import random
 import re
 
 from discord.ext import commands
 from more_itertools import always_iterable
 
 from .context_managers import temp_attr
+from .examples import get_example
 
 # Avoid excessive dot-lookup every time a member is attempted to be converted
 _get_from_guilds = commands.converter._get_from_guilds
+
+
+class _DisambiguateExampleGenerator:
+    # This must be a descriptor because it can either be called from
+    # a class or an instance.
+    def __get__(self, obj, cls):
+        if obj is not None:
+            cls = obj.__class__.__name__
+
+        cls_name = cls.__name__.replace('Disambiguate', '')
+        return functools.partial(get_example, getattr(discord, cls_name))
 
 
 class DisambiguateConverter(commands.Converter):
     def __init__(self, *, case_sensitive=False):
         super().__init__()
         self.case_sensitive = case_sensitive
+
+    random_example = _DisambiguateExampleGenerator()
 
 
 class DisambiguateRole(DisambiguateConverter, commands.IDConverter):
@@ -205,3 +221,6 @@ class union(DisambiguateConverter, commands.Converter):
             if t in _type_search_maps else t
             for t in self.types
         ]
+
+    def random_example(self, ctx):
+        return get_example(random.choice(self.types), ctx)

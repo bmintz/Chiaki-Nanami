@@ -140,6 +140,10 @@ class RPSElement(commands.Converter):
 
         return Choice(arg, element)
 
+    def random_example(self, ctx):
+        name, element = random.choice(list(self.game_type.elements.items()))
+        return random.choice([name, element.emoji])
+
 
 __warned_about_bad_element = set()
 
@@ -147,12 +151,7 @@ __warned_about_bad_element = set()
 def _make_rps_command(name, game_type):
     @commands.command(name=name, help=game_type.title)
     @commands.bot_has_permissions(embed_links=True)
-    async def command(self, ctx, *, elem: RPSElement(game_type) = None):
-        if elem is None:
-            embed = game_type.element_embed()
-            embed.description += f'\n\u200b\n(type `{ctx.clean_prefix}{ctx.invoked_with} element`)'
-            return await ctx.send(embed=embed, delete_after=90)
-
+    async def command(self, ctx, *, elem: RPSElement(game_type)):
         if elem.element is _null_element:  # null element is a singleton
             # XXX: De-nest
             key = (ctx.invoked_with, ctx.author.id)
@@ -168,6 +167,15 @@ def _make_rps_command(name, game_type):
                 return await ctx.send(embed=embed, delete_after=90)
 
         await self._rps(ctx, elem, game_type)
+
+    @command.error
+    async def command_error(self, ctx, error):
+        if not isinstance(error, commands.MissingRequiredArgument):
+            return await ctx.bot.on_command_error(ctx, error, bypass=True)
+
+        embed = game_type.element_embed()
+        embed.description += f'\n\u200b\n(type `{ctx.clean_prefix}{ctx.invoked_with} element`)'
+        return await ctx.send(embed=embed, delete_after=90)
 
     return command
 

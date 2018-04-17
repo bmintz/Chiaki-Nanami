@@ -3,6 +3,7 @@ import discord
 import functools
 import itertools
 import operator
+import random
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
@@ -135,6 +136,11 @@ class ModuleName(BotCogConverter):
                 raise commands.BadArgument("You can't modify this cog...")
 
             return f'{cog.__parent_category__}/{name}'
+
+    @staticmethod
+    def random_example(ctx):
+        categories = {c.__parent_category__.lower() for c in ctx.bot.cogs.values()}
+        return random.sample(categories, 1)[0]
 
 
 PermissionEntity = disambiguate.union(discord.Member, discord.Role, discord.TextChannel)

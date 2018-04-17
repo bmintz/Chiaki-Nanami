@@ -1,9 +1,14 @@
 import discord
+import random
+import string
 
 from discord.ext import commands
 from itertools import starmap
 
 from core.cog import Cog
+
+
+_prefixes = list(set(string.punctuation) - {'@', '#'})
 
 
 class Prefix(commands.Converter):
@@ -18,6 +23,16 @@ class Prefix(commands.Converter):
         if argument.startswith((f'<@{user_id}>', f'<@!{user_id}>')):
             raise commands.BadArgument('That is a reserved prefix already in use.')
         return argument
+
+    @staticmethod
+    def random_example(ctx):
+        return random.choice(_prefixes)
+
+
+class RemovablePrefix(Prefix):
+    @staticmethod
+    def random_example(ctx):
+        return random.choice(ctx.bot.get_raw_guild_prefixes(ctx.guild))
 
 
 class Prefixes(Cog):
@@ -59,7 +74,7 @@ class Prefixes(Cog):
 
     @prefix.command(name='remove', ignore_extra=False)
     @commands.has_permissions(manage_guild=True)
-    async def remove_prefix(self, ctx, prefix: Prefix):
+    async def remove_prefix(self, ctx, prefix: RemovablePrefix):
         """Removes a prefix for this server.
 
         This is effectively the inverse to `{prefix}prefix add`.

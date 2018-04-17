@@ -18,6 +18,7 @@ from ..utils import cache, disambiguate, varpos
 from ..utils.colours import url_color, user_color
 from ..utils.context_managers import temp_message
 from ..utils.converter import union
+from ..utils.examples import wrap_example
 from ..utils.formats import *
 from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
 from ..utils.paginator import BaseReactionPaginator, ListPaginator, page
@@ -265,6 +266,17 @@ PRE_PING_REMARKS = [
     'We are being rate-limited.',
     'Pong?',
 ]
+
+
+_valid_names = discord.PermissionOverwrite.VALID_NAMES
+def permission(arg):
+    permission = arg.replace(' ', '_').lower()
+    if permission not in _valid_names:
+        raise commands.BadArgument(f'{arg} is not a permission')
+
+@wrap_example(permission)
+def _permission_example(ctx):
+    return random.sample(_valid_names, 1)[0].replace('_', ' ').title()
 
 
 def _format_activity(activity):
@@ -678,7 +690,7 @@ class Information(Cog):
 
     @commands.command()
     @commands.guild_only()
-    async def permroles(self, ctx, *, perm: str):
+    async def permroles(self, ctx, *, perm: permission):
         """
         Checks which roles have a particular permission
 

@@ -14,6 +14,7 @@ from operator import attrgetter
 from ..utils import formats, time, varpos
 from ..utils.context_managers import temp_attr
 from ..utils.converter import union
+from ..utils.examples import get_example, static_example, wrap_example
 from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
 from ..utils.paginator import ListPaginator, EmbedFieldPages
@@ -62,6 +63,17 @@ _default_punishment = _DummyPunishment(warns=3, type='mute', duration=60 * 10)
 del _DummyPunishment
 
 
+def _get_lower_member(ctx):
+    member = random.choice([
+        member for member in ctx.guild.members
+        if ctx.author.id != member.id
+        and member.id != ctx.bot.user.id
+        and member != ctx.guild.owner
+        and ctx.author.top_role > member.top_role < ctx.me.top_role
+    ] or ctx.guild.members)
+    return f'@{member}'
+
+
 class MemberID(union):
     def __init__(self):
         super().__init__(discord.Member, int)
@@ -74,6 +86,16 @@ class MemberID(union):
             obj.guild = ctx.guild
             return obj
         return member
+
+    @staticmethod
+    def random_example(ctx):
+        if random.random() > 0.5:
+            return _get_lower_member(ctx)
+
+        exists = ctx.guild.get_member
+        user_ids = [u.id for u in ctx.bot.users]
+        user_ids = list(itertools.filterfalse(exists, user_ids)) or user_ids
+        return random.choice(user_ids)
 
 
 class BannedMember(commands.Converter):
@@ -90,8 +112,14 @@ class BannedMember(commands.Converter):
             raise commands.BadArgument(f"{arg} wasn't previously-banned in this server...")
         return thing
 
+    @staticmethod
+    def random_example(ctx):
+        # Querying guild.bans requires an API request and is overkill
+        # for this.
+        return 'SomeBannedUser#0000'
 
-class CheckedMember(commands.Converter):
+
+class _CheckedMember(commands.Converter):
     def __init__(self, type=commands.MemberConverter):
         self.converter = type()
 
@@ -120,11 +148,16 @@ class CheckedMember(commands.Converter):
 
         return member
 
+    def random_example(self, ctx):
+        # Can't duck-type this cuz we only want users we can actually ban
+        if self.converter is commands.MemberConverter:
+            return _get_lower_member(ctx)
+        return get_example(self.converter, ctx)
 
-_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
-_is_valid_punishment = frozenset(_warn_punishments).__contains__
+CheckedMember = _CheckedMember()
+CheckedMemberID = _CheckedMember(MemberID)
 
-
+@static_example
 class Reason(commands.Converter):
     async def convert(self, ctx, arg):
         result = f'{ctx.author} \N{EM DASH} {arg}'
@@ -136,6 +169,23 @@ class Reason(commands.Converter):
             )
 
         return result
+
+
+_warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
+_is_valid_punishment = frozenset(_warn_punishments).__contains__
+
+def warn_punishment(arg):
+    lowered = arg.lower()
+    if not _is_valid_punishment(arg):
+        raise commands.BadArgument(
+            f'{arg} is not a valid punishment.\n'
+            f'Valid punishments: {", ".join(_warn_punishments)}'
+        )
+    return lowered
+
+@wrap_example(warn_punishment)
+def _warn_punishment_example(ctx):
+    return random.choice(_warn_punishments)
 
 
 # TODO:
@@ -515,7 +565,7 @@ class Moderator(Cog):
 
     @commands.command(name='warnpunish', usage=['4 softban', '5 ban'])
     @commands.has_permissions(manage_messages=True, manage_guild=True)
-    async def warn_punish(self, ctx, num: int, punishment, duration: time.Delta = 0):
+    async def warn_punish(self, ctx, num: int, punishment: warn_punishment, duration: time.Delta = 0):
         """Sets the punishment a user receives upon exceeding a given warn limit.
 
         Valid punishments are:
@@ -525,15 +575,9 @@ class Moderator(Cog):
         `tempban` (requires a duration argument)
         `ban`
         """
-        lowered = punishment.lower()
-        if not _is_valid_punishment(lowered):
-            message = (f'{lowered} is not a valid punishment.\n'
-                       f'Valid punishments: {", ".join(_warn_punishments)}')
-            return await ctx.send(message)
-
-        if lowered in {'tempban', 'mute'}:
+        if punishment in {'tempban', 'mute'}:
             if not duration:
-                return await ctx.send(f'A duration is required for {lowered}...')
+                return await ctx.send(f'A duration is required for {punishment}...')
             true_duration = duration.duration
         else:
             true_duration = 0
@@ -543,11 +587,11 @@ class Moderator(Cog):
                    ON CONFLICT (guild_id, warns)
                    DO UPDATE SET type = $3, duration = $4;
                 """
-        await ctx.db.execute(query, ctx.guild.id, num, lowered, true_duration)
+        await ctx.db.execute(query, ctx.guild.id, num, punishment, true_duration)
 
         extra = f'for {duration}' if duration else ''
         await ctx.send(f'\N{OK HAND SIGN} if a user has been warned {num} times, '
-                       f'I will **{lowered}** them {extra}.')
+                       f'I will **{punishment}** them {extra}.')
 
     @commands.command(name='warnpunishments', aliases=['warnpl'])
     async def warn_punishments(self, ctx):
@@ -823,7 +867,7 @@ class Moderator(Cog):
     @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def ban(self, ctx, member: CheckedMember(MemberID), *, reason: Reason=None):
+    async def ban(self, ctx, member: CheckedMemberID, *, reason: Reason=None):
         """Bans a user (obviously)
 
         You can also use this to ban someone even if they're not in the server,
@@ -846,7 +890,7 @@ class Moderator(Cog):
 
     @varpos.require_va_command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
     @commands.has_permissions(ban_members=True)
-    async def massban(self, ctx, reason: Reason, *members: CheckedMember(MemberID)):
+    async def massban(self, ctx, reason: Reason, *members: CheckedMemberID):
         """Bans multiple users from the server (obviously)"""
         for m in members:
             await ctx.guild.ban(m, reason=reason)
