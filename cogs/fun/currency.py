@@ -115,6 +115,17 @@ class _DummyUser(collections.namedtuple('_DummyUser', 'id')):
 class NotNegative(commands.BadArgument):
     pass
 
+class SideOrAmount:
+    __converter = union(Side, int)
+
+    async def converter(self, ctx, arg):
+        return await self.__converter.convert(ctx, arg)
+
+    @classmethod
+    def random_example(cls, ctx):
+        ctx.__sideoramount_flag__ = type_index = not getattr(ctx, '__sideoramount_flag__', False)
+        return get_example(cls.__converter.types[type_index], ctx)
+
 def positive_int(arg):
     value = int(arg)
     if value > 0:
@@ -353,7 +364,7 @@ class Money(Cog):
     # XXX: Solve the edge case of {prefix}flip number number
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
-    async def flip(self, ctx, side_or_number: union(Side, int)=None, amount: positive_int_only_on_side = None):
+    async def flip(self, ctx, side_or_number: SideOrAmount=None, amount: positive_int_only_on_side = None):
         """Flips a coin.
 
         The first argument can either be the side (heads or tails)
