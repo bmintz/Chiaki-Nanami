@@ -121,7 +121,15 @@ def positive_int(arg):
         return value
     raise NotNegative('expected a positive value')
 
+class positive_int_only_on_side(commands.Converter):
+    async def convert(self, ctx, arg):
+        last_arg = ctx.args[-1]
+        if isinstance(last_arg, int):
+            raise commands.BadArgument(f'Um, I thought you wanted me to flip it {last_arg} times...?')
+        return positive_int(arg)
+
 @wrap_example(positive_int)
+@wrap_example(positive_int_only_on_side)
 def _positive_int_example(ctx):
     if random.random() > 0.5:
         return random.choice([1, 5, 10])
@@ -345,7 +353,7 @@ class Money(Cog):
     # XXX: Solve the edge case of {prefix}flip number number
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
-    async def flip(self, ctx, side_or_number: union(Side, int)=None, amount: positive_int = None):
+    async def flip(self, ctx, side_or_number: union(Side, int)=None, amount: positive_int_only_on_side = None):
         """Flips a coin.
 
         The first argument can either be the side (heads or tails)
