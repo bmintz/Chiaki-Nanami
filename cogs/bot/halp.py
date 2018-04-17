@@ -6,7 +6,7 @@ import random
 from discord.ext import commands
 from datetime import datetime
 
-from ..utils.converter import BotCogConverter, BotCommand
+from ..utils.converter import BotCommand
 from ..utils.deprecated import deprecated
 from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
@@ -126,6 +126,21 @@ _bracket_repls = {
     '<': '>', '>': '<',
 }
 
+class Category(commands.Converter):
+    async def convert(self, ctx, arg):
+        parents = {c.__parent_category__.lower() for c in ctx.bot.cogs.values()}
+        lowered = arg.lower()
+        if lowered == 'other':
+            lowered = ''
+        if lowered not in parents:
+            raise commands.BadArgument(f'"{arg}" is not a category.')
+        return lowered
+
+    @staticmethod
+    def random_example(ctx):
+        categories = {c.__parent_category__ for c in ctx.bot.cogs.values()}
+        return random.sample(categories, 1)[0]
+
 
 class Help(Cog):
     def __init__(self, bot):
@@ -194,9 +209,9 @@ class Help(Cog):
         await ctx.send(embed=modules_embed)
 
     @commands.command(name='commands', aliases=['cmds'])
-    async def commands_(self, ctx, cog: BotCogConverter):
-        """Shows all the *visible* commands I have in a given cog/module"""
-        paginator = await CogPages.create(ctx, cog)
+    async def commands_(self, ctx, category: Category):
+        """Shows all the commands in a given category"""
+        paginator = await CogPages.create(ctx, category)
         await paginator.interact()
 
     async def _show_tip(self, ctx, number):

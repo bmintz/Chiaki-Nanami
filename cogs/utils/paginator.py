@@ -796,6 +796,12 @@ def _command_lines(command_can_run_pairs):
 CROSSED_NOTE = "**Note:** You can't use commands\nthat are ~~crossed out~~."
 
 
+def _get_category_commands(bot, category):
+    return {
+        c for c in bot.all_commands.values()
+        if getattr(c.instance, '__parent_category__', None) == category
+    }
+
 class CogPages(ListPaginator):
     numbered = None
 
@@ -804,16 +810,19 @@ class CogPages(ListPaginator):
     # As we have to check if the commands can be run, which entails querying the
     # DB too.
     @classmethod
-    async def create(cls, ctx, cog):
-        cog_name = cog.__class__.__name__
-        entries = (c for c in ctx.bot.get_cog_commands(cog_name)
-                   if not (c.hidden or ctx.bot.formatter.show_hidden))
+    async def create(cls, ctx, category):
+        command, commands = spy(
+            c for c in _get_category_commands(ctx.bot, category)
+            if not (c.hidden or ctx.bot.formatter.show_hidden)
+        )
 
-        pairs = [pair async for pair in _command_formatters(sorted(entries, key=str), ctx)]
+        pairs = [pair async for pair in _command_formatters(sorted(commands, key=str), ctx)]
 
         self = cls(ctx, _command_lines(pairs))
-        self._cog_doc = inspect.getdoc(cog) or 'No description... yet.'
-        self._cog_name = cog_name
+        pkg_name = command[0].module.rpartition('.')[0]
+        module = sys.modules[pkg_name]
+        self._cog_doc = inspect.getdoc(module) or 'No description... yet.'
+        self._cog_name = category.title() or 'Other'
 
         return self
 
