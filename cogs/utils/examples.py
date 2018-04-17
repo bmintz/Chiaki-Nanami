@@ -280,6 +280,7 @@ def command_example(command, ctx):
         return f'`{ctx.clean_prefix}{random.choice(qual_names)} {resolved}`'
 
     usage = generate(required)
-    if optional:
-        usage = f'{usage}\n{generate(required + optional)}'
-    return usage
+    if not optional:
+        return usage
+    joined = '\n'.join(generate(required + optional[:i+1]) for i in range(len(optional)))
+    return f'{usage}\n{joined}'
