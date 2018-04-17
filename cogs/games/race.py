@@ -40,6 +40,13 @@ async def _get_race_horse(user_id, *, connection):
     return row['emoji'] if row else None
 
 
+_default_emoji_examples = [
+    ':thinking:',
+    ':cloud_tornado:',
+    ':pig2:',
+    ':love_hotel:'
+]
+
 class RacehorseEmoji(commands.Converter):
     _converter = converter.union(discord.Emoji, str)
 
@@ -53,6 +60,11 @@ class RacehorseEmoji(commands.Converter):
 
         return str(emoji_)
 
+    @staticmethod
+    def random_example(ctx):
+        if random.random() > 0.5 and ctx.guild.emojis:
+            return f':{random.choice(ctx.guild.emojis).name}:'
+        return random.choice(_default_emoji_examples)
 
 MINIMUM_REQUIRED_MEMBERS = 2
 # fields can only go up to 25
