@@ -253,7 +253,7 @@ class Moderator(Cog):
                 await message.delete()
                 break
 
-    @commands.group(invoke_without_command=True, usage=['15', '99999 @Mee6#4876'])
+    @commands.group(invoke_without_command=True)
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     async def slowmode(self, ctx, duration: time.Delta, *, member: discord.Member=None):
@@ -297,7 +297,7 @@ class Moderator(Cog):
             'between each message they send.'
         )
 
-    @slowmode.command(name='noimmune', aliases=['n-i'], usage=['10', '1000000000 @b1nzy#1337'])
+    @slowmode.command(name='noimmune', aliases=['n-i'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     async def slowmode_no_immune(self, ctx, duration: time.Delta, *, member: discord.Member=None):
@@ -321,7 +321,7 @@ class Moderator(Cog):
                        f'{pronoun} must wait {duration} '
                        'after each message they send.')
 
-    @slowmode.command(name='off', usage=['', '277045400375001091'])
+    @slowmode.command(name='off')
     async def slowmode_off(self, ctx, *, member: discord.Member=None):
         """Turns off slowmode for either a member or channel."""
         member = member or ctx.channel
@@ -336,7 +336,7 @@ class Moderator(Cog):
             await ctx.send(f'{member.mention} is no longer in slowmode... '
                            '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
-    @commands.command(usage=['', '277045400375001091'])
+    @commands.command()
     @commands.has_permissions(manage_messages=True)
     async def slowoff(self, ctx, *, member: discord.Member=None):
         """Alias for `{prefix}slowmode off`"""
@@ -375,7 +375,7 @@ class Moderator(Cog):
         pages = EmbedFieldPages(ctx, entries, lines_per_page=5, colour=0x00FF00, title=title)
         await pages.interact()
 
-    @commands.command(aliases=['clr'], usage=['', '50', '@Corrupt X#6821'])
+    @commands.command(aliases=['clr'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     async def clear(self, ctx, num_or_user: union(int, discord.Member)=None):
@@ -399,7 +399,7 @@ class Moderator(Cog):
         messages = formats.pluralize(message=len(deleted) - 1)
         await ctx.send(f"Deleted {messages} successfully!", delete_after=1.5)
 
-    @commands.command(aliases=['clean'], usage=['', '10'])
+    @commands.command(aliases=['clean'])
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
     async def cleanup(self, ctx, limit=100):
@@ -477,7 +477,7 @@ class Moderator(Cog):
         row = await connection.fetchrow(query, guild_id)
         return row['timeout'] if row else datetime.timedelta(minutes=15)
 
-    @commands.command(usage=['@XenaWolf#8379 NSFW'])
+    @commands.command()
     @commands.has_permissions(manage_messages=True)
     async def warn(self, ctx, member: discord.Member, *, reason: str):
         """Warns a user (obviously)"""
@@ -555,7 +555,7 @@ class Moderator(Cog):
 
     # XXX: Should this be a group?
 
-    @commands.command(name='clearwarns', usage='MIkusaba')
+    @commands.command(name='clearwarns')
     @commands.has_permissions(manage_messages=True)
     async def clear_warns(self, ctx, member: discord.Member):
         """Clears a member's warns."""
@@ -563,7 +563,7 @@ class Moderator(Cog):
         await ctx.db.execute(query, ctx.guild.id, member.id)
         await ctx.send(f"{member}'s warns have been reset!")
 
-    @commands.command(name='warnpunish', usage=['4 softban', '5 ban'])
+    @commands.command(name='warnpunish')
     @commands.has_permissions(manage_messages=True, manage_guild=True)
     async def warn_punish(self, ctx, num: int, punishment: warn_punishment, duration: time.Delta = 0):
         """Sets the punishment a user receives upon exceeding a given warn limit.
@@ -610,7 +610,7 @@ class Moderator(Cog):
         pages = ListPaginator(ctx, entries, title=f'Punishments for {ctx.guild}')
         await pages.interact()
 
-    @commands.command(name='warntimeout', usage=['10', '15m', '1h20m10s'])
+    @commands.command(name='warntimeout')
     @commands.has_permissions(manage_messages=True, manage_guild=True)
     async def warn_timeout(self, ctx, duration: time.Delta):
         """Sets the maximum time between the oldest warn and the most recent warn.
@@ -721,7 +721,7 @@ class Moderator(Cog):
             await self._update_muted_role(ctx.guild, role, ctx.db)
             return role
 
-    @commands.command(usage=['192060404501839872 stfu about your gf'])
+    @commands.command()
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
@@ -756,7 +756,7 @@ class Moderator(Cog):
         await try_edit(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
-    @commands.command(usage=['80528701850124288', '@R. Danny#6348'])
+    @commands.command()
     async def mutetime(self, ctx, member: discord.Member=None):
         """Shows the time left for a member's mute. Defaults to yourself."""
         if member is None:
@@ -808,7 +808,7 @@ class Moderator(Cog):
         await self.bot.db_scheduler.remove(discord.Object(id=entry['id']))
         return entry['expires']
 
-    @commands.command(usage=['@rjt#2336 sorry bb'])
+    @commands.command()
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: Reason=None):
@@ -824,14 +824,14 @@ class Moderator(Cog):
         await ctx.send(f'{member.mention} can now speak again... '
                        '\N{SMILING FACE WITH OPEN MOUTH AND COLD SWEAT}')
 
-    @commands.command(name='setmuterole', aliases=['muterole', 'smur'], usage=['My Cooler Mute Role'])
+    @commands.command(name='setmuterole', aliases=['muterole', 'smur'])
     @commands.has_permissions(manage_roles=True, manage_guild=True)
     async def set_muted_role(self, ctx, *, role: discord.Role):
         """Sets the muted role for the server."""
         await self._update_muted_role(ctx.guild, role, ctx.db)
         await ctx.send(f'Set the muted role to **{role}**!')
 
-    @commands.command(usage='@Salt#3514 Inferior bot')
+    @commands.command()
     @commands.has_permissions(kick_members=True)
     @commands.bot_has_permissions(kick_members=True)
     async def kick(self, ctx, member: CheckedMember, *, reason: Reason=None):
@@ -841,7 +841,7 @@ class Moderator(Cog):
         await member.kick(reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
-    @commands.command(aliases=['sb'], usage='259209114268336129 Enough of your raid fetish.')
+    @commands.command(aliases=['sb'])
     @commands.has_permissions(kick_members=True, manage_messages=True)
     @commands.bot_has_permissions(ban_members=True)
     async def softban(self, ctx, member: CheckedMember, *, reason: Reason=None):
@@ -852,7 +852,7 @@ class Moderator(Cog):
         await member.unban(reason=f'softban (original reason: {reason})')
         await ctx.send("Done. At least he'll be ok...")
 
-    @commands.command(aliases=['tb'], usage='Kwoth#2560 Your bot sucks lol')
+    @commands.command(aliases=['tb'])
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
     async def tempban(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
@@ -864,7 +864,7 @@ class Moderator(Cog):
 
         await ctx.bot.db_scheduler.add(duration.delta, 'tempban_complete', (ctx.guild.id, member.id))
 
-    @commands.command(usage='@Nadeko#6685 Stealing my flowers.')
+    @commands.command()
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
     async def ban(self, ctx, member: CheckedMemberID, *, reason: Reason=None):
@@ -888,7 +888,7 @@ class Moderator(Cog):
         await self._remove_time_entry(ctx.guild, user.user, ctx.db, event='tempban_complete')
         await ctx.send(f"Done. What did {user.user} do to get banned in the first place...?")
 
-    @varpos.require_va_command(usage='"theys f-ing up shit" @user1#0000 105635576866156544 user2#0001 user3')
+    @varpos.require_va_command()
     @commands.has_permissions(ban_members=True)
     async def massban(self, ctx, reason: Reason, *members: CheckedMemberID):
         """Bans multiple users from the server (obviously)"""

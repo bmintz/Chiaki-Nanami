@@ -230,7 +230,7 @@ class RNG(Cog):
             embed.colour = answer.colour
             await msg.edit(embed=embed)
 
-    @varpos.require_va_command(usage='Nadeko Salt PvPCraft mee6 "Chiaki Nanami"')
+    @varpos.require_va_command()
     async def choose(self, ctx, *choices: Choice):
         """Chooses between a list of choices.
 
@@ -244,7 +244,7 @@ class RNG(Cog):
             await asyncio.sleep(random.uniform(0.25, 1))
             await msg.edit(content=random.choice(choices))
 
-    @commands.group(aliases=['rand'], invoke_without_command=True, usage='<low> [high]')
+    @commands.group(aliases=['rand'], invoke_without_command=True)
     async def random(self, ctx, low: low_number, high: MaxNumber = None):
         """Gives a random number between low and high"""
 
