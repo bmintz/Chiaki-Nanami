@@ -118,7 +118,7 @@ class NotNegative(commands.BadArgument):
 class SideOrAmount(commands.Converter):
     __converter = union(Side, int)
 
-    async def converter(self, ctx, arg):
+    async def convert(self, ctx, arg):
         return await self.__converter.convert(ctx, arg)
 
     @classmethod
