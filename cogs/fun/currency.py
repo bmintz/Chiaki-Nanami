@@ -115,7 +115,7 @@ class _DummyUser(collections.namedtuple('_DummyUser', 'id')):
 class NotNegative(commands.BadArgument):
     pass
 
-class SideOrAmount:
+class SideOrAmount(commands.Converter):
     __converter = union(Side, int)
 
     async def converter(self, ctx, arg):
