@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import contextlib
 import datetime
+import discord
 import logging
 import os
 import sys

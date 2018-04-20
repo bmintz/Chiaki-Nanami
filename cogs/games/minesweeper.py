@@ -787,8 +787,6 @@ class Minesweeper(Cog):
         return ''
 
     async def _say_ending_embed(self, ctx, level, time):
-            except asyncio.TimeoutError:
-                return await ctx.send(f'{ctx.author.mention} You took too long!')
         rounded = round(time, 2)
         text = f'You beat Minesweeper on {level} in {duration_units(rounded)}.'
 
