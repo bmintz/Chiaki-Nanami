@@ -502,7 +502,7 @@ class Permissions(Cog):
             await self._set_permissions_command(ctx, category, *entities,
                                                 whitelist=value, type_='Category')
 
-        @group.command(name='all', help=all_doc_string, usage='<command> [channels, members or roles...]')
+        @group.command(name='all', help=all_doc_string, usage='[channels, members or roles...]')
         async def group_all(self, ctx, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, ALL_MODULES_KEY, *entities,
                                                 whitelist=value, type_='All Modules')
