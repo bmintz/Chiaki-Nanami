@@ -28,7 +28,7 @@ class RequireVarPositionalCommand(commands.Command):
 
     @property
     def signature(self):
-        param = self.var_arg_parameter
+        param = self.var_arg_parameter.name
         return super().signature.replace(f'[{param}...]', f'<{param}...>')
 
     @property
