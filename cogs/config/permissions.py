@@ -481,7 +481,10 @@ class Permissions(Cog):
                        )
             await ctx.send(message)
 
-        @group.command(name='command', help=cmd_doc_string, aliases=['cmd'])
+        @group.command(
+            name='command', help=cmd_doc_string,
+            aliases=['cmd'], usage='<command> [channels, members or roles...]'
+        )
         async def group_command(self, ctx, command: CommandName, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, command, *entities,
                                                 whitelist=value, type_='Command')
@@ -491,12 +494,15 @@ class Permissions(Cog):
         # but that would force me to make the commands case sensitive.
         #
         # Not sure whether that would be good or bad for the end user.
-        @group.command(name='category', help=cog_doc_string, aliases=['cog', 'module'])
+        @group.command(
+            name='category', help=cog_doc_string,
+            aliases=['cog', 'module'], usage='<category> [channels, members or roles...]'
+        )
         async def group_category(self, ctx, category: ModuleName, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, category, *entities,
                                                 whitelist=value, type_='Category')
 
-        @group.command(name='all', help=all_doc_string)
+        @group.command(name='all', help=all_doc_string, usage='<command> [channels, members or roles...]')
         async def group_all(self, ctx, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, ALL_MODULES_KEY, *entities,
                                                 whitelist=value, type_='All Modules')
