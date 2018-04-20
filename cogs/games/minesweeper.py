@@ -658,7 +658,7 @@ class MinesweeperSession:
             try:
                 await next(iter(done))
             except commands.BotMissingPermissions as e:
-                await self._ctx.bot_missing_perms(e.missing_perms, action='play Minesweeper')
+                await self._ctx.bot_missing_perms(e.missing_perms)
             else:
                 await delete_edit(0, 'Minesweeper Stopped')
             return None, -1

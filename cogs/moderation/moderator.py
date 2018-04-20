@@ -342,12 +342,6 @@ class Moderator(Cog):
         """Alias for `{prefix}slowmode off`"""
         await ctx.invoke(self.slowmode_off, member=member)
 
-    @slowmode.error
-    @slowmode_no_immune.error
-    async def slowmode_error(self, ctx, error):
-        if isinstance(error, commands.BotMissingPermissions):
-            await ctx.bot_missing_perms(error.missing_perms, action='slow people down')
-
     # ----------------------- End slowmode ---------------------
 
     @commands.command(aliases=['newmembers', 'joined'])
@@ -464,13 +458,13 @@ class Moderator(Cog):
         # We need to use the __cause__ because any non-CommandErrors will be
         # wrapped in CommandInvokeError
         cause = error.__cause__
-        if isinstance(error, commands.BotMissingPermissions):
-            await ctx.bot_missing_perms(error.missing_perms, action='delete messages')
-        elif isinstance(cause, discord.HTTPException):
-            await ctx.send(
-                "Couldn't delete the messages for some reason... Here's the error:\n"
-                f"```py\n{type(cause).__name__}: {cause}```"
-            )
+        if not isinstance(cause, discord.HTTPException):
+            return await ctx.bot.on_command_error(ctx, error, bypass=True)
+
+        await ctx.send(
+            "Couldn't delete the messages for some reason... Here's the error:\n"
+            f"```py\n{type(cause).__name__}: {cause}```"
+        )
 
     async def _get_warn_timeout(self, connection, guild_id):
         query = 'SELECT timeout FROM warn_timeouts WHERE guild_id = $1;'
@@ -896,25 +890,6 @@ class Moderator(Cog):
             await ctx.guild.ban(m, reason=reason)
 
         await ctx.send(f"Done. What happened...?")
-
-    def _error(command, action=None):
-        @command.error
-        async def error(self, ctx, error):
-            if isinstance(error, commands.BotMissingPermissions):
-                await ctx.bot_missing_perms(error.missing_perms, action=action)
-            else:
-                await ctx.bot.on_command_error(ctx, error, bypass=True)
-        return error
-
-    mute_error = _error(mute, 'mute members')
-    unmute_error = _error(unmute, 'unmute members')
-    kick_error = _error(kick)
-    ban_error = _error(ban)
-    softban_error = _error(softban, 'softly ban someone')
-    tempban_error = _error(tempban, 'temporarily ban someone')
-    massban_error = _error(massban, 'ban all the people')
-    unban_error = _error(unban)
-    del _error
 
     # --------- Events ---------
 

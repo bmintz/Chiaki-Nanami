@@ -618,7 +618,7 @@ class SudokuSession:
         try:
             await done.pop()
         except commands.BotMissingPermissions as e:
-            await self._ctx.bot_missing_perms(e.missing_perms, action='play Sudoku')
+            await self._ctx.bot_missing_perms(e.missing_perms)
             return
 
         # The message has to be deleted in order to mitigate lag from the emojis

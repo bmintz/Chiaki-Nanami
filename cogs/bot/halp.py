@@ -81,8 +81,7 @@ async def _dm_send_fail(ctx, error):
         await old_send(content, **kwargs)
 
     ctx.send = new_send
-    action = f'send {ctx.invoked_with}'
-    await ctx.bot_missing_perms(error.missing_perms, action=action)
+    await ctx.bot_missing_perms(error.missing_perms)
 
 
 async def _maybe_dm_help(ctx, paginator, error):

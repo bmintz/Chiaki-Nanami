@@ -130,12 +130,6 @@ class AutoRole(disambiguate.DisambiguateRole):
 
 _bot_role_check = partial(commands.bot_has_permissions, manage_roles=True)
 
-def _role_error(command, action):
-    @command.error
-    async def error(self, ctx, error):
-        if isinstance(error, commands.BotMissingPermissions):
-            await ctx.bot_missing_perms(error.missing_perms, action=action)
-
 
 class Roles(Cog):
     """Commands that are related to roles.
@@ -225,10 +219,6 @@ class Roles(Cog):
                             (f"You are now **{role}**... I think.", author.add_roles))
         await role_action(role)
         await ctx.send(msg)
-
-    iam_error = _role_error(iam, 'give you a role')
-    iamnot_error = _role_error(iamnot, 'take away your role')
-    selfrole_error = _role_error(selfrole, 'give or take your role')
 
     # ----------- Auto-Assign Role commands -----------------
     @commands.command(name='autorole', aliases=['aar'])
@@ -324,11 +314,6 @@ class Roles(Cog):
         """
         await role.delete()
         await ctx.send(f"Successfully deleted **{role.name}**!")
-
-    add_role_error = _role_error(add_role, 'give them a role')
-    remove_role_error = _role_error(remove_role, 'take any roles from them')
-    create_role_error = _role_error(create_role, 'create a role')
-    delete_role_error = _role_error(delete_role, 'delete a role')
 
     async def on_member_join(self, member):
         await self._add_auto_role(member)

@@ -4,6 +4,7 @@ import contextlib
 import discord
 import functools
 import itertools
+import json
 import random
 import sys
 
@@ -18,6 +19,9 @@ _DEFAULT_MISSING_PERMS_ACTIONS = {
     'embed_links': 'embeds',
     'attach_files': 'upload stuffs',
 }
+
+with open('data/bot_missing_perms.json', encoding='utf-8') as f:
+    _missing_perm_actions = json.load(f)
 
 
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
@@ -197,12 +201,13 @@ class Context(commands.Context):
 
     ask_confirmation = confirm
 
-    def bot_missing_perms(self, missing_perms, *, action=None):
+    def bot_missing_perms(self, missing_perms):
         """Send a message that the bot is missing permssions.
 
         If action is not specified the actions for each permissions are used.
         """
-        if action is None:
+        action = _missing_perm_actions.get(str(self.command))
+        if not action:
             actions = (
                 _DEFAULT_MISSING_PERMS_ACTIONS.get(p, p.replace('_', ' '))
                 for p in missing_perms
