@@ -117,9 +117,6 @@ def _callable_prefix(bot, message):
     return commands.when_mentioned_or(*prefixes)(bot, message)
 
 
-VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro')
-
-
 # Activity-related stuffs...
 def _parse_type(type_):
     with contextlib.suppress(AttributeError):
@@ -144,9 +141,12 @@ def _get_proper_activity(type, name, url=''):
     return discord.Activity(type=type, name=name)
 
 
+VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro releaselevel serial')
+
+
 class Chiaki(commands.Bot):
     __version__ = '1.1.0'
-    version_info = VersionInfo(major=1, minor=1, micro=0)
+    version_info = VersionInfo(major=1, minor=1, micro=0, releaselevel='final', serial=0)
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
