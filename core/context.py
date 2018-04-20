@@ -3,12 +3,14 @@ import collections
 import contextlib
 import discord
 import functools
+import itertools
 import random
 import sys
 
 from discord.ext import commands
 from itertools import starmap
 
+from cogs.utils.examples import _parameter_examples, _split_params
 from cogs.utils.formats import human_join
 
 
@@ -30,6 +32,9 @@ class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
     async def __aexit__(self, exc_type, exc, tb):
         return await self.ctx._release(exc_type, exc, tb)
 
+
+def _random_slice(seq):
+    return seq[:random.randint(0, len(seq))]
 
 class Context(commands.Context):
     # Used for getting the current parameter when generating an example
@@ -221,3 +226,18 @@ class Context(commands.Context):
         return all(getattr(perms, perm) == value for perm, value in permissions.items())
 
     bot_has_embed_links = functools.partialmethod(bot_has_permissions, embed_links=True)
+
+    def missing_required_arg(self, param):
+        required, optional = _split_params(self.command)
+        missing = list(itertools.dropwhile(lambda p: p != param, required))
+        names = human_join(f'`{p.name}`' for p in missing)
+        example = ' '.join(_parameter_examples(missing + _random_slice(optional), self))
+
+        # TODO: Specify the args more descriptively.
+        message = (
+            f"Hey hey, you're missing {names}.\n\n"
+            f'Usage: `{self.clean_prefix}{self.command.signature}`\n'
+            f'Example: {self.message.clean_content} **{example}** \n'
+        )
+
+        return self.send(message)

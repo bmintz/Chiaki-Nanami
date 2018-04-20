@@ -394,7 +394,6 @@ class Chiaki(commands.Bot):
             # it's fine. Besides it works anyway.
             while ctx.db:
                 await asyncio.sleep(0)
-
             try:
                 async with ctx.acquire():
                     await ctx.reinvoke()
@@ -413,7 +412,7 @@ class Chiaki(commands.Bot):
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send('This command cannot be used in private messages.')
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f'This command ({ctx.command}) needs another parameter ({error.param})')
+            await ctx.missing_required_arg(error.param)
         elif isinstance(error, commands.CommandInvokeError):
             print(f'In {ctx.command.qualified_name}:', file=sys.stderr)
             traceback.print_tb(error.original.__traceback__)
