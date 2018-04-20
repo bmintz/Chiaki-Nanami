@@ -1,5 +1,4 @@
 import asyncio
-import enum
 import functools
 import inspect
 
@@ -8,11 +7,13 @@ from lru import LRU
 
 _keyword_marker = object()
 
+
 # Key-making functions
 def unordered(args, kwargs):
     if kwargs:
         args += (_keyword_marker, *kwargs.items())
     return frozenset(args)
+
 
 default_key = functools.partial(functools._make_key, typed=False)
 typed_key = functools.partial(functools._make_key, typed=True)
@@ -81,5 +82,6 @@ def cache(maxsize=128, make_key=default_key):
         wrapper.get_stats = get_stats
         return wrapper
     return decorator
+
 
 async_cache = cache

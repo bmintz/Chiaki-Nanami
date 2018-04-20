@@ -1,9 +1,14 @@
 import discord
+import random
+import string
 
 from discord.ext import commands
 from itertools import starmap
 
-from ._initroot import InitRoot
+from core.cog import Cog
+
+
+_prefixes = list(set(string.punctuation) - {'@', '#'})
 
 
 class Prefix(commands.Converter):
@@ -19,8 +24,18 @@ class Prefix(commands.Converter):
             raise commands.BadArgument('That is a reserved prefix already in use.')
         return argument
 
+    @staticmethod
+    def random_example(ctx):
+        return random.choice(_prefixes)
 
-class Prefixes(InitRoot):
+
+class RemovablePrefix(Prefix):
+    @staticmethod
+    def random_example(ctx):
+        return random.choice(ctx.bot.get_raw_guild_prefixes(ctx.guild))
+
+
+class Prefixes(Cog):
     @commands.group(aliases=['prefixes'], invoke_without_command=True)
     async def prefix(self, ctx):
         """Shows the prefixes that you can use in this server."""
@@ -59,7 +74,7 @@ class Prefixes(InitRoot):
 
     @prefix.command(name='remove', ignore_extra=False)
     @commands.has_permissions(manage_guild=True)
-    async def remove_prefix(self, ctx, prefix: Prefix):
+    async def remove_prefix(self, ctx, prefix: RemovablePrefix):
         """Removes a prefix for this server.
 
         This is effectively the inverse to `{prefix}prefix add`.
@@ -91,12 +106,11 @@ class Prefixes(InitRoot):
     async def reset_prefix(self, ctx):
         """Removes all the server's prefixes.
 
-        After this, the only way to get my commands to work
-        is by mentioning me.
+        I will only respond to mentions after this.
         """
 
         await ctx.bot.set_guild_prefixes(ctx.guild, [])
-        await ctx.send(f"Done. **{ctx.guild}** no longer has any custom prefixes")
+        await ctx.send(f"Done. Please mention me if you need anything.")
 
 
 def setup(bot):

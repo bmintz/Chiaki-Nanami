@@ -1,0 +1,111 @@
+{
+    "8ball.question": [
+        "Will Senpai notice me?",
+        "Will I get rich?",
+        "Will you marry me?",
+        "Are you best waifu?"
+    ],
+    "afk.message": [
+        "sleeping",
+        "watching bots",
+        "sleeping more"
+    ],
+    "alias_examples": [
+        ["all in", "flip h 999"],
+        ["superban", "ban"],
+        ["shipwaifu", "ship @Chiaki Nanami#4514"]
+    ],
+    "botav.avatar": [
+        "chiaki.jpg",
+        "chiaki-sleeping-with-hajime.png"
+    ],
+    "bye message.message": "Bye {user}. Hope you enjoyed your stay!",
+    "choose.choices": [
+        [
+            "apples",
+            "bananas",
+            "kiwis",
+            "oranges",
+            "tomatoes"
+        ],
+        [
+            "Discord",
+            "Skype",
+            "Teamspeak",
+            "IRC",
+            "Slack"
+        ],
+        [
+            "red",
+            "green",
+            "blue",
+            "yellow",
+            "orange"
+        ],
+        [
+            "get up",
+            "get up later",
+            "sleep",
+            "sleep more",
+            "sleep even more"
+        ]
+    ],
+    "createrole.name": [
+        "Mod",
+        "Admin",
+        "Staff",
+        "new role",
+        "Super Special Role"
+    ],
+    "debug.code": "1 + 1",
+    "eval.body": "print('Hello world!')",
+    "feedback.message": [
+        "Hi from help!",
+        "bot machine broke",
+        "good bot 10/10 would invite again"
+    ],
+    "msg": [
+        "Hey hey, I'm Chiaki.",
+        "Hello everyone~!"
+    ],
+    "reason": [
+        "he did a bad",
+        "ads",
+        "Your behaviour is toxic.",
+        "Shitposting",
+        "Asked for it",
+        "Spam",
+        "Advertising"
+    ],
+    "remind.message": [
+        "do the dishes",
+        "prepare for the apocalypse",
+        "don't suffer from despair",
+        "do a thing",
+        "unmute someone"
+    ],
+    "rig.comment": [
+        "OTP!1!!1! <3 <3",
+        "best ship"
+    ],
+    "shell.command": [
+        "echo \"Hello world!\"",
+        "wall Hey hey I'm Chiaki!!"
+    ],
+    "sql.query": "SELECT * FROM table",
+
+    "tag_examples": [
+        ["super secret stuff", "aaa"],
+        ["Note from Senpai", "you have been noticed."],
+        ["yt bot tutorial", "https://www.youtube.com/watch?v=XfR9iY5y94s"],
+        ["code for free nitro", "WtkPTmE"],
+        ["rules", "No gambling in my swearing server"]
+    ],
+    "tag search.name": [
+        "help",
+        "help chiaki",
+        "free money",
+        "install chiakibot"
+    ],
+    "welcome message.message": "Welcome {user} to {server}!"
+}

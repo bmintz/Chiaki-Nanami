@@ -1,9 +1,7 @@
 import asyncio
-import asyncqlio
 import contextlib
 import discord
 import emoji
-import heapq
 import itertools
 import random
 import time
@@ -14,12 +12,16 @@ from operator import attrgetter
 
 from .manager import SessionManager
 
-from ..tables.base import TableBase
-from ..tables.currency import Currency, add_money, get_money
 from ..utils import converter, formats
 
 from core.cog import Cog
 
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS racehorses (
+        user_id BIGINT PRIMARY KEY,
+        emoji TEXT NOT NULL
+    );
+"""
 
 TRACK_LENGTH = 40
 DEFAULT_TRACK = '-' * TRACK_LENGTH
@@ -32,21 +34,18 @@ ANIMALS = [
 ]
 
 
-class Racehorse(TableBase, table_name='racehorses'):
-    user_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    # For custom horses we're gonna support custom emojis here.
-    # Custom emojis are in the format <:name:id>
-    # The name has a maximum length of 32 characters, while the ID is at
-    # most 21 digits long. Add that to the 2 colons and 2 angle brackets
-    # for a total 57 characters. But we'll go with 64 just to play it safe.
-    emoji = asyncqlio.Column(asyncqlio.String(64))
+async def _get_race_horse(user_id, *, connection):
+    query = 'SELECT emoji FROM racehorses WHERE user_id = $1;'
+    row = await connection.fetchrow(query, user_id)
+    return row['emoji'] if row else None
 
 
-async def _get_race_horse(session, member_id):
-    query = session.select.from_(Racehorse).where(Racehorse.user_id == member_id)
-    horse = await query.first()
-    return horse.emoji if horse else None
-
+_default_emoji_examples = [
+    ':thinking:',
+    ':cloud_tornado:',
+    ':pig2:',
+    ':love_hotel:'
+]
 
 class RacehorseEmoji(commands.Converter):
     _converter = converter.union(discord.Emoji, str)
@@ -61,6 +60,11 @@ class RacehorseEmoji(commands.Converter):
 
         return str(emoji_)
 
+    @staticmethod
+    def random_example(ctx):
+        if random.random() > 0.5 and ctx.guild.emojis:
+            return f':{random.choice(ctx.guild.emojis).name}:'
+        return random.choice(_default_emoji_examples)
 
 MINIMUM_REQUIRED_MEMBERS = 2
 # fields can only go up to 25
@@ -83,7 +87,7 @@ class _RaceWaiter:
         with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
             await future
 
-        return len(self.members) >= 2
+        return len(self.members) >= 1
 
     def close(self, member):
         if not self._future:
@@ -94,28 +98,30 @@ class _RaceWaiter:
 
         return self._future.cancel()
 
-    async def _update_pot(self, member, amount):
+    async def _update_pot(self, member, amount, *, connection):
         if amount is None:
             return
 
         if amount <= 0:
             raise ValueError(f"How can you bet {amount} anyway?")
 
-        async with self._bot.db.get_session() as session:
-            row = await get_money(session, member.id)
-            if not row or row.amount < amount:
-                raise RuntimeError(f"{member.mention}, you don't have enough...")
+        currency = self._bot.get_cog('Money')
+        if currency is None:
+            raise RuntimeError("Betting isn't available right now. Please try again later.")
 
-            row.amount -= amount
-            await session.add(row)
-            self.pot += amount
+        money = await currency.get_money(member.id, connection=connection)
+        if money < amount:
+            raise RuntimeError(f"{member.mention}, you don't have enough...")
 
-    async def add_member(self, session, member, amount):
+        await currency.add_money(member.id, -amount)
+        self.pot += amount
+
+    async def add_member(self, member, amount, *, connection):
         if any(r.user.id == member.id for r in self.members):
             raise RuntimeError("You're already in the race!")
 
-        await self._update_pot(member, amount)
-        horse = await _get_race_horse(session, member.id)
+        await self._update_pot(member, amount, connection=connection)
+        horse = await _get_race_horse(member.id, connection=connection)
         self.members.append(Racer(member, horse))
 
         if len(self.members) >= MAXIMUM_REQUIRED_MEMBERS:
@@ -168,9 +174,9 @@ class RacingSession:
         self.pot = pot
         self._winners = set()
         self._track = (discord.Embed(colour=self.ctx.bot.colour)
-                      .set_author(name='Race has started!')
-                      .set_footer(text='Current Leader: None')
-                      )
+                       .set_author(name='Race has started!')
+                       .set_footer(text='Current Leader: None')
+                       )
         if self.pot:
             self._track.description = f'Pot: **{self.pot}**{self.ctx.bot.emoji_config.money}'
 
@@ -221,8 +227,8 @@ class RacingSession:
         racers = sorted(self.players, key=attrgetter('time_taken'))
         duration = racers[-1].time_taken
         embed = (discord.Embed(title='Results', colour=0x00FF00)
-                .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
-                )
+                 .set_footer(text=f'Race took {duration :.2f} seconds to finish.')
+                 )
 
         others, winners = partition(self._winners.__contains__, racers)
         winners, others = list(winners), itertools.islice(others, 2)
@@ -257,16 +263,17 @@ class RacingSession:
         amount = self.pot // num_winners
         ids = [winner.user.id for winner in self._winners]
 
-        await (self.ctx.session.update.table(Currency)
-                               .set(Currency.amount + amount)
-                               .where(Currency.user_id.in_(*ids))
-               )
+        query = """UPDATE currency SET amount = currency.amount + $1 
+                   WHERE user_id = ANY($2::BIGINT[])
+                """
+        await self.ctx.db.execute(query, amount, ids)
 
     async def run(self):
         await self._loop()
         await self._display_winners()
 
         if self.pot:
+            await self.ctx.acquire()
             await self._give_to_winners()
 
     def is_completed(self):
@@ -279,6 +286,7 @@ class Racing(Cog):
         self.manager = SessionManager()
 
     @commands.group(invoke_without_command=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def race(self, ctx, amount: int = None):
         """Starts a race. Or if one has already started, joins one.
 
@@ -288,18 +296,24 @@ class Racing(Cog):
         session = self.manager.get_session(ctx.channel)
         if session is not None:
             try:
-                await session.add_member(ctx.session, ctx.author, amount)
+                await session.add_member(ctx.author, amount, connection=ctx.db)
             except AttributeError:
                 # Probably the race itself
                 return await ctx.send('Sorry... you were late...')
             except Exception as e:
                 return await ctx.send(e)
             else:
+                # Release the connection here because there's a possibility of a high
+                # volume of people invoking this command. If we run into a rate-limit,
+                # this can prove fatal, as Chiaki has to sleep for a certain amount
+                # of time. This can cause her to hang the connection longer that she
+                # needs to.
+                await ctx.release()
                 return await ctx.send(f'Ok, {ctx.author.mention}, good luck!')
 
         with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.bot, ctx.author)) as waiter:
             try:
-                await waiter.add_member(ctx.session, ctx.author, amount)
+                await waiter.add_member(ctx.author, amount, connection=ctx.db)
             except Exception as e:
                 return await ctx.send(e)
 
@@ -309,12 +323,16 @@ class Racing(Cog):
                 f'closes the race with `{ctx.prefix}{ctx.invoked_with} close`!'
             )
 
+            await ctx.release()  # release as we're gonna be waiting for a bit
             if not await waiter.wait():
                 if amount is not None:
-                    # We can assert that there will only be one racer because there
-                    # must be at least two racers.
-                    user = one(waiter.members).user
-                    await add_money(ctx.session, user.id, amount)
+                    currency = self.bot.get_cog('Money')
+                    if currency:
+                        # We can assert that there will only be one racer because there
+                        # must be at least two racers.
+                        user = one(waiter.members).user
+                        await ctx.acquire()
+                        await currency.add_money(user.id, amount, connection=ctx.db)
 
                 return await ctx.send("Can't start the race. There weren't enough people. ;-;")
 
@@ -345,31 +363,31 @@ class Racing(Cog):
         Custom emojis are allowed. But they have to be in a server that I'm in.
         """
         if not emoji:
-            query = ctx.session.select.from_(Racehorse).where(Racehorse.user_id == ctx.author.id)
-            selection = await query.first()
+            emoji = await _get_race_horse(ctx.author.id, connection=ctx.db)
 
-            message = (f'{selection.emoji} will be racing on your behalf, I think.'
-                       if selection else
+            message = (f'{emoji} will be racing on your behalf, I think.'
+                       if emoji else
                        "You don't have a horse. I'll give you one when you race though!")
             return await ctx.send(message)
 
-        await (ctx.session.insert.add_row(Racehorse(user_id=ctx.author.id, emoji=emoji))
-                                 .on_conflict(Racehorse.user_id)
-                                 .update(Racehorse.emoji)
-               )
+        query = """INSERT INTO racehorses (user_id, emoji) VALUES ($1, $2)
+                   ON CONFLICT (user_id)
+                   DO UPDATE SET emoji = $2;
+                """
+        await ctx.db.execute(query, ctx.author.id, emoji)
         await ctx.send(f'Ok, you can now use {emoji}')
 
     @race.command(name='nohorse', aliases=['noride'])
     async def race_nohorse(self, ctx):
         """Removes your custom race."""
         # Gonna do two queries for the sake of user experience/dialogue here
-        query = ctx.session.select.from_(Racehorse).where(Racehorse.user_id == ctx.author.id)
-        horse = await query.first()
-        if not horse:
-            return await ctx.send('You never had a horse...')
+        query = 'DELETE FROM racehorses WHERE user_id = $1;'
+        status = await ctx.db.execute(query, ctx.author.id)
 
-        await ctx.session.remove(horse)
-        await ctx.send("Okai, I'll give you a horse when I can.")
+        if status[-1] == '0':
+            await ctx.send('You never had a horse...')
+        else:
+            await ctx.send("Okai, I'll give you a horse when I can.")
 
 
 def setup(bot):

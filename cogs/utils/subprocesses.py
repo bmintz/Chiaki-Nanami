@@ -18,7 +18,7 @@ async def run_subprocess(cmd, loop=None):
         # make matters worse, we can't use the proactor event loop because
         # there is a regression in Python 3.6 where an AssertionError is
         # thrown when reading the data.
-        # 
+        #
         # This is why we have no choice but to resort to using an executor.
         # If anyone can supply a minimal repro of this issue and submit it
         # to the Python bug tracker that would be really nice (I can't sadly

@@ -34,5 +34,3 @@ url_colour = url_color
 async def user_color(user):
     return await url_color(user.avatar_url_as(static_format='png'))
 user_colour = user_color
-
-        

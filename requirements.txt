@@ -1,12 +1,12 @@
 git+https://github.com/carpedm20/emoji.git
 git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py[voice]
-git+https://github.com/SunDwarf/asyncqlio.git
 
 asyncpg
 colorthief
 lru_dict
-more-itertools
+more-itertools>=3.2,<4.0
 parsedatetime
 psutil
 python-dateutil
 webcolors
+websockets>=3.1,<4.0  # needed because 4.0 is really fucky

@@ -1,0 +1,84 @@
+{
+    "title": "RPS-11",
+    "elements": {
+        "rock": "\ud83d\uddff",
+        "paper": "\ud83d\udcf0",
+        "scissors": "\u2702",
+        "water": "\ud83d\udca7",
+        "fire": "\ud83d\udd25",
+        "air": "\ud83d\udca8",
+        "sponge": "\ud83e\uddc0",
+        "human": "\ud83d\udd7a",
+        "gun": "\ud83d\udd2b",
+        "devil": "\ud83d\udc7f",
+        "wolf": "\ud83d\udc3a"
+    },
+
+    "outcomes": [
+        "{Rock} pounds out {fire}",
+        "{Rock} crushes {sponge}",
+        "{Rock} smashes {scissors}",
+        "{Rock} crushes {human}",
+        "{Rock} crushes {wolf}",
+
+        "{Fire} melts {scissors}",
+        "{Fire} burns {paper}",
+        "{Fire} burns {sponge}",
+        "{Fire} burns {human}",
+        "{Fire} burns {wolf}",
+
+        "{Paper} covers {rock}",
+        "{Paper} fans {air}",
+        "{Paper} floats on {water}",
+        "{Paper} outlaws {gun}",
+        "{Paper} rebukes {devil}",
+
+        "{Scissors} swish through {air}",
+        "{Scissors} cuts {paper}",
+        "{Scissors} cuts {sponge}",
+        "{Scissors} cuts {human}",
+        "{Scissors} cuts {wolf}",
+
+        "{Sponge} soaks {paper}",
+        "{Sponge} uses {air} pockets",
+        "{Sponge} absorbs {water}",
+        "{Sponge} cleans {gun}",
+        "{Sponge} cleanses {devil}",
+
+        "{Air} blows out {fire}",
+        "{Air} erodes {rock}", 
+        "{Air} evaporates {water}",
+        "{Air} tarnishes {gun}",
+        "{Air} chokes {devil}",
+
+        "{Water} erodes {rock}", 
+        "{Water} puts out {fire}", 
+        "{Water} rusts {scissors}",
+        "{Water} rusts {gun}",
+        "{Water} drowns {devil}",
+
+        "{Human} cleans with {sponge}",
+        "{Human} writes {paper}",
+        "{Human} breathes {air}",
+        "{Human} drinks {water}",
+        "{Human} tames {wolf}",
+
+        "{Gun} targets {rock}", 
+        "{Gun} {fire}s", 
+        "{Gun} outclasses {scissors}", 
+        "{Gun} shoots {human}",
+        "{Gun} shoots {wolf}",
+
+        "{Wolf} chews up {sponge}",
+        "{Wolf} chews up {paper}",
+        "{Wolf} breathes {air}",
+        "{Wolf} drinks {water}",
+        "{Wolf} bites {devil}'s heiny",
+
+        "{Devil} hurls {rock}", 
+        "{Devil} breathes {fire}", 
+        "{Devil} is immune to {scissors}",
+        "{Devil} is immune to {gun}", 
+        "{Devil} possesses {human}"
+    ]
+}

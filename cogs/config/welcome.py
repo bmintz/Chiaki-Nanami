@@ -1,4 +1,3 @@
-import asyncqlio
 import collections
 import discord
 import enum
@@ -8,31 +7,32 @@ from discord.ext import commands
 from datetime import datetime
 from more_itertools import one
 
-from ._initroot import InitRoot
-
-from ..tables.base import TableBase
 from ..utils import time
+from ..utils.examples import static_example
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
 
+from core.cog import Cog
+
+__schema__ = """
+    CREATE TABLE IF NOT EXISTS server_messages (
+        guild_id BIGINT,
+        is_welcome BOOLEAN,
+        channel_id BIGINT NULL,
+        message TEXT NULL,
+        delete_after SMALLINT DEFAULT 0,
+        enabled BOOLEAN DEFAULT FALSE
+    );
+"""
 
 _DEFAULT_CHANNEL_CHANGE_URL = ('https://github.com/discordapp/discord-api-docs/blob/master/docs/'
                                'Change_Log.md#breaking-change-default-channels')
 
 
-class ServerMessage(TableBase, table_name='server_messages'):
-    # Cannot use a auto-increment primary key because it fucks
-    # with ON CONFLICT in a strange way.
-    guild_id = asyncqlio.Column(asyncqlio.BigInt, primary_key=True)
-    is_welcome = asyncqlio.Column(asyncqlio.Boolean, primary_key=True)
-
-    # When I make this per-channel I'll add a unique constraint to this later.
-    channel_id = asyncqlio.Column(asyncqlio.BigInt, default=-1)
-
-    message = asyncqlio.Column(asyncqlio.String(2000), default='', nullable=True)
-    delete_after = asyncqlio.Column(asyncqlio.SmallInt, default=0)
-    enabled = asyncqlio.Column(asyncqlio.Boolean, default=False)
-
+fields = 'guild_id is_welcome channel_id message delete_after enabled'.split()
+ServerMessage = collections.namedtuple('ServerMessage', fields)
+ServerMessage.__new__.__defaults__ = (None, ) * len(fields)
+del fields
 
 _server_message_check = functools.partial(commands.has_permissions, manage_guild=True)
 
@@ -67,23 +67,12 @@ _lookup = {
 }
 
 
-class _ConflictColumns(collections.namedtuple('_ConflictColumns', 'columns')):
-    """Hack to support multiple columns for on_conflict"""
-    __slots__ = ()
-
-    @property
-    def quoted_name(self):
-        return ', '.join(c.quoted_name for c in self.columns)
-
-_ConflictServerColumns = _ConflictColumns((ServerMessage.guild_id, ServerMessage.is_welcome))
-del _ConflictColumns
-
-
+@static_example
 def special_message(message):
     return message if '{user}' in message else f'{{user}}{message}'
 
 
-class WelcomeMessages(InitRoot):
+class WelcomeMessages(Cog):
     """Commands related to welcome and leave messages."""
     # TODO: Put this in a config module.
 
@@ -92,28 +81,24 @@ class WelcomeMessages(InitRoot):
 
     # ------------ config helper functions --------------------
 
-    async def _get_server_config(self, session, guild_id, thing):
-        query = (session.select(ServerMessage)
-                        .where((ServerMessage.guild_id == guild_id)
-                               & (ServerMessage.is_welcome == thing.value))
-                 )
-        return await query.first()
+    async def _get_server_config(self, guild_id, thing, *, connection=None):
+        connection = connection or self.bot.pool
+
+        query = "SELECT * FROM server_messages WHERE guild_id = $1 AND is_welcome = $2"
+        row = await connection.fetchrow(query, guild_id, thing.value)
+        return ServerMessage(**row) if row else None
 
     async def _update_server_config(self, ctx, thing, **kwarg):
-        # asyncqlio doesn't support multi-column on_conflict yet...
         column, value = one(kwarg.items())
-        column = getattr(ServerMessage, column)
-
-        row = ServerMessage(
-            guild_id=ctx.guild.id,
-            is_welcome=thing.value,
-            **kwarg,
-        )
-
-        await ctx.session.insert.add_row(row).on_conflict(_ConflictServerColumns).update(column)
+        query = f"""INSERT INTO server_messages (guild_id, is_welcome, {column})
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (guild_id, is_welcome)
+                    DO UPDATE SET {column} = $3
+                """
+        await ctx.db.execute(query, ctx.guild.id, thing.value, value)
 
     async def _show_server_config(self, ctx, thing):
-        config = await self._get_server_config(ctx.session, ctx.guild.id, thing)
+        config = await self._get_server_config(ctx.guild.id, thing, connection=ctx.db)
         if not config:
             commands = sorted(ctx.command.commands, key=str)
             message = ("Um... you haven't even set this at all...\n"
@@ -128,7 +113,7 @@ class WelcomeMessages(InitRoot):
         colour, prefix = (0x4CAF50, 'en') if config.enabled else (0xf44336, 'dis')
         message = (f'**Message:**\n{config.message}'
                    if config.message else
-                   f"You haven't even set the message...\nUse `{thing.command_name} message` to set it.")
+                   f"Set one using `{thing.command_name} message`.")
 
         embed = (discord.Embed(colour=colour, description=message)
                  .set_author(name=f'{thing.name.title()} Status: {prefix}abled')
@@ -136,22 +121,25 @@ class WelcomeMessages(InitRoot):
 
         ch_id = config.channel_id
         if ch_id == -1:
-            ch_field = f"You haven't even set this! Use `{thing.command_name} channel your_channel` right now!"
+            ch_field = f"Set a channel using `{thing.command_name} channel channel`."
         else:
             channel = ctx.bot.get_channel(ch_id)
             if channel:
                 ch_field = channel.mention
             else:
-                ch_field = (f"{config.channel_id} has been deleted, pls reset it with "
-                            f"`{thing.command_name} channel your_channel`")
+                ch_field = (
+                    "Deleted.\nSet a new one using\n"
+                    f"`{ctx.clean_prefix}{thing.command_name} channel your_channel`"
+                )
 
         embed.add_field(name='Channel', value=ch_field, inline=False)
 
-        delete_after = (time.duration_units(config.delete_after)
-                        if config.delete_after > 0 else
-                        "Actually wait, I won't delete it at all...")
-
-        embed.add_field(name='I will delete it after', value=delete_after, inline=False)
+        if config.delete_after > 0:
+            embed.add_field(
+                name='Message will be deleted after',
+                value=time.duration_units(config.delete_after),
+                inline=False
+            )
 
         await ctx.send(embed=embed)
 
@@ -169,7 +157,7 @@ class WelcomeMessages(InitRoot):
             await self._update_server_config(ctx, thing, message=message)
             await ctx.send(f"{thing.name.title()} message has been set to *{message}*")
         else:
-            config = await self._get_server_config(ctx.session, ctx.guild.id, thing)
+            config = await self._get_server_config(ctx.guild.id, thing, connection=ctx.db)
             to_say = (f"I will say {config.message} to the user."
                       if (config and config.message) else
                       "I won't say anything...")
@@ -180,7 +168,7 @@ class WelcomeMessages(InitRoot):
             await self._update_server_config(ctx, thing, channel_id=channel.id)
             await ctx.send(f'Ok, {channel.mention} it is then!')
         else:
-            config = await self._get_server_config(ctx.session, ctx.guild.id, thing)
+            config = await self._get_server_config(ctx.guild.id, thing, connection=ctx.db)
 
             channel = self.bot.get_channel(getattr(config, 'channel_id', None))
 
@@ -194,7 +182,7 @@ class WelcomeMessages(InitRoot):
 
     async def _delete_after_config(self, ctx, duration, *, thing):
         if duration is None:
-            config = await self._get_server_config(ctx.session, ctx.guild.id, thing)
+            config = await self._get_server_config(ctx.guild.id, thing, connection=ctx.db)
             duration = config.delete_after if config else 0
             message = (f"I won't delete the {thing} message." if duration < 0 else
                        f"I will delete the {thing} message after {time.duration_units(duration)}.")
@@ -282,8 +270,7 @@ class WelcomeMessages(InitRoot):
 
     async def _maybe_do_message(self, member, thing, time):
         guild = member.guild
-        async with self.bot.db.get_session() as session:
-            config = await self._get_server_config(session, guild.id, thing)
+        config = await self._get_server_config(guild.id, thing)
 
         if not (config and config.enabled):
             return

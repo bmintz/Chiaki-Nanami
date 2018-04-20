@@ -1,7 +1,6 @@
 import asyncio
+import collections.abc
 import contextlib
-import collections
-import itertools
 import json
 import os
 import uuid
@@ -12,7 +11,7 @@ os.makedirs(JSONS_PATH, exist_ok=True)
 
 
 # Shamelessly copied from Danny because he's Danny and he's cool.
-class JSONFile(collections.MutableMapping):
+class JSONFile(collections.abc.MutableMapping):
     """The "database" object. Internally based on ``json``.
 
     Basically a wrapper for persistent data, whenever I don't want to use a DB,
@@ -29,7 +28,7 @@ class JSONFile(collections.MutableMapping):
         if options.pop('load_later', False):
             self._loop.create_task(self.load())
         else:
-            self.load_from_file()
+            self._load()
 
     def __getitem__(self, key):
         return self._db[self._transform_key(key)]
@@ -46,13 +45,13 @@ class JSONFile(collections.MutableMapping):
     def __len__(self):
         return len(self._db)
 
-    def load_from_file(self):
+    def _load(self):
         with contextlib.suppress(FileNotFoundError), open(self._name, 'r') as f:
             self._db.update(json.load(f))
 
     async def load(self):
         async with self._lock:
-            await self._loop.run_in_executor(None, self.load_from_file)
+            await self._loop.run_in_executor(None, self._load)
 
     def _dump(self):
         temp = f'{self._name}-{uuid.uuid4()}.tmp'
@@ -68,15 +67,10 @@ class JSONFile(collections.MutableMapping):
 
     async def put(self, key, value, *args):
         """Edits a config entry."""
-        self._db[self._transform_key(key)] = value
+        self[key] = value
         await self.save()
 
     async def remove(self, key):
         """Removes a config entry."""
-        del self._db[self._transform_key(key)]
+        del self[key]
         await self.save()
-
-    async def update(self, mapping, **kwargs):
-        super().update(mapping, **kwargs)
-        await self.save()
-

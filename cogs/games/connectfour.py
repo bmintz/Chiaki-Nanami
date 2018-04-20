@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import discord
 import enum
 import itertools
@@ -9,8 +10,10 @@ from more_itertools import first_true, locate, one, windowed
 
 from . import errors
 from .bases import TwoPlayerGameCog
-
 from ..utils.context_managers import temp_message
+from ..utils.formats import escape_markdown
+from ..utils.misc import emoji_url
+
 
 NUM_ROWS = 6
 NUM_COLS = 7
@@ -46,20 +49,20 @@ def _is_full(line):
     return len(line) == 1 and Tile.NONE not in line
 
 
-_winning_tiles = {
-    Tile.X: '\N{HEAVY BLACK HEART}',
-    Tile.O: '\N{BLUE HEART}'
-}
+_winning_tile_indices = {Tile.X: 0, Tile.O: 1}
 
 
 class Board:
+    _numbers = [f'{i}\U000020e3' for i in range(1, NUM_COLS + 1)]
+    _winning_tiles = ['\N{HEAVY BLACK HEART}', '\N{BLUE HEART}']
+
     def __init__(self):
         self._board = [[Tile.NONE] * NUM_ROWS for _ in range(NUM_COLS)]
         self._last_column = None
 
     def __str__(self):
         fmt = ''.join(itertools.repeat('{}', NUM_COLS))
-        return '\n'.join(map(fmt.format, *map(reversed, self._board)))
+        return self.top_row + '\n' + '\n'.join(map(fmt.format, *map(reversed, self._board)))
 
     def is_full(self):
         return Tile.NONE not in itertools.chain.from_iterable(self._board)
@@ -76,7 +79,7 @@ class Board:
         for line_idx in locate(lines, _is_full):
             indices = _default_indices[line_idx]
             winner = b[indices[0][0]][indices[0][1]]
-            emoji = _winning_tiles[winner]
+            emoji = self._winning_tiles[_winning_tile_indices[winner]]
 
             for c, r in indices:
                 # TODO: Custom emojis for tiles?
@@ -98,105 +101,133 @@ class Board:
 Player = namedtuple('Player', 'user symbol')
 Stats = namedtuple('Stats', 'winner turns')
 
+# icons
+FOREFIT_ICON = emoji_url('\N{WAVING WHITE FLAG}')
+TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
+# XXX: Should be refactored along with tic-tac-toe
 class ConnectFourSession:
     def __init__(self, ctx, opponent):
         self.ctx = ctx
-        self.board = Board()
         self.opponent = opponent
 
         xo = random.sample((Tile.X, Tile.O), 2)
-        self.players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
-        self._current = None
+        self._players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
+        self._stopped = False
+        self._timed_out = False
+        self._turn = random.random() > 0.5
         self._runner = None
+        self._board = Board()
 
-        player_field = '\n'.join(itertools.starmap('{1} = **{0}**'.format, self.players))
+        if ctx.bot_has_permissions(external_emojis=True):
+            config = self.ctx.bot.emoji_config
+            self._board._numbers = config.numbers[:7]
+            self._board._winning_tiles = config.c4_winning_tiles
+
         instructions = ('Type the number of the column to play!\n'
                         'Or `quit` to stop the game (you will lose though).')
+
         self._game_screen = (discord.Embed(colour=0x00FF00)
-                            .set_author(name=f'Connect 4 - {self.ctx.author} vs {self.opponent}')
-                            .add_field(name='Players', value=player_field)
-                            .add_field(name='Current Player', value=None, inline=False)
-                            .add_field(name='Instructions', value=instructions)
-                            )
+                             .set_author(name=f'Connect 4')
+                             .add_field(name='Instructions', value=instructions)
+                             )
 
-    @staticmethod
-    def get_column(string):
-        lowered = string.lower()
+    def _check(self, m):
+        current = self.current
+        if not (m.channel == self.ctx.channel and m.author.id == current.user.id):
+            return
+        lowered = m.content.lower()
         if lowered in {'quit', 'stop'}:
+            self._stopped = True
+            return True
+
+        if not lowered.isdigit():
+            return
+
+        try:
+            self._board.place(int(lowered) - 1, current.symbol)
+        except (ValueError, IndexError):
+            return
+        else:
+            return True
+
+    async def wait_for_player_move(self):
+        message = await self.ctx.bot.wait_for('message', timeout=60, check=self._check)
+        with contextlib.suppress(discord.HTTPException):
+            await message.delete()
+
+        if self._stopped:
             raise errors.RageQuit
-
-        column = int(one(string))
-        if not 1 <= column <= 7:
-            raise ValueError('must be 1 <= column <= 7')
-        return column - 1
-
-    def _check_message(self, m):
-        return m.channel == self.ctx.channel and m.author.id == self._current.user.id
-
-    async def get_input(self):
-        while True:
-            message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
-            try:
-                coords = self.get_column(message.content)
-            except (ValueError, IndexError):
-                continue
-            else:
-                await message.delete()
-                return coords
 
     def _update_display(self):
         screen = self._game_screen
-        user = self._current.user
+        user = self.current.user
+        winner = self.winner
 
-        b = self.board
-        screen.description = f'**Current Board:**\n\n{b.top_row}\n{b}'
-        screen.set_thumbnail(url=user.avatar_url)
-        screen.set_field_at(1, name='Current Move', value=str(user), inline=False)
+        formats = [
+            f'{p.symbol} = {escape_markdown(str(p.user))}'
+            for p in self._players
+        ]
+
+        if not winner:
+            formats[self._turn] = f'**{formats[self._turn]}**'
+        else:
+            self._board.mark_winning_lines()
+
+        joined = '\n'.join(formats)
+
+        b = self._board
+        screen.description = f'{b}\n\u200b\n{joined}'
+
+        if winner:
+            user = winner.user
+            screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
+        elif self._stopped:
+            screen.colour = 0
+            screen.set_author(name=f'{user} forefited...', icon_url=FOREFIT_ICON)
+        elif self._timed_out:
+            screen.colour = 0
+            screen.set_author(name=f'{user} ran out of time...', icon_url=TIMEOUT_ICON)
+        elif self._board.is_full():
+            screen.colour = 0
+            screen.set_author(name="It's a tie!")
+        else:
+            screen.set_author(name='Connect 4', icon_url=user.avatar_url)
 
     async def _loop(self):
-        cycle = itertools.cycle(self.players)
-        for turn, self._current in enumerate(cycle, start=1):
-            user, tile = self._current
+        for turn in itertools.count(1):
+            user, tile = self.current
             self._update_display()
-            async with temp_message(self.ctx, embed=self._game_screen) as m:
-                while True:
-                    try:
-                        column = await self.get_input()
-                    except (asyncio.TimeoutError, errors.RageQuit):
-                        return Stats(next(cycle), turn)
 
-                    try:
-                        self.board.place(column, tile)
-                    except (ValueError, IndexError):
-                        pass
-                    else:
-                        break
+            async with temp_message(self.ctx, embed=self._game_screen):
+                try:
+                    await self.wait_for_player_move()
+                except (asyncio.TimeoutError, errors.RageQuit):
+                    self._timed_out = True
+                    return Stats(self._players[not self._turn], turn)
 
                 winner = self.winner
-                if winner or self.board.is_full():
-                    if winner:
-                        self.board.mark_winning_lines()
+                if winner or self._board.is_full():
                     return Stats(winner, turn)
+            self._turn = not self._turn
 
     async def run(self):
         try:
             return await self._loop()
         finally:
             self._update_display()
-            self._game_screen.set_author(name='Game ended.')
-            self._game_screen.colour = 0
             await self.ctx.send(embed=self._game_screen)
 
     @property
+    def current(self):
+        return self._players[self._turn]
+
+    @property
     def winner(self):
-        return discord.utils.get(self.players, symbol=self.board.winner)
+        return discord.utils.get(self._players, symbol=self._board.winner)
 
 class Connect4(TwoPlayerGameCog, name='Connect 4', game_cls=ConnectFourSession, aliases=['con4']):
-    def _make_invite_embed(self, ctx, member):
-        return (super()._make_invite_embed(ctx, member)
-               .set_footer(text='Board size: 7 x 6'))
-
+    pass
 
 def setup(bot):
     bot.add_cog(Connect4(bot))

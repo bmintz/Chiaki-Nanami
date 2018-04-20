@@ -1,10 +1,11 @@
 import argparse
 import asyncio
-import discord
+import contextlib
+import datetime
 import logging
+import os
 import sys
 
-from cogs.utils.misc import file_handler
 from core import Chiaki
 
 # use faster event loop, but fall back to default if on Windows or not installed
@@ -15,10 +16,36 @@ except ImportError:
 else:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-logger = logging.getLogger('discord')
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
-logger.addHandler(file_handler('discord'))
+
+@contextlib.contextmanager
+def log(stream=False):
+    logging.getLogger('discord').setLevel(logging.INFO)
+
+    os.makedirs(os.path.join(os.path.dirname(__file__), 'logs'), exist_ok=True)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    handler = logging.FileHandler(
+        filename=f'logs/chiaki-{datetime.datetime.now()}.log',
+        encoding='utf-8',
+        mode='w'
+    )
+    fmt = logging.Formatter('[{asctime}] ({levelname:<7}) {name}: {message}', '%Y-%m-%d %H:%M:%S', style='{')
+    handler.setFormatter(fmt)
+    root.addHandler(handler)
+
+    if stream:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(fmt)
+        root.addHandler(stream_handler)
+
+    try:
+        yield
+    finally:
+        for hdlr in root.handlers[:]:
+            hdlr.close()
+            root.removeHandler(hdlr)
+
 
 bot = Chiaki()
 
@@ -37,15 +64,18 @@ async def new_send(self, content=None, *, allow_everyone=False, **kwargs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--create-tables', action='store_true', help='Create the tables before running the bot.')
+    parser.add_argument('--log-stream', action='store_true', help='Adds a stderr stream-handler for logging')
+
     args = parser.parse_args()
     if args.create_tables:
-        bot.loop.run_until_complete(bot.create_tables())
+        bot.loop.run_until_complete(bot.run_sql())
 
     discord.abc.Messageable.send = new_send
-    try:
-        bot.run()
-    finally:
-        discord.abc.Messageable.send = _old_send
+    with log(args.log_stream):
+        try:
+            bot.run()
+        finally:
+            discord.abc.Messageable.send = _old_send
     return 69 * bot.reset_requested
 
 

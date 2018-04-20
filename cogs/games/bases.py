@@ -8,9 +8,6 @@ import random
 from discord.ext import commands
 
 from core.cog import Cog
-from core.deprecated import DeprecatedCommand
-
-from ..utils.converter import CheckedMember, NoSelfArgument
 
 
 class _TwoPlayerWaiter:
@@ -57,6 +54,34 @@ class _TwoPlayerWaiter:
         return bool(self._future and self._future.done())
 
 
+class NoSelfArgument(commands.BadArgument):
+    """Exception raised in CheckedMember when the author passes themself as an argument"""
+
+
+class _MemberConverter(commands.MemberConverter):
+    async def convert(self, ctx, arg):
+        member = await super().convert(ctx, arg)
+        if member.status is discord.Status.offline:
+            raise commands.BadArgument(f'{member} is offline.')
+        if member.bot:
+            raise commands.BadArgument(f"{member} is a bot. You can't use a bot here.")
+        if member == ctx.author:
+            raise NoSelfArgument("You can't use yourself. lol.")
+
+        return member
+
+    @staticmethod
+    def random_example(ctx):
+        members = [
+            member for member in ctx.guild.members
+            if member.status is not discord.Status.offline
+            and not member.bot
+            and member != ctx.author
+        ]
+        member = random.choice(members) if members else 'SomeGuy'
+        return f'@{member}'
+
+
 @contextlib.contextmanager
 def _swap_item(obj, item, new_val):
     obj[item] = new_val
@@ -70,8 +95,6 @@ def _swap_item(obj, item, new_val):
 @contextlib.contextmanager
 def _dummy_cm(*args, **kwargs):
     yield
-
-_MemberConverter = CheckedMember(offline=False, bot=False, include_self=False)
 
 
 class TwoPlayerGameCog(Cog):
@@ -87,9 +110,13 @@ class TwoPlayerGameCog(Cog):
         cmd_name = cmd or cls.__name__.lower()
 
         group_help = inspect.getdoc(cls._game).format(name=cls.name)
-        group_command = commands.group(
+        # We can't use the decorator because all the check decorator does is
+        # add the predicate to an attribute called __commands_checks__, which
+        # gets deleted after the first command.
+        group = commands.group(
             name=cmd_name, aliases=aliases, help=group_help, invoke_without_command=True
-        )(cls._game)
+        )
+        group_command = group(commands.bot_has_permissions(embed_links=True)(cls._game))
         setattr(cls, f'{cmd_name}', group_command)
 
         gc = group_command.command
@@ -97,22 +124,13 @@ class TwoPlayerGameCog(Cog):
             if not name.startswith('_game_'):
                 continue
 
-
             name = name[6:]
-            if name in {'invite', 'create'}:
-                # Special treatment is needed for these two
-                continue
 
             help = inspect.getdoc(member).format(name=cls.name, cmd=cmd_name)
             command = gc(name=name, help=help)(member)
             setattr(cls, f'{cmd_name}_{name}', command)
 
         setattr(cls, f'_{cls.__name__}__error', cls._error)
-
-        # Deprecate create and invite
-        dc = functools.partial(gc, cls=DeprecatedCommand, version='1.2')
-        setattr(cls, f'{cmd_name}_create', dc(name='create', instead=f'{cmd_name}')(cls._game_create))
-        setattr(cls, f'{cmd_name}_invite', dc(name='invite', instead=f'{cmd_name} @user')(cls._game_invite))
 
     async def _error(self, ctx, error):
         if isinstance(error, NoSelfArgument):
@@ -122,8 +140,6 @@ class TwoPlayerGameCog(Cog):
                 "Self inviting, huh... :eyes:",
             ))
             await ctx.send(message)
-        elif issubclass(type(error), commands.BadArgument) and not type(error) is commands.BadArgument:
-            await ctx.send(error)
 
     def _create_invite(self, ctx, member):
         action = 'invited you to' if member else 'created'
@@ -134,9 +150,9 @@ class TwoPlayerGameCog(Cog):
         )
 
         return (discord.Embed(colour=0x00FF00, description=description)
-               .set_author(name=title)
-               .set_thumbnail(url=ctx.author.avatar_url)
-               )
+                .set_author(name=title)
+                .set_thumbnail(url=ctx.author.avatar_url)
+                )
 
     async def _invite_member(self, ctx, member):
         invite_embed = self._create_invite(ctx, member)
@@ -154,7 +170,7 @@ class TwoPlayerGameCog(Cog):
         winner_embed = (discord.Embed(colour=0x00FF00, description=f'Game took {result.turns} turns to complete.')
                         .set_thumbnail(url=user.avatar_url)
                         .set_author(name=f'{user} is the winner!')
-                       )
+                        )
 
         await ctx.send(embed=winner_embed)
 
@@ -184,6 +200,7 @@ class TwoPlayerGameCog(Cog):
 
         put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
 
+        await ctx.release()
         with cm:
             await self._invite_member(ctx, member)
             with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
@@ -255,10 +272,3 @@ class TwoPlayerGameCog(Cog):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.message.add_reaction('\U00002705')
 
-    async def _game_create(self, ctx):
-        """Deprecated alias to `{cmd}`."""
-        await ctx.invoke(ctx.command.root_parent)
-
-    async def _game_invite(self, ctx, *, member: _MemberConverter):
-        """Deprecated alias to `{cmd} @user`."""
-        await ctx.invoke(ctx.command.root_parent, member=member)

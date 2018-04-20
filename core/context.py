@@ -2,11 +2,26 @@ import asyncio
 import collections
 import contextlib
 import discord
+import functools
+import itertools
+import json
 import random
 import sys
 
 from discord.ext import commands
 from itertools import starmap
+
+from cogs.utils.examples import _parameter_examples, _split_params
+from cogs.utils.formats import human_join
+
+
+_DEFAULT_MISSING_PERMS_ACTIONS = {
+    'embed_links': 'embeds',
+    'attach_files': 'upload stuffs',
+}
+
+with open('data/bot_missing_perms.json', encoding='utf-8') as f:
+    _missing_perm_actions = json.load(f)
 
 
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
@@ -22,10 +37,20 @@ class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
         return await self.ctx._release(exc_type, exc, tb)
 
 
+def _random_slice(seq):
+    return seq[:random.randint(0, len(seq))]
+
 class Context(commands.Context):
+    # Used for getting the current parameter when generating an example
+    _current_parameter = None
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.session = None
+        self.db = None
+
+    @property
+    def pool(self):
+        return self.bot.pool
 
     @property
     def clean_prefix(self):
@@ -33,15 +58,10 @@ class Context(commands.Context):
         user = self.bot.user
         return self.prefix.replace(user.mention, f'@{user.name}')
 
-    @property
-    def db(self):
-        """The bot's database connection interface, if applicable."""
-        return getattr(self.bot, 'db', None)
-
     async def _acquire(self):
-        if self.session is None:
-            self.session = await self.db.get_session().__aenter__()
-        return self.session
+        if self.db is None:
+            self.db = await self.pool.acquire()
+        return self.db
 
     def acquire(self):
         """Acquires a database session.
@@ -66,10 +86,9 @@ class Context(commands.Context):
         This is the method that is called automatically by the bot,
         NOT Context.release.
         """
-        if self.session is not None:
-            suppress = await self.session.__aexit__(exc_type, exc, tb)
-            self.session = None
-            return suppress
+        if self.db is not None:
+            await self.pool.release(self.db)
+            self.db = None
 
     async def release(self):
         """Closes the current database session.
@@ -130,36 +149,10 @@ class Context(commands.Context):
             await message.delete()
             await self.acquire()
 
-    # Nommed from Danny again.
-    async def ask_confirmation(self, message, *, timeout=60.0, delete_after=True, reacquire=True,
-                               author_id=None, destination=None):
-        """An interactive reaction confirmation dialog.
-
-        Parameters
-        -----------
-        message: Union[str, discord.Embed]
-            The message to show along with the prompt.
-        timeout: float
-            How long to wait before returning.
-        delete_after: bool
-            Whether to delete the confirmation message after we're done.
-        reacquire: bool
-            Whether to release the database connection and then acquire it
-            again when we're done.
-        author_id: Optional[int]
-            The member who should respond to the prompt. Defaults to the author of the
-            Context's message.
-        destination: Optional[discord.abc.Messageable]
-            Where the prompt should be sent. Defaults to the channel of the
-            Context's message.
-
-        Returns
-        --------
-        Optional[bool]
-            ``True`` if explicit confirm,
-            ``False`` if explicit deny,
-            ``None`` if deny due to timeout
-        """
+    # Credit to Danny#0007 for making the original
+    async def confirm(self, message, *, timeout=60.0, delete_after=True, reacquire=True,
+                      author_id=None, destination=None):
+        """Prompts the user with either yes or no."""
 
         # We can also wait for a message confirmation as well. This is faster, but
         # it's risky if there are two prompts going at the same time.
@@ -174,10 +167,10 @@ class Context(commands.Context):
         confirm_emoji, deny_emoji = emojis = [config.confirm, config.deny]
         is_valid_emoji = frozenset(map(str, emojis)).__contains__
 
-        instructions = f'React with {confirm_emoji} to confirm or {deny_emoji} to deny\n'
+        instructions = f'{confirm_emoji} \N{EM DASH} Yes\n{deny_emoji} \N{EM DASH} No'
 
         if isinstance(message, discord.Embed):
-            message.add_field(name="Instructions", value=instructions, inline=False)
+            message.add_field(name="Choices", value=instructions, inline=False)
             msg = await destination.send(embed=message)
         else:
             message = f'{message}\n\n{instructions}'
@@ -185,44 +178,71 @@ class Context(commands.Context):
 
         author_id = author_id or self.author.id
 
-        def check(emoji, message_id, channel_id, user_id):
-            if message_id != msg.id or user_id != author_id:
-                return False
-
-            result = is_valid_emoji(str(emoji))
-            print(emojis)
-            print(result, 'emoji:', emoji)
-            return result
+        def check(data):
+            return (data.message_id == msg.id
+                    and data.user_id == author_id
+                    and is_valid_emoji(str(data.emoji)))
 
         for em in emojis:
-            # Standard unicode emojis are wrapped in _ProxyEmoji in core/bot.py
-            # because we need a url property. This is an issue because
-            # message.add_reaction will just happily pass the _ProxyEmoji raw,
-            # causing a 400 Bad Request due to Discord not recognizing the object.
-            #
-            # This is the cleanest way to do it withour resorting to monkey-
-            # patching the discord.Message.add_reaction method. Since we're using
-            # the emojis defined in emojis.py, we only need to worry about two types:
-            # _ProxyEmoji and discord.Emoji, so we can just do a simple isinstance
-            # check for discord.Emoji so we don't need to import _ProxyEmoji.
-            #
-            # It also doesn't matter if the confirm/deny emojis are None. That's the
-            # user's fault.
-            if not isinstance(em, discord.Emoji):
-                em = str(em)
-
             await msg.add_reaction(em)
 
         if reacquire:
             await self.release()
 
         try:
-            emoji, *_, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
-            # Extra str cast for the case of _ProxyEmojis
-            return str(emoji) == str(confirm_emoji)
+            data = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
+            return str(data.emoji) == str(confirm_emoji)
         finally:
             if reacquire:
                 await self.acquire()
 
             if delete_after:
                 await msg.delete()
+
+    ask_confirmation = confirm
+
+    def bot_missing_perms(self, missing_perms):
+        """Send a message that the bot is missing permssions.
+
+        If action is not specified the actions for each permissions are used.
+        """
+        action = _missing_perm_actions.get(str(self.command))
+        if not action:
+            actions = (
+                _DEFAULT_MISSING_PERMS_ACTIONS.get(p, p.replace('_', ' '))
+                for p in missing_perms
+            )
+            action = human_join(actions, final='or')
+
+        nice_perms = (
+            perm.replace('_', ' ').replace('guild', 'server').title()
+            for perm in missing_perms
+        )
+
+        message = (
+            f"Hey hey, I don't have permissions to {action}. "
+            f'Please check if I have {human_join(nice_perms)}.'
+        )
+
+        return self.send(message)
+
+    def bot_has_permissions(self, **permissions):
+        perms = self.channel.permissions_for(self.me)
+        return all(getattr(perms, perm) == value for perm, value in permissions.items())
+
+    bot_has_embed_links = functools.partialmethod(bot_has_permissions, embed_links=True)
+
+    def missing_required_arg(self, param):
+        required, optional = _split_params(self.command)
+        missing = list(itertools.dropwhile(lambda p: p != param, required))
+        names = human_join(f'`{p.name}`' for p in missing)
+        example = ' '.join(_parameter_examples(missing + _random_slice(optional), self))
+
+        # TODO: Specify the args more descriptively.
+        message = (
+            f"Hey hey, you're missing {names}.\n\n"
+            f'Usage: `{self.clean_prefix}{self.command.signature}`\n'
+            f'Example: {self.message.clean_content} **{example}** \n'
+        )
+
+        return self.send(message)

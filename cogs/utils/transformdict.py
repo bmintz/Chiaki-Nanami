@@ -1,68 +1,57 @@
-from collections import defaultdict as _defaultdict
-from itertools import chain as _chain
+import collections.abc
+from reprlib import recursive_repr
 
-class TransformedDict(_defaultdict):
-    __slots__ = ()
 
-    def __init__(self, default_factory=None, mapping=(), **kwargs):
-        super().__init__(default_factory, self._process_args(mapping, **kwargs))
+# For the sake of simplicity we will subclass collections.MutableMapping
+# rather than dict. While subclassing dict is better for performance it
+# will make the subclass more complex as there are more methods to extend.
+#
+# Besides, this is only used for cogs right now. If (and this is a big if)
+# this gets used for commands AND performance really becomes and issue,
+# then I might consider subclassing dict.
+#
+# See also: https://stackoverflow.com/questions/3387691/how-to-perfectly-override-a-dict
 
-    def __getitem__(self, k):
-        return super().__getitem__(self.__keytransform__(k))
+class TransformedDict(collections.abc.MutableMapping):
+    """A dictionary that applies an arbitrary key-altering
+    function before accessing the keys.
+    """
+    __slots__ = ('store', )
 
-    def __setitem__(self, k, v):
-        return super().__setitem__(self.__keytransform__(k), v)
+    def __init__(self, *args, **kwargs):
+        self.store = {}
+        self.update(dict(*args, **kwargs))  # use the free update to set keys
 
-    def __delitem__(self, k):
-        return super().__delitem__(self.__keytransform__(k))
+    @recursive_repr()
+    def __repr__(self):
+        return f'{self.__class__.__name__}({list(self.items())})'
 
-    def __contains__(self, k):
-        return super().__contains__(self.__keytransform__(k))
+    def __getitem__(self, key):
+        return self.store[self._transform_key(key)]
 
-    def _process_args(self, mapping=(), **kwargs):
-        if hasattr(mapping, "items"):
-            mapping = getattr(mapping, "items")()
-        return ((self.__keytransform__(k), v)
-                for k, v in _chain(mapping, getattr(kwargs, "items")()))
+    def __setitem__(self, key, value):
+        self.store[self._transform_key(key)] = value
 
-    def get(self, k, default=None):
-        return super().get(self.__keytransform__(k), default)
+    def __delitem__(self, key):
+        del self.store[self._transform_key(key)]
 
-    def setdefault(self, k, default=None):
-        return super().setdefault(self.__keytransform__(k), default)
+    def __iter__(self):
+        return iter(self.store)
 
-    __marker = object()
+    def __len__(self):
+        return len(self.store)
 
-    def pop(self, k, d=__marker):
-        try:
-            return super().pop(self.__keytransform__(k))
-        except KeyError:
-            if d is self.__marker:
-                raise
-            return d
+    def copy(self):
+        'Create a shallow copy of itself'
+        return self.__class__(self)
 
-    def update(self, mapping=(), **kwargs):
-        super().update(self._process_args(mapping, **kwargs))
+    def _transform_key(self, key):
+        return key
 
-    @classmethod
-    def fromkeys(cls, keys):
-        return super(TransformedDict, cls).fromkeys(cls.__keytransform__(k) for k in keys)
 
-    def __keytransform__(self, k):
-        raise NotImplementedError("__keytransform__ not implemented... for some reason")
-
-# Best used for JSONs
-# Only work around as far as I know
-# Because JSONs only take string keys
-class StrDict(TransformedDict):
-    def __keytransform__(self, k):
-        return str(k)
-
-class LowerDict(TransformedDict):
-    def __keytransform__(self, k):
+class CaseInsensitiveDict(TransformedDict):
+    def _transform_key(self, k):
         return str(k).lower()
 
-# For discord
-class IDAbleDict(TransformedDict):
-    def __keytransform__(self, k):
-        return str(getattr(k, "id", k))
+
+CIDict = CaseInsensitiveDict  # alias for ease of use.

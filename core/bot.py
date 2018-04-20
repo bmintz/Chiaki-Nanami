@@ -1,56 +1,75 @@
 import aiohttp
 import asyncio
-import asyncqlio
+import asyncpg
 import collections
 import contextlib
 import discord
 import emoji
-import functools
 import inspect
 import json
 import logging
 import random
 import re
 import sys
+import textwrap
 import traceback
 
 from datetime import datetime
 from discord.ext import commands
 from more_itertools import always_iterable
 
-from . import context
+from . import context, errors
 from .cog import Cog
-from .formatter import ChiakiFormatter
 
-from cogs.tables.base import TableBase
-from cogs.utils import errors
 from cogs.utils.jsonf import JSONFile
-from cogs.utils.misc import file_handler
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
+from cogs.utils.transformdict import CIDict
 
 # The bot's config file
 import config
 
 log = logging.getLogger(__name__)
-log.addHandler(file_handler('chiakinanami'))
-
 command_log = logging.getLogger('commands')
-command_log.addHandler(file_handler('commands'))
 
 
 def _is_submodule(parent, child):
     return parent == child or child.startswith(parent + ".")
 
 
-class _ProxyEmoji(collections.namedtuple('_ProxyEmoji', 'emoji')):
-    def __str__(self):
-        return self.emoji
+class _UnicodeEmoji(discord.PartialEmoji):
+    __slots__ = ()
+
+    def __new__(cls, name):
+        return super().__new__(cls, animated=False, name=name, id=None)
 
     @property
     def url(self):
-        hexes = '-'.join(hex(ord(c))[2:] for c in self.emoji)
+        hexes = '-'.join(hex(ord(c))[2:] for c in str(self))
         return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
+
+
+async def _set_codec(conn):
+    await conn.set_type_codec(
+            'jsonb',
+            schema='pg_catalog',
+            encoder=json.dumps,
+            decoder=json.loads,
+            format='text'
+    )
+
+
+async def _create_pool(dsn, *, init=None, **kwargs):
+    # credits to danny
+    if init is None:
+        async def new_init(conn):
+            await _set_codec(conn)
+    else:
+        async def new_init(conn):
+            await _set_codec(conn)
+            await init(conn)
+
+    return await asyncpg.create_pool(dsn, init=new_init, **kwargs)
 
 
 _MINIMAL_PERMISSIONS = [
@@ -98,19 +117,45 @@ def _callable_prefix(bot, message):
     return commands.when_mentioned_or(*prefixes)(bot, message)
 
 
-VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro')
-_chiaki_formatter = ChiakiFormatter(width=MAX_FORMATTER_WIDTH, show_check_failure=True)
+# Activity-related stuffs...
+def _parse_type(type_):
+    with contextlib.suppress(AttributeError):
+        type_ = type_.lower()
+
+    try:
+        return discord.ActivityType[type_]
+    except KeyError:
+        pass
+
+    typ_ = discord.enums.try_enum(discord.ActivityType, type_)
+    if typ_ is type_:
+        raise ValueError(f'inappropriate activity type passed: {type_!r}')
+    return typ_
+
+def _get_proper_activity(type, name, url=''):
+    if type is discord.ActivityType.playing:
+        return discord.Game(name=name)
+    if type is discord.ActivityType.streaming:
+        # TODO: Validate twitch.tv url
+        return discord.Streaming(name=name, url=url)
+    return discord.Activity(type=type, name=name)
+
+
+VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro releaselevel serial')
 
 
 class Chiaki(commands.Bot):
-    __version__ = '1.1.0'
-    version_info = VersionInfo(major=1, minor=1, micro=0)
+    __version__ = '1.2.0'
+    version_info = VersionInfo(major=1, minor=2, micro=0, releaselevel='final', serial=0)
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
-                         formatter=_chiaki_formatter,
                          description=config.description,
                          pm_help=None)
+
+        # Case-insensitive dict so we don't have to override get_cog
+        # or get_cog_commands
+        self.cogs = CIDict()
 
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
@@ -125,15 +170,13 @@ class Chiaki(commands.Bot):
         self.message_counter = 0
         self.command_counter = collections.Counter()
         self.custom_prefixes = JSONFile('customprefixes.json')
-        self.cog_aliases = {}
 
         self.reset_requested = False
 
         psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
-        self.db = asyncqlio.DatabaseInterface(psql)
-        self.loop.run_until_complete(self._connect_to_db())
+        self.pool = self.loop.run_until_complete(_create_pool(psql, command_timeout=60))
 
-        self.db_scheduler = DatabaseScheduler(self.db, timefunc=datetime.utcnow)
+        self.db_scheduler = DatabaseScheduler(self.pool, timefunc=datetime.utcnow)
         self.db_scheduler.add_callback(self._dispatch_from_scheduler)
 
         for ext in config.extensions:
@@ -149,20 +192,36 @@ class Chiaki(commands.Bot):
         import emojis
 
         d = {}
+
+        # These are not recognized by the Unicode or Emoji standard, but
+        # discord never really was one to follow standards.
+        is_edge_case_emoji = {
+           *(chr(i + 0x1f1e6) for i in range(26)),
+           *(f'{i}\u20e3' for i in [*range(10), '#', '*']),
+        }.__contains__
+
+        def parse_emoji(em):
+            if isinstance(em, int) and not isinstance(em, bool):
+                return self.get_emoji(em)
+
+            if isinstance(em, str):
+                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
+                if match:
+                    return self.get_emoji(int(match[1]))
+                if em in emoji.UNICODE_EMOJI or is_edge_case_emoji(em):
+                    return _UnicodeEmoji(name=em)
+                log.warn('Unknown Emoji: %r', em)
+
+            return em
+
         for name, em in inspect.getmembers(emojis):
             if name[0] == '_':
                 continue
 
-            if isinstance(em, int):
-                em = self.get_emoji(em)
-            elif isinstance(em, str):
-                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
-                if match:
-                    em = self.get_emoji(int(match[1]))
-                elif em in emoji.UNICODE_EMOJI:
-                    em = _ProxyEmoji(em)
-                elif em:
-                    log.warn('Unknown Emoji: %r', em)
+            if hasattr(em, '__iter__') and not isinstance(em, str):
+                em = list(map(parse_emoji, em))
+            else:
+                em = parse_emoji(em)
 
             d[name] = em
 
@@ -172,89 +231,30 @@ class Chiaki(commands.Bot):
     def _dispatch_from_scheduler(self, entry):
         self.dispatch(entry.event, entry)
 
-    async def _connect_to_db(self):
-        # Unfortunately, while DatabaseInterface.connect takes in **kwargs, and
-        # passes them to the underlying connector, the AsyncpgConnector doesn't
-        # take them AT ALL. This is a big problem for my case, because I use JSONB
-        # types, which requires the type_codec to be set first (they need to be str).
-        #
-        # As a result I have to explicitly use json.dumps when storing them,
-        # which is rather annoying, but doable, since I only use JSONs in two
-        # places (reminders and welcome/leave messages).
-        await self.db.connect()
-
     async def close(self):
         await self.session.close()
-        await self.db.close()
         self._game_task.cancel()
         await super().close()
 
     def add_cog(self, cog):
         if not isinstance(cog, Cog):
             raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
-
-        # cog aliases
-        for alias in cog.__aliases__:
-            if alias in self.cog_aliases:
-                raise discord.ClientException(f'"{alias}" already has a cog registered')
-            self.cog_aliases[alias.lower()] = cog
-
         super().add_cog(cog)
-        cog_name = cog.__class__.__name__
-        self.cog_aliases[cog.__class__.name.lower()] = self.cogs[cog_name.lower()] = self.cogs.pop(cog_name)
+
+        self.cogs.update(dict.fromkeys(cog.__aliases__, cog))
+        self.cogs[cog.__class__.name] = cog
 
     def remove_cog(self, name):
-        lowered = name.lower()
-        cog = self.cogs.get(lowered)
-        if cog is None:
+        real_cog = self.cogs.get(name)
+        if real_cog is None:
             return
-        super().remove_cog(lowered)
+
+        super().remove_cog(name)
 
         # remove cog aliases
-        self.cog_aliases = {alias: real for alias, real in self.cog_aliases.items() if real is not cog}
-
-    def get_cog(self, name):
-        return self.all_cogs.get(name.lower())
-
-    # This must be implemented because Bot.get_all_commands doesn't call
-    # Bot.get_cog, so it will throw KeyError, and thus return an empty set.
-    def get_cog_commands(self, name):
-        return super().get_cog_commands(name.lower())
-
-    def load_extension(self, name):
-        super().load_extension(name)
-
-        # Bind all the tables to set up tables that were added here.
-        self.table_base = self.db.bind_tables(TableBase)
-
-    def unload_extension(self, name):
-        super().unload_extension(name)
-
-        # Delete the tables so that we don't have old table references
-        for k, v in list(self.table_base.tables.items()):
-            if _is_submodule(name, v.__module__):
-                del self.table_base.tables[k]
-
-        self.table_base.setup_tables()
-
-    async def create_tables(self):
-        # This hack is here because asyncqlio doesn't make a query that checks
-        # if an existing index is ok. Maybe I should make an issue this but
-        # MySQL doesn't support CREATE INDEX IF NOT EXISTS which might make
-        # the issue even harder.
-
-        old_idx_ddl_sql = asyncqlio.Index.get_ddl_sql
-
-        def new_ddl_sql(index):
-            return old_idx_ddl_sql(index).replace('INDEX', 'INDEX IF NOT EXISTS', 1)
-
-        asyncqlio.Index.get_ddl_sql = new_ddl_sql
-        try:
-            for table in self.table_base.tables.values():
-                await table.create()
-        finally:
-            asyncqlio.Index.get_ddl_sql = old_idx_ddl_sql
-
+        cogs_to_remove = [name for name, cog in self.cogs.items() if cog is real_cog]
+        for name in cogs_to_remove:
+            del self.cogs[name]
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
@@ -265,18 +265,51 @@ class Chiaki(commands.Bot):
         finally:
             self.remove_listener(func)
 
+    def __format_name_for_activity(self, name):
+        return name.format(
+            server_count=self.guild_count,
+            user_count=self.user_count,
+            version=self.__version__,
+        )
+
+    def __parse_activity(self, game):
+        if isinstance(game, str):
+            return discord.Game(name=self.__format_name_for_activity(game))
+
+        if isinstance(game, collections.abc.Sequence):
+            type_, name, url = (*game, config.twitch_url)[:3]  # not accepting a seq of just "[type]"
+            type_ = _parse_type(type_)
+            name = self.__format_name_for_activity(name)
+            return _get_proper_activity(type_, name, url)
+
+        if isinstance(game, collections.abc.Mapping):
+            def get(key):
+                try:
+                    return game[key]
+                except KeyError:
+                    raise ValueError(f"game mapping must have a {key!r} key, got {game!r}")
+
+            data = {
+                **game,
+                'type': _parse_type(get('type')),
+                'name': self.__format_name_for_activity(get('name'))
+            }
+            data.setdefault('url', config.twitch_url)
+            return _get_proper_activity(**data)
+
+        raise TypeError(f'expected a str, sequence, or mapping for game, got {type(game).__name__!r}')
+
     async def change_game(self):
         await self.wait_until_ready()
         while True:
-            name = random.choice(config.games)
-            formatted = name.format(
-                server_count=self.guild_count, 
-                user_count=self.user_count,
-                version=self.__version__,
+            pick = random.choice(config.games)
+            try:
+                activity = self.__parse_activity(pick)
+            except (TypeError, ValueError):
+                log.exception(f'inappropriate game {pick!r}, removing it from the list.')
+                config.games.remove(pick)
 
-            )
-
-            await self.change_presence(game=discord.Game(name=formatted, type=0))
+            await self.change_presence(activity=activity)
             await asyncio.sleep(random.uniform(0.5, 2) * 60)
 
     def run(self):
@@ -310,6 +343,16 @@ class Chiaki(commands.Bot):
         async with ctx.acquire():
             await self.invoke(ctx)
 
+    async def run_sql(self):
+        await self.pool.execute(self.schema)
+
+    def _dump_schema(self):
+        with open('schema.sql', 'w') as f:
+            f.write(self.schema)
+
+    async def dump_sql(self):
+        await self.loop.run_in_executor(None, self._dump_schema)
+
     # --------- Events ----------
 
     async def on_ready(self):
@@ -335,8 +378,12 @@ class Chiaki(commands.Bot):
         if not hasattr(self, 'start_time'):
             self.start_time = datetime.utcnow()
 
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.CheckFailure) and await self.is_owner(ctx.author):
+    async def on_command_error(self, ctx, error, *, bypass=False):
+        if (
+            isinstance(error, commands.CheckFailure)
+            and not isinstance(error, commands.BotMissingPermissions)
+            and await self.is_owner(ctx.author)
+        ):
             # There is actually a race here. When this command is invoked the
             # first time, it's wrapped in a context manager that automatically
             # starts and closes a DB session.
@@ -349,9 +396,8 @@ class Chiaki(commands.Bot):
             #
             # This solution is dirty but since I'm only doing it once here
             # it's fine. Besides it works anyway.
-            while ctx.session:
+            while ctx.db:
                 await asyncio.sleep(0)
-
             try:
                 async with ctx.acquire():
                     await ctx.reinvoke()
@@ -359,9 +405,8 @@ class Chiaki(commands.Bot):
                 await ctx.command.dispatch_error(ctx, exc)
             return
 
-        # command_counter['failed'] += 0 sets the 'failed' key. We don't want that.
-        if not isinstance(error, commands.CommandNotFound):
-            self.command_counter['failed'] += 1
+        if not bypass and hasattr(ctx.command, 'on_error'):
+            return
 
         cause = error.__cause__
         if isinstance(error, errors.ChiakiException):
@@ -371,19 +416,22 @@ class Chiaki(commands.Bot):
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send('This command cannot be used in private messages.')
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f'This command ({ctx.command}) needs another parameter ({error.param})')
+            await ctx.missing_required_arg(error.param)
         elif isinstance(error, commands.CommandInvokeError):
             print(f'In {ctx.command.qualified_name}:', file=sys.stderr)
             traceback.print_tb(error.original.__traceback__)
             print(f'{error.__class__.__name__}: {error}'.format(error), file=sys.stderr)
+        elif isinstance(error, commands.BotMissingPermissions):
+            await ctx.bot_missing_perms(error.missing_perms)
 
     async def on_message(self, message):
         self.message_counter += 1
         await self.process_commands(message)
 
     async def on_command(self, ctx):
-        self.command_counter['commands'] += 1
-        self.command_counter['executed in DMs'] += isinstance(ctx.channel, discord.abc.PrivateChannel)
+        self.command_counter['total'] += 1
+        if isinstance(ctx.channel, discord.abc.PrivateChannel):
+            self.command_counter['in DMs'] += 1
         fmt = ('Command executed in {0.channel} ({0.channel.id}) from {0.guild} ({0.guild.id}) '
                'by {0.author} ({0.author.id}) Message: "{0.message.content}"')
         command_log.info(fmt.format(ctx))
@@ -453,7 +501,7 @@ class Chiaki(commands.Bot):
         # The following is the link to the bot's support server.
         # You are allowed to change this to be another server of your choice.
         # However, doing so will instantly void your warranty.
-        # Change this at your own peril.
+        # Change this azt your own peril.
         return 'https://discord.gg/WtkPTmE'
 
     @property
@@ -465,5 +513,6 @@ class Chiaki(commands.Bot):
         return duration_units(self.uptime.total_seconds())
 
     @property
-    def all_cogs(self):
-        return collections.ChainMap(self.cogs, self.cog_aliases)
+    def schema(self):
+        schema = ''.join(getattr(ext, '__schema__', '') for ext in self.extensions.values())
+        return textwrap.dedent(schema + self.db_scheduler.__schema__)
