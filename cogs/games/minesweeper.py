@@ -793,6 +793,7 @@ class Minesweeper(Cog):
         extra_text = ''
         # Check if the player broke the world record.
         if level is not Level.custom:
+            await ctx.acquire()
             extra_text = await self._get_record_text(ctx.author.id, level, time, connection=ctx.db)
 
         description = f'{text}\n{extra_text}'
