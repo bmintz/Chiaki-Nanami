@@ -25,6 +25,15 @@ else:
 
 class Meta(Cog):
     """Need some info about the bot? Here you go!"""
+    def __init__(self, bot):
+        super().__init__(bot)
+
+        if bot.version_info.releaselevel == 'alpha':
+            branch = 'master'
+        else:
+            branch = 'v' + bot.__version__
+
+        self._source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/{branch}'
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
@@ -57,10 +66,6 @@ class Meta(Cog):
         url, _ = await run_subprocess('git remote get-url origin')
         return url.strip()[:-4]  # remove .git\n
 
-    @staticmethod
-    async def _get_branch():
-        return (await run_subprocess('git rev-parse --abbrev-ref HEAD'))[0].rstrip()
-
     async def _get_recent_commits(self, *, limit=None):
         url = await self._get_github_url()
         cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
@@ -92,17 +97,16 @@ class Meta(Cog):
         If the source code has too many lines \u2014 10 lines for me \u2014
         it displays the Github URL.
         """
+        source_url = self._source_url
         if command is None:
-            source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/dev'
+            if source_url.endswith('/tree/master'):
+                source_url = source_url.rsplit('/', 2)[0]  # For cleanness
             return await ctx.send(source_url)
 
         src = command.callback.__code__
         lines, firstlineno = inspect.getsourcelines(command.callback)
         if len(lines) < 10:
             return await self._display_raw(ctx, lines)
-
-        branch = await self._get_branch()
-        source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/{branch}'
 
         lastline = firstlineno + len(lines) - 1
         # We don't use the built-in commands so we can eliminate this branch
