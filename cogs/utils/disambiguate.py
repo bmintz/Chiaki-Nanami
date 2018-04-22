@@ -123,7 +123,7 @@ class UserConverterMixin:
         )
 
 
-class DisambiguateUser(UserConverterMixin, IDConverter):
+class User(UserConverterMixin, IDConverter):
     def _get_from_id(self, ctx, id):
         return ctx.bot.get_user(int(id))
 
@@ -131,7 +131,7 @@ class DisambiguateUser(UserConverterMixin, IDConverter):
         return ctx._state._users.values()
 
 
-class DisambiguateMember(UserConverterMixin, IDConverter):
+class Member(UserConverterMixin, IDConverter):
     def _get_from_id(self, ctx, id):
         return ctx.guild.get_member(int(id))
 
@@ -149,7 +149,7 @@ class DisambiguateMember(UserConverterMixin, IDConverter):
         )
 
 
-class DisambiguateRole(IDConverter):
+class Role(IDConverter):
     MENTION_REGEX = r'<@&([0-9]+)>$'
 
     def _get_from_id(self, ctx, id):
@@ -159,7 +159,7 @@ class DisambiguateRole(IDConverter):
         return ctx.guild.roles
 
 
-class DisambiguateTextChannel(IDConverter):
+class TextChannel(IDConverter):
     MENTION_REGEX = r'<#([0-9]+)>$'
 
     def _get_from_id(self, ctx, id):
@@ -169,7 +169,7 @@ class DisambiguateTextChannel(IDConverter):
         return ctx.guild.text_channels
 
 
-class DisambiguateGuild(IDConverter):
+class Guild(IDConverter):
     MENTION_REGEX = None
 
     def _get_from_id(self, ctx, id):
@@ -193,8 +193,7 @@ def _disambiguated(type_):
     if not _is_discord_py_type(type_):
         return type_
 
-    name = f'Disambiguate{type_.__name__}'
-    return Converter.__converters__.get(name, type_)
+    return Converter.__converters__.get(type_.__name__, type_)
 
 
 class union(commands.Converter):

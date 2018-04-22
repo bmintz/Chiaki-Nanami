@@ -50,7 +50,7 @@ class LowerRole(commands.RoleConverter):
     random_example = _pick_random_role
 
 
-class LowerRoleSearch(disambiguate.DisambiguateRole, LowerRole):
+class LowerRoleSearch(disambiguate.Role, LowerRole):
     random_example = _pick_random_role  # needed because the MRO is weird
 
 
@@ -88,7 +88,7 @@ async def _get_self_roles(ctx):
     return [r for r in roles if r]
 
 
-class SelfRole(disambiguate.DisambiguateRole):
+class SelfRole(disambiguate.Role):
     async def convert(self, ctx, arg):
         if not ctx.guild:
             raise commands.NoPrivateMessage
@@ -116,7 +116,7 @@ class SelfRole(disambiguate.DisambiguateRole):
         return 'Cool Role'
 
 
-class AutoRole(disambiguate.DisambiguateRole):
+class AutoRole(disambiguate.Role):
     async def convert(self, ctx, arg):
         if not ctx.guild:
             raise commands.NoPrivateMessage

@@ -3,7 +3,7 @@ import math
 
 from discord.ext import commands
 
-from ..utils.disambiguate import DisambiguateGuild
+from ..utils import disambiguate
 
 from core.cog import Cog
 
@@ -89,7 +89,7 @@ class AntiBotCollections(Cog, hidden=True):
 
     @commands.command(name='isbotfarm')
     @commands.is_owner()
-    async def _is_bot_farm(self, ctx, *, server: DisambiguateGuild):
+    async def _is_bot_farm(self, ctx, *, server: disambiguate.Guild):
         """Checks if a server is considered to be a "bot collection" server.
 
         A bot collection server is a server that has a high

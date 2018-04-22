@@ -406,7 +406,7 @@ class Information(Cog):
     @info.command(name='user')
     @commands.guild_only()
     @embedded()
-    async def info_user(self, ctx, *, member: disambiguate.DisambiguateMember=None):
+    async def info_user(self, ctx, *, member: disambiguate.Member=None):
         """Gets some userful info because why not"""
         if member is None:
             member = ctx.author
@@ -415,21 +415,21 @@ class Information(Cog):
     @info.command(name='mee6')
     @commands.guild_only()
     @embedded()
-    async def info_mee6(self, ctx, *, member: disambiguate.DisambiguateMember=None):
+    async def info_mee6(self, ctx, *, member: disambiguate.Member=None):
         """Equivalent to `{prefix}rank`"""
         await ctx.invoke(self.rank, member=member)
 
     @commands.command()
     @commands.guild_only()
     @embedded()
-    async def userinfo(self, ctx, *, member: disambiguate.DisambiguateMember=None):
+    async def userinfo(self, ctx, *, member: disambiguate.Member=None):
         """Gets some userful info because why not"""
         await ctx.invoke(self.info_user, member=member)
 
     @commands.command()
     @commands.guild_only()
     @embedded()
-    async def rank(self, ctx, *, member: disambiguate.DisambiguateMember=None):
+    async def rank(self, ctx, *, member: disambiguate.Member=None):
         """Gets mee6 info... if it exists"""
         if member is None:
             member = ctx.author
@@ -469,7 +469,7 @@ class Information(Cog):
 
     @info.command(name='role')
     @embedded()
-    async def info_role(self, ctx, *, role: disambiguate.DisambiguateRole):
+    async def info_role(self, ctx, *, role: disambiguate.Role):
         """Shows information about a particular role."""
         server = ctx.guild
 
@@ -599,7 +599,7 @@ class Information(Cog):
         await pages.interact()
 
     @commands.command()
-    async def roles(self, ctx, member: disambiguate.DisambiguateMember=None):
+    async def roles(self, ctx, member: disambiguate.Member=None):
         """Shows all the roles that a member has. Roles in bold are the ones you have.
 
         If a member isn't provided, it defaults to all the roles in the server.
@@ -655,7 +655,7 @@ class Information(Cog):
 
     @commands.command()
     @commands.guild_only()
-    async def inrole(self, ctx, *, role: disambiguate.DisambiguateRole):
+    async def inrole(self, ctx, *, role: disambiguate.Role):
         """Checks which members have a given role.
         If you have the role, your name will be in **bold**.
 
@@ -666,7 +666,7 @@ class Information(Cog):
 
     @varpos.require_va_command()
     @commands.guild_only()
-    async def inanyrole(self, ctx, *roles: disambiguate.DisambiguateRole):
+    async def inanyrole(self, ctx, *roles: disambiguate.Role):
         """Checks which members have any of the given role(s).
         If you have the role, your name will be in **bold**.
 
@@ -678,7 +678,7 @@ class Information(Cog):
 
     @varpos.require_va_command()
     @commands.guild_only()
-    async def inallrole(self, ctx, *roles: disambiguate.DisambiguateRole):
+    async def inallrole(self, ctx, *roles: disambiguate.Role):
         """Checks which members have all of the given role(s).
         If you have the role, your name will be in **bold**.
 
@@ -747,7 +747,7 @@ class Information(Cog):
     @commands.command(aliases=['permsin'])
     @commands.guild_only()
     @embedded()
-    async def permissionsin(self, ctx, *, member: disambiguate.DisambiguateMember=None):
+    async def permissionsin(self, ctx, *, member: disambiguate.Member=None):
         """Shows a member's Permissions *in the channel*.
 
         ```diff
@@ -763,7 +763,7 @@ class Information(Cog):
 
     @commands.command(aliases=['av'])
     @embedded()
-    async def avatar(self, ctx, *, user: disambiguate.DisambiguateMember=None):
+    async def avatar(self, ctx, *, user: disambiguate.Member=None):
         """Shows a member's avatar.
 
         If no user is specified I show your avatar.

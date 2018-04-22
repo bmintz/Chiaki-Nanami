@@ -11,8 +11,8 @@ import traceback
 from discord.ext import commands
 from functools import partial
 
+from ..utils import disambiguate
 from ..utils.context_managers import temp_attr
-from ..utils.disambiguate import DisambiguateGuild
 from ..utils.examples import wrap_example
 from ..utils.subprocesses import run_subprocess
 
@@ -312,7 +312,7 @@ class Owner(Cog, hidden=True):
                 await asyncio.sleep(1)
 
     @commands.command()
-    async def leave(self, ctx, server: DisambiguateGuild):
+    async def leave(self, ctx, server: disambiguate.Guild):
         """Leaves a server. Defaults to the current server."""
         await server.leave()
         with contextlib.suppress(discord.HTTPException):
