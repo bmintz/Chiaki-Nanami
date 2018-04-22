@@ -1,25 +1,12 @@
-"""Converters for disambiguation.
-
-By default, if there is more than one thing with a given name. The converters
-will only pick the first result. These converters are made as a result to
-be able to select from multiple things with the same name.
-
-This becomes especially important when the args are case-insensitive.
-"""
-
-import discord
 import functools
 import random
 import re
+import weakref
 
+import discord
 from discord.ext import commands
-from more_itertools import always_iterable
 
-from .context_managers import temp_attr
 from .examples import get_example
-
-# Avoid excessive dot-lookup every time a member is attempted to be converted
-_get_from_guilds = commands.converter._get_from_guilds
 
 
 class _DisambiguateExampleGenerator:
@@ -30,194 +17,219 @@ class _DisambiguateExampleGenerator:
         return functools.partial(get_example, getattr(discord, cls_name))
 
 
-class DisambiguateConverter(commands.Converter):
-    def __init__(self, *, case_sensitive=False):
-        super().__init__()
-        self.case_sensitive = case_sensitive
+class Converter(commands.Converter):
+    """Base class for all disambiguating converters.
 
+    By default, if there is more than one thing with a given name, the
+    ext converters will only pick the first result. These allow you to
+    pick from multiple results.
+
+    This becomes especially important when the args are case-insensitive.
+    """
+    _transform = str
+    __converters__ = weakref.WeakValueDictionary()
     random_example = _DisambiguateExampleGenerator()
 
+    def __init__(self, *, ignore_case=True):
+        self.ignore_case = ignore_case
 
-class DisambiguateRole(DisambiguateConverter, commands.IDConverter):
-    """Converter that allows for case-insensitive discord.Role conversion."""
-    async def convert(self, ctx, argument):
-        guild = ctx.guild
-        if not guild:
-            raise commands.NoPrivateMessage()
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        Converter.__converters__[cls.__name__] = cls
 
-        # Let ID's and mentions take priority
-        match = self._get_id_match(argument) or re.match(r'<@&([0-9]+)>$', argument)
-        if match:
-            predicate = lambda r, id=int(match.group(1)): r.id == id
-        elif self.case_sensitive:
-            predicate = lambda r: r.name == argument
-        else:
-            predicate = lambda r, arg=argument.lower(): r.name.lower() == arg
+    def _get_possible_entries(self, ctx):
+        """Return an iterable of possible entries to find matches with
 
-        return await ctx.disambiguate(list(filter(predicate, guild.roles)))
+        Subclasses must provide this to allow disambiguating.
+        """
+        raise NotImplementedError
 
+    def _exact_match(self, ctx, argument):
+        """Return an "exact match" given an argument.
 
-class DisambiguateMember(DisambiguateConverter, commands.MemberConverter):
-    """Converter that allows for discord.Member disambiguation."""
-    async def convert(self, ctx, argument):
-        guild = ctx.guild
-        bot = ctx.bot
-        match = self._get_id_match(argument) or re.match(r'<@!?([0-9]+)>$', argument)
+        If this returns anything but None, that result will be
+        returned without going through disambiguating.
 
-        # IDs must be unique, we won't allow conflicts here.
-        if match is not None:
-            return await super().convert(ctx, argument)
+        Subclasses may override this to provide an "exact" functionality.
+        """
+        return None
 
-        # not a mention or ID...
-        if guild:
-            # The trailing comma is because the result expects a sequence
-            # This will transform result into a tuple, which is important.
-            # Because len(discord.Member) will error.
-            result = guild.get_member_named(argument),
-            # Will only be False if only the name was provided, or a user with
-            # the same nickname as another user's fullname was provided.
-            # (eg if someone nicknames themself "rjt#2336", and rjt#2336 was in
-            # the server)
-            if str(result[0]) != argument:
-                if self.case_sensitive:
-                    def predicate(m):
-                        return m.name == argument or (m.nick and m.nick == argument)
-                else:
-                    lowered = argument.lower()
+    # These predicates can be overridden if necessary
 
-                    def predicate(m):
-                        # We can't just do lowered in (m.nick.lower(), m.name.lower())
-                        # because m.nick can be None
-                        return m.name.lower() == lowered or (m.nick and m.nick.lower() == lowered)
+    def _predicate(self, obj, argument):
+        """Standard predicate for filtering"""
+        return obj.name == argument
 
-                # filter it out from here
-                result = list(filter(predicate, guild.members))
+    def _predicate_ignore_case(self, obj, argument):
+        """Predicate for case-insensitive filtering"""
+        return obj.name.lower() == argument
 
-        else:
-            # We can't use the "fuzzy" match here, due to potential conflicts
-            # and duplicate results.
-            #
-            # The trailing comma is because the result expects a sequence
-            # This will transform result into a tuple, which is important.
-            # Because len(discord.Member) will error.
-            result = _get_from_guilds(bot, 'get_member_named', argument),
+    # End of predicates
 
-        return await ctx.disambiguate(result)
-
-
-class DisambiguateTextChannel(DisambiguateConverter, commands.TextChannelConverter):
-    async def convert(self, ctx, argument):
-        bot = ctx.bot
-
-        match = self._get_id_match(argument) or re.match(r'<#([0-9]+)>$', argument)
-        result = None
-        guild = ctx.guild
-
-        if match is not None:
-            return await super().convert(ctx, argument)
-        else:
-            if self.case_sensitive:
-                def check(c):
-                    return isinstance(c, discord.TextChannel) and c.name == argument
-            else:
-                # not a mention
-                lowered = argument.lower()
-
-                def check(c):
-                    return isinstance(c, discord.TextChannel) and c.name.lower() == lowered
-
-            if guild:
-                result = list(filter(check, guild.text_channels))
-                transform = str
-            else:
-                result = list(filter(check, bot.get_all_channels()))
-                transform = '{0} (Server: {0.guild})'
-
-        return await ctx.disambiguate(result, transform)
-
-
-class DisambiguateUser(DisambiguateConverter, commands.UserConverter):
-    async def convert(self, ctx, argument):
-        match = self._get_id_match(argument) or re.match(r'<@!?([0-9]+)>$', argument)
-        state = ctx._state
-
-        if match is not None:
-            return await super().convert(ctx, argument)
-
-        # check for discriminator if it exists
-        # This should also be an exact match.
-        if len(argument) > 5 and argument[-5] == '#':
-            return await super().convert(ctx, argument)
-
-        if self.case_sensitive:
-            results = [u for u in state._users.values() if u.name == argument]
+    def _get_possible_results(self, ctx, argument):
+        entries = self._get_possible_entries(ctx)
+        if self.ignore_case:
+            lowered = argument
+            predicate = self._predicate_ignore_case
         else:
             lowered = argument.lower()
-            results = [u for u in state._users.values() if u.name.lower() == lowered]
+            predicate = self._predicate
 
-        return await ctx.disambiguate(results)
-
-
-class DisambiguateGuild(DisambiguateConverter, commands.IDConverter):
-    async def convert(self, ctx, arg):
-        match = self._get_id_match(arg)
-        state = ctx._state
-        if match:
-            guild = ctx.bot.get_guild(int(match.group(1)))
-            if guild:
-                return guild
-
-        if self.case_sensitive:
-            guilds = [g for g in state._guilds.values() if g.name == arg]
-        else:
-            lowered = arg.lower()
-            guilds = [g for g in state._guilds.values() if g.name.lower() == lowered]
-
-        return await ctx.disambiguate(guilds)
-
-
-# A mapping for the discord.py class and it's corresponding searcher.
-_type_search_maps = {
-    discord.Role: DisambiguateRole,
-    discord.Member: DisambiguateMember,
-    discord.TextChannel: DisambiguateTextChannel,
-    discord.User: DisambiguateUser,
-    discord.Guild: DisambiguateGuild,
-}
-
-
-# Function for stubbing out the context's disambiguate method
-# so it doesn't prematurely do the disambiguation prompt.
-async def _dummy_disambiguate(matches, *args, **kwargs):
-    return matches
-
-
-class union(DisambiguateConverter, commands.Converter):
-    def __init__(self, *types, case_sensitive=False):
-        # Can't use super() because of weird MRO things
-        self.types = types
-        self.case_sensitive = case_sensitive
+        return [obj for obj in entries if predicate(obj, lowered)]
 
     async def convert(self, ctx, argument):
-        choices = []
+        exact_match = self._exact_match(ctx, argument)
+        if exact_match is not None:
+            return exact_match
 
-        with temp_attr(ctx, 'disambiguate', _dummy_disambiguate):
-            for converter in self.searchers():
+        matches = self._get_possible_results(ctx, argument)
+        return await ctx.disambiguate(matches, transform=self._transform)
+
+
+_ID_REGEX = re.compile(r'([0-9]{15,21})$')
+
+class IDConverter(Converter):
+    def _get_from_id(self, ctx, id):
+        """Given an ID, return an object via that ID"""
+        raise NotImplementedError
+
+    def __get_id_from_mention(self, argument):
+        return re.match(self.MENTION_REGEX, argument) if self.MENTION_REGEX else None
+
+    def _exact_match(self, ctx, argument):
+        match = _ID_REGEX.match(argument) or self.__get_id_from_mention(argument)
+        if not match:
+            return None
+
+        return self._get_from_id(ctx, match[1])
+
+
+class UserConverterMixin:
+    MENTION_REGEX = r'<@!?([0-9]+)>$'
+
+    def _exact_match(self, ctx, argument):
+        result = super()._exact_match(ctx, argument)
+        if result is not None:
+            return result
+
+        if not (len(argument) > 5 and argument[-5] == '#'):
+            # We don't have a discriminator so we can't exact-match
+            return None
+
+        name, _, discriminator = argument.rpartition('#')
+        return discord.utils.find(
+            lambda u: u.name == name and u.discriminator == discriminator,
+            self._get_possible_entries(ctx)
+        )
+
+
+class DisambiguateUser(UserConverterMixin, IDConverter):
+    def _get_from_id(self, ctx, id):
+        return ctx.bot.get_user(int(id))
+
+    def _get_possible_entries(self, ctx):
+        return ctx._state._users.values()
+
+
+class DisambiguateMember(UserConverterMixin, IDConverter):
+    def _get_from_id(self, ctx, id):
+        return ctx.guild.get_member(int(id))
+
+    def _get_possible_entries(self, ctx):
+        return ctx.guild._members.values()
+
+    # Overriding these is necessary due to members having nicknames
+    def _predicate(self, obj, argument):
+        return super()._predicate(obj, argument) or (obj.nick and obj.nick == argument)
+
+    def _predicate_ignore_case(self, obj, argument):
+        return (
+            super()._predicate_ignore_case(obj, argument)
+            or (obj.nick and obj.nick.lower() == argument)
+        )
+
+
+class DisambiguateRole(IDConverter):
+    MENTION_REGEX = r'<@&([0-9]+)>$'
+
+    def _get_from_id(self, ctx, id):
+        return discord.utils.get(self._get_possible_entries(), id=id)
+
+    def _get_possible_entries(self, ctx):
+        return ctx.guild.roles
+
+
+class DisambiguateTextChannel(IDConverter):
+    MENTION_REGEX = r'<#([0-9]+)>$'
+
+    def _get_from_id(self, ctx, id):
+        return ctx.guild.get_channel(id)
+
+    def _get_possible_entries(self, ctx):
+        return ctx.guild.text_channels
+
+
+class DisambiguateGuild(IDConverter):
+    MENTION_REGEX = None
+
+    def _get_from_id(self, ctx, id):
+        return ctx.bot.get_guild(id)
+
+    def _get_possible_entries(self, ctx):
+        return ctx._state._guilds.values()
+
+
+def _is_discord_py_type(cls):
+    module = getattr(cls, '__module__', '')
+    return module.startswith('discord.') and not module.endswith('converter')
+
+
+def _disambiguated(type_):
+    """Return the corresponding disambiguating converter if one exists
+    for that type.
+
+    If no such converter exists, it returns the type.
+    """
+    if not _is_discord_py_type(type_):
+        return type_
+
+    name = f'Disambiguate{type_.__name__}'
+    return Converter.__converters__.get(name, type_)
+
+
+class union(commands.Converter):
+    _transform = '{0} ({0.__class__.__name__})'.format
+
+    def __init__(self, *types, ignore_case=False):
+        self.types = [
+            type_(ignore_case=ignore_case)
+            if isinstance(type_, type) and issubclass(type_, Converter)
+            else type_
+            for type_ in map(_disambiguated, types)
+        ]
+
+    async def convert(self, ctx, argument):
+        results = []
+        for converter in self.types:
+            # If we have a disambiguate converter then we must handle that
+            # differently as the converter.convert prompts the user to choose.
+            if isinstance(converter, Converter):
+                exact = converter._exact_match(ctx, argument)
+                if exact is not None:
+                    return exact
+
+                results.extend(converter._get_possible_results(ctx, argument))
+            else:
+                # It's just a standard type, just apply the standard conversion
                 try:
-                    entries = await ctx.command.do_conversion(ctx, converter, argument)
+                    result = await ctx.command.do_conversion(ctx, converter, argument)
                 except commands.BadArgument:
                     continue
                 else:
-                    choices.extend(always_iterable(entries))
-
-        return await ctx.disambiguate(choices, '{0} ({0.__class__.__name__})'.format)
-
-    def searchers(self):
-        return [
-            _type_search_maps[t](case_sensitive=self.case_sensitive)
-            if t in _type_search_maps else t
-            for t in self.types
-        ]
+                    results.append(result)
+        return await ctx.disambiguate(results, transform=self._transform)
 
     def random_example(self, ctx):
         return get_example(random.choice(self.types), ctx)
+
+Union = union
