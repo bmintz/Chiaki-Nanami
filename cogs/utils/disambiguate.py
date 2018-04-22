@@ -26,9 +26,6 @@ class _DisambiguateExampleGenerator:
     # This must be a descriptor because it can either be called from
     # a class or an instance.
     def __get__(self, obj, cls):
-        if obj is not None:
-            cls = obj.__class__.__name__
-
         cls_name = cls.__name__.replace('Disambiguate', '')
         return functools.partial(get_example, getattr(discord, cls_name))
 
