@@ -469,8 +469,18 @@ class PokemonTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
     async def _get_question(self):
         file = random.choice(glob.glob(f'{POKEMON_IMAGE_PATH}/*.png'))
 
+        # Note that this assumes that the filename is the pokedex number
+        # of the pokemon. The way the pictures are meant to be stored is
+        # pokedex_no.png. For example, Bulbasaur's image is meant to be
+        # stored as "1.png".
+        #
+        # This partition is meant for Pokemon that have alternate forms,
+        # such as Shaymin or Deoxys. Their images as stored as
+        # pokedex_no-some_num.png. This is bad because it can cause KeyErrors
+        # since the names.json only has the actual Pokedex number without
+        # any other info.
         index = os.path.splitext(os.path.basename(file))[0]
-        answer = self._pokemon_names[index]
+        answer = self._pokemon_names[index.partition('-')[0]]
         image = await _get_silouhette(index)
         return PokemonQuestion(index, answer, image)
 
