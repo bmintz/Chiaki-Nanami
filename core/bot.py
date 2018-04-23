@@ -241,6 +241,10 @@ class Chiaki(commands.Bot):
             raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
         super().add_cog(cog)
 
+        if getattr(cog, '__hidden__', False):
+            for _, command in inspect.getmembers(cog, lambda m: isinstance(m, commands.Command)):
+                command.hidden = True
+
         self.cogs.update(dict.fromkeys(cog.__aliases__, cog))
         self.cogs[cog.__class__.name] = cog
 
