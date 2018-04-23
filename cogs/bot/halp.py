@@ -12,8 +12,6 @@ from ..utils.formats import multi_replace
 from ..utils.misc import emoji_url
 from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
 
-from core.cog import Cog
-
 
 CHIAKI_TIP_EPOCH = datetime(2017, 8, 24)
 TIP_EMOJI = emoji_url('\N{ELECTRIC LIGHT BULB}')
@@ -140,7 +138,7 @@ class Category(commands.Converter):
         return random.sample(categories, 1)[0]
 
 
-class Help(Cog):
+class Help:
     def __init__(self, bot):
         self.bot = bot
         self.bot.remove_command('help')

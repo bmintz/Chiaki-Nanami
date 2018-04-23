@@ -5,8 +5,6 @@ import string
 from discord.ext import commands
 from itertools import starmap
 
-from core.cog import Cog
-
 
 _prefixes = list(set(string.punctuation) - {'@', '#'})
 
@@ -35,7 +33,7 @@ class RemovablePrefix(Prefix):
         return random.choice(ctx.bot.get_raw_guild_prefixes(ctx.guild))
 
 
-class Prefixes(Cog):
+class Prefixes:
     @commands.group(aliases=['prefixes'], invoke_without_command=True)
     async def prefix(self, ctx):
         """Shows the prefixes that you can use in this server."""
@@ -114,4 +112,4 @@ class Prefixes(Cog):
 
 
 def setup(bot):
-    bot.add_cog(Prefixes(bot))
+    bot.add_cog(Prefixes())

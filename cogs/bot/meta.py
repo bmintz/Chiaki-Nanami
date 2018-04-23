@@ -11,7 +11,6 @@ from ..utils.formats import truncate
 from ..utils.subprocesses import run_subprocess
 from ..utils.paginator import ListPaginator, paginated
 
-from core.cog import Cog
 
 try:
     import pkg_resources
@@ -23,10 +22,10 @@ else:
     del pkg_resources
 
 
-class Meta(Cog):
+class Meta:
     """Need some info about the bot? Here you go!"""
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
 
         if bot.version_info.releaselevel == 'alpha':
             branch = 'master'

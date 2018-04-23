@@ -19,7 +19,6 @@ from ..utils.paginator import EmbedFieldPages
 from ..utils.time import duration_units, parse_delta
 
 from core import errors
-from core.cog import Cog
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +155,7 @@ class CaseNumber(commands.Converter):
         return random.choice([-1, *range(1, 10)])
 
 
-class ModLog(Cog):
+class ModLog:
     def __init__(self, bot):
         self.bot = bot
         self._cache_cleaner = asyncio.ensure_future(self._clean_cache())

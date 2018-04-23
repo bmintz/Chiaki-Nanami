@@ -11,7 +11,6 @@ from .utils import disambiguate
 from .utils.context_managers import temp_attr
 from .utils.misc import str_join
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS selfroles(
@@ -131,7 +130,7 @@ class AutoRole(disambiguate.Role):
 _bot_role_check = partial(commands.bot_has_permissions, manage_roles=True)
 
 
-class Roles(Cog):
+class Roles:
     """Commands that are related to roles.
 
     Self-assignable, auto-assignable, and general role-related

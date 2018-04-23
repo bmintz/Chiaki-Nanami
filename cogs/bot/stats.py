@@ -17,7 +17,6 @@ from ..utils.paginator import ListPaginator, EmbedFieldPages
 from ..utils.time import human_timedelta
 
 from core import errors
-from core.cog import Cog
 
 
 __schema__ = """
@@ -50,7 +49,7 @@ ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
 
 _celebration = partial(random.choices, '\U0001f38a\U0001f389', k=8)
 
-class Stats(Cog):
+class Stats:
     def __init__(self, bot):
         self.bot = bot
         self.process = psutil.Process()

@@ -7,7 +7,6 @@ from discord.ext import commands
 from ..utils import disambiguate
 from ..utils.misc import emoji_url, truncate
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS blacklist (
@@ -41,9 +40,8 @@ class Blacklisted(commands.CheckFailure):
 _GuildOrUser = disambiguate.union(discord.Guild, discord.User)
 
 
-class Blacklists(Cog, hidden=True):
-    def __init__(self, bot):
-        self.bot = bot
+class Blacklists:
+    __hidden__ = True
 
     @staticmethod
     async def get_blacklist(thing, *, connection):
@@ -125,4 +123,4 @@ class Blacklists(Cog, hidden=True):
 
 
 def setup(bot):
-    bot.add_cog(Blacklists(bot))
+    bot.add_cog(Blacklists())

@@ -20,8 +20,6 @@ from ..utils.examples import wrap_example
 from ..utils.paginator import ListPaginator
 from ..utils.misc import emoji_url, load_async
 
-from core.cog import Cog
-
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS rigged_ships (
@@ -187,7 +185,7 @@ def _calculate_rating(user1, user2):
 TEN_SEC_REACTION = '\N{BLACK SQUARE FOR STOP}'
 
 
-class OtherStuffs(Cog):
+class OtherStuffs:
     def __init__(self, bot):
         self.bot = bot
         self.default_time = datetime.utcnow()

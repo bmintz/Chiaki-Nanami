@@ -8,8 +8,6 @@ from more_itertools import one
 
 from .manager import SessionManager
 
-from core.cog import Cog
-
 
 class InvalidGameState(Exception):
     pass
@@ -129,10 +127,10 @@ class RussianRouletteSession:
             await self.context.acquire()
 
 
-class RussianRoulette(Cog):
+class RussianRoulette:
     """The ultimate test of luck."""
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
         self.manager = SessionManager()
 
     @commands.command(name='russianroulette', aliases=['rusr'])

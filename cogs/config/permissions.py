@@ -14,7 +14,6 @@ from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS permissions (
@@ -198,7 +197,7 @@ _plonk_embed_mappings = {
 PLONK_ICON = emoji_url('\N{HAMMER}')
 
 
-class Permissions(Cog):
+class Permissions:
     """Used for enabling or disabling commands for a channel, member,
     role, or even the whole server.
     """
@@ -646,4 +645,4 @@ class Permissions(Cog):
 
 
 def setup(bot):
-    bot.add_cog(Permissions(bot))
+    bot.add_cog(Permissions())

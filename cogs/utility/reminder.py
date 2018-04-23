@@ -8,8 +8,6 @@ from ..utils.misc import emoji_url, truncate
 from ..utils.paginator import EmbedFieldPages
 from ..utils.time import FutureTime, human_timedelta
 
-from core.cog import Cog
-
 
 MAX_REMINDERS = 10
 ALARM_CLOCK_URL = emoji_url('\N{ALARM CLOCK}')
@@ -18,7 +16,7 @@ CANCELED_URL = emoji_url('\N{BELL WITH CANCELLATION STROKE}')
 
 
 # sorry not sorry danny
-class Reminder(Cog):
+class Reminder:
     def __init__(self, bot):
         self.bot = bot
 

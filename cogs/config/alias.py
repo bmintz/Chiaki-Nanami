@@ -6,7 +6,6 @@ from itertools import starmap
 from ..utils.examples import _get_static_example
 from ..utils.paginator import ListPaginator
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS command_aliases (
@@ -57,7 +56,7 @@ class AliasCommand(commands.Converter):
         return ctx.__alias_example__[1]
 
 
-class Aliases(Cog):
+class Aliases:
     def __init__(self, bot):
         self.bot = bot
 

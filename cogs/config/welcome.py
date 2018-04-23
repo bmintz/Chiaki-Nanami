@@ -12,7 +12,6 @@ from ..utils.examples import static_example
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS server_messages (
@@ -72,12 +71,12 @@ def special_message(message):
     return message if '{user}' in message else f'{{user}}{message}'
 
 
-class WelcomeMessages(Cog):
+class WelcomeMessages:
     """Commands related to welcome and leave messages."""
     # TODO: Put this in a config module.
 
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
 
     # ------------ config helper functions --------------------
 

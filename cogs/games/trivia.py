@@ -17,7 +17,6 @@ import discord
 from discord.ext import commands
 from PIL import Image
 
-from core.cog import Cog
 from ..utils import cache
 from ..utils.deprecated import DeprecatedCommand
 from ..utils.formats import pluralize
@@ -518,7 +517,7 @@ class PokemonTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
         await self._ctx.send(embed=embed, file=file)
 
 
-class Trivia(Cog):
+class Trivia:
     def __init__(self, bot):
         self.bot = bot
         self.sessions = {}

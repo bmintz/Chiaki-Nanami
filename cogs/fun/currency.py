@@ -13,7 +13,6 @@ from ..utils.examples import get_example, wrap_example
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS currency (
@@ -163,14 +162,14 @@ class NonBlacklistedMember(commands.MemberConverter):
         return get_example(discord.Member, ctx)
 
 
-class Money(Cog):
+class Money:
     """For all you gamblers and money-lovers, this is this cog for you!
 
     Other commands from other modules might starting using this
     for betting, so be on the lookout!
     """
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
 
         with open('data/images/coins/heads.png', 'rb') as heads, \
              open('data/images/coins/tails.png', 'rb') as tails:

@@ -15,8 +15,8 @@ from ..utils.converter import number
 from ..utils.examples import get_example, wrap_example
 from ..utils.misc import emoji_url
 
-from core.cog import Cog
 from core.errors import InvalidUserArgument
+
 
 try:
     import webcolors
@@ -198,12 +198,7 @@ class Choice(commands.clean_content):
         return next(choices)
 
 
-class RNG(Cog):
-    __aliases__ = "Random",
-
-    def __init__(self, bot):
-        self.bot = bot
-
+class RNG:
     @commands.command(name="8ball", aliases=['8'])
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
     async def ball(self, ctx, *, question: str):
@@ -383,4 +378,4 @@ class RNG(Cog):
 
 
 def setup(bot):
-    bot.add_cog(RNG(bot))
+    bot.add_cog(RNG())

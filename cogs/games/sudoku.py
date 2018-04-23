@@ -10,7 +10,6 @@ import discord
 from discord.ext import commands
 from more_itertools import flatten, grouper, sliced
 
-from core.cog import Cog
 from .manager import SessionManager
 from ..utils.paginator import BaseReactionPaginator, page
 from ..utils.misc import emoji_url
@@ -631,9 +630,9 @@ class SudokuSession:
         self._ctx.bot.loop.create_task(task())
 
 
-class Sudoku(Cog):
+class Sudoku:
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
         self.sudoku_sessions = SessionManager()
 
     async def _get_difficulty(self, ctx):

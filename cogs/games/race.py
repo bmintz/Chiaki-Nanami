@@ -14,7 +14,6 @@ from .manager import SessionManager
 
 from ..utils import converter, formats
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS racehorses (
@@ -279,7 +278,7 @@ class RacingSession:
     def is_completed(self):
         return all(r.is_finished() for r in self.players)
 
-class Racing(Cog):
+class Racing:
     """Be the animal you wish to beat. Wait."""
     def __init__(self, bot):
         self.bot = bot

@@ -16,8 +16,6 @@ from ..utils.context_managers import temp_attr
 from ..utils.examples import wrap_example
 from ..utils.subprocesses import run_subprocess
 
-from core.cog import Cog
-
 
 _extension = partial(str)
 @wrap_example(_extension)
@@ -49,8 +47,9 @@ def _tabulate(rows, headers=()):
     return '\n'.join(to_draw)
 
 
-class Owner(Cog, hidden=True):
+class Owner:
     """Owner-only commands"""
+    __hidden__ = True
 
     def __init__(self, bot):
         self.bot = bot

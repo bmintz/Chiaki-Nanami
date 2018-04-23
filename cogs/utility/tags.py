@@ -9,7 +9,6 @@ from ..utils.examples import _get_static_example
 from ..utils.paginator import ListPaginator
 from ..utils import formats
 
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS tags (
@@ -81,7 +80,7 @@ class TagContent(commands.clean_content):
         return ctx.__tag_example__[1]
 
 
-class Tags(Cog):
+class Tags:
     """You're it."""
     def __init__(self, bot):
         self.bot = bot

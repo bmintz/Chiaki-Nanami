@@ -16,11 +16,11 @@ import discord
 from discord.ext import commands
 from more_itertools import chunked, tail
 
-from core.cog import Cog
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url, REGIONAL_INDICATORS
 from ..utils.paginator import BaseReactionPaginator, page
 from ..utils.time import duration_units
+
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS minesweeper_games (
@@ -727,9 +727,9 @@ def not_playing_minesweeper():
     return commands.check(predicate)
 
 
-class Minesweeper(Cog):
+class Minesweeper:
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
         self.sessions = {}
 
     # Needed to set the "control scheme" for minesweeper.

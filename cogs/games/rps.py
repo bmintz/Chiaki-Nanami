@@ -8,12 +8,10 @@ from collections import defaultdict, namedtuple
 from discord.ext import commands
 from itertools import zip_longest
 
-from core.cog import Cog
-
 
 Result = namedtuple('Result', 'cmp name image')
 
-class RockPaperScissors(Cog):
+class RockPaperScissors:
     @staticmethod
     def pick(choice, elements):
         beats = choice.beats
@@ -206,4 +204,4 @@ del _create_commands
 
 
 def setup(bot):
-    bot.add_cog(RockPaperScissors(bot))
+    bot.add_cog(RockPaperScissors())

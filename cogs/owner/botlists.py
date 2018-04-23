@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 
-from core.cog import Cog
 
 log = logging.getLogger(__name__)
 
@@ -11,10 +10,12 @@ DISCORD_BOTS_API_URL = 'https://bots.discord.pw/api'
 DISCORD_BOT_LIST_URL = 'https://discordbots.org/api/'
 
 
-class Botlists(Cog, hidden=True):
+class Botlists:
+    __hidden__ = True
+
     def __init__(self, bot):
         # Of course...
-        super().__init__(bot)
+        self.bot = bot
 
         # Importing the config here so that I can update the config
         # without binding this module to the globals by accident.

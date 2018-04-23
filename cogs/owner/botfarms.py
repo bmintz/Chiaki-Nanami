@@ -5,8 +5,6 @@ from discord.ext import commands
 
 from ..utils import disambiguate
 
-from core.cog import Cog
-
 
 # These functions are usually used for doing ratings
 # but here I'm using them to calculate if a server *might*
@@ -48,10 +46,11 @@ def _ci_lower_bound(pos, n, confidence):
     return (phat + z*z/(2*n) - z * math.sqrt((phat*(1-phat)+z*z/(4*n))/n))/(1+z*z/n)
 
 
-class AntiBotCollections(Cog, hidden=True):
+class AntiBotCollections:
     """Commands related to "bot-collection" servers -- servers that have a
     high ratio of bots to humans.
     """
+    __hidden__ = True
 
     # Determining if a server is a "bot collection server" is no easy task,
     # because there are a lot of edge cases in servers where it might not be
@@ -123,4 +122,4 @@ class AntiBotCollections(Cog, hidden=True):
 
 
 def setup(bot):
-    bot.add_cog(AntiBotCollections(bot))
+    bot.add_cog(AntiBotCollections())

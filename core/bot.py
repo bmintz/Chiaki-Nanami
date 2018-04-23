@@ -19,7 +19,6 @@ from discord.ext import commands
 from more_itertools import always_iterable
 
 from . import context, errors
-from .cog import Cog
 
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.scheduler import DatabaseScheduler
@@ -237,28 +236,17 @@ class Chiaki(commands.Bot):
         await super().close()
 
     def add_cog(self, cog):
-        if not isinstance(cog, Cog):
-            raise discord.ClientException(f'cog must be an instance of {Cog.__qualname__}')
         super().add_cog(cog)
 
         if getattr(cog, '__hidden__', False):
             for _, command in inspect.getmembers(cog, lambda m: isinstance(m, commands.Command)):
                 command.hidden = True
 
-        self.cogs.update(dict.fromkeys(cog.__aliases__, cog))
-        self.cogs[cog.__class__.name] = cog
-
-    def remove_cog(self, name):
-        real_cog = self.cogs.get(name)
-        if real_cog is None:
-            return
-
-        super().remove_cog(name)
-
-        # remove cog aliases
-        cogs_to_remove = [name for name, cog in self.cogs.items() if cog is real_cog]
-        for name in cogs_to_remove:
-            del self.cogs[name]
+        # Hack to set the category until I can properly use command.module
+        cls = type(cog)
+        folder = cls.__module__.rpartition('.')[0]
+        cogs, _, tail = folder.partition('.')
+        cls.__parent_category__ = tail
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):

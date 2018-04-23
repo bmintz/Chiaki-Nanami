@@ -11,8 +11,6 @@ from .manager import SessionManager
 
 from ..utils.misc import emoji_url
 
-from core.cog import Cog
-
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS hilo_games (
@@ -124,13 +122,13 @@ class HiloSession:
         return await self._loop()
 
 
-class HigherOrLower(Cog, name='Higher or Lower?'):
+class HigherOrLower:
     """The classic game of Higher or Lower.
 
     See if the next card will be... well higher or lower than the current one.
     """
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
         self.channel_sessions = SessionManager()  # because only one game per channel
         self.user_sessions = SessionManager()     # because only one game per user
 

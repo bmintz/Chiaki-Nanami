@@ -23,8 +23,6 @@ from ..utils.formats import *
 from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
 from ..utils.paginator import BaseReactionPaginator, ListPaginator, page
 
-from core.cog import Cog
-
 
 async def _mee6_stats(session, member):
     async with session.get(f"https://mee6.xyz/levels/{member.guild.id}?json=1&limit=-1") as r:
@@ -315,7 +313,7 @@ def _format_activity(activity):
     return playing
 
 
-class Information(Cog):
+class Information:
     """Info related commands"""
 
     def __init__(self, bot):

@@ -17,8 +17,6 @@ from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import ListPaginator
 
-from core.cog import Cog
-
 
 # I hate string concatentation
 # And I hate constantly building the same string
@@ -183,7 +181,7 @@ class Category(commands.Converter):
         return random.choice(list(hangman.categories))
 
 
-class Hangman(Cog):
+class Hangman:
     """So you don't have to hang people in real life."""
     FILE_PATH = os.path.join('.', 'data', 'words')
 

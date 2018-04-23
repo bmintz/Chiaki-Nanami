@@ -7,8 +7,6 @@ import random
 
 from discord.ext import commands
 
-from core.cog import Cog
-
 
 class _TwoPlayerWaiter:
     def __init__(self, author, recipient):
@@ -97,15 +95,16 @@ def _dummy_cm(*args, **kwargs):
     yield
 
 
-class TwoPlayerGameCog(Cog):
+class TwoPlayerGameCog:
     def __init__(self, bot):
-        super().__init__(bot)
+        self.bot = bot
         self.running_games = {}
         self._invited_games = {}
 
-    def __init_subclass__(cls, *, game_cls, cmd=None, aliases=(), **kwargs):
+    def __init_subclass__(cls, *, game_cls, name=None, cmd=None, aliases=(), **kwargs):
         super().__init_subclass__(**kwargs)
 
+        cls.name = name or cls.__name__
         cls.__game_class__ = game_cls
         cmd_name = cmd or cls.__name__.lower()
 

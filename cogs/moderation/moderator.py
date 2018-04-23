@@ -20,7 +20,6 @@ from ..utils.misc import ordinal
 from ..utils.paginator import ListPaginator, EmbedFieldPages
 
 from core import errors
-from core.cog import Cog
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS warn_entries (
@@ -192,7 +191,7 @@ def _warn_punishment_example(ctx):
 # - implement anti-raid protocol
 # - implement antispam
 # - implement mention-spam
-class Moderator(Cog):
+class Moderator:
     def __init__(self, bot):
         self.bot = bot
 
