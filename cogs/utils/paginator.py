@@ -948,7 +948,7 @@ class GeneralHelpPaginator(ListPaginator):
         if not (
             reaction.message.id == self._message.id
             and user.id == self.context.author.id
-            and reaction.emoji in '\N{HEAVY BLACK HEART}'
+            and reaction.emoji == '\N{HEAVY BLACK HEART}'
         ):
             return
 
