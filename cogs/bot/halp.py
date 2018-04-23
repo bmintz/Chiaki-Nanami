@@ -7,10 +7,9 @@ from discord.ext import commands
 from datetime import datetime
 
 from ..utils.converter import BotCommand
-from ..utils.deprecated import deprecated
 from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
-from ..utils.misc import emoji_url, truncate
+from ..utils.misc import emoji_url
 from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
 
 from core.cog import Cog
@@ -186,26 +185,6 @@ class Help(Cog):
                 f'Minimal Permissions: <{self.bot.minimal_invite_url}>'
             )
             await ctx.send(content)
-
-    @deprecated(aliases=['cogs', 'mdls'], instead='help')
-    async def modules(self, ctx):
-        """Shows all the *visible* modules that I have loaded"""
-        visible_cogs = (
-            (name, cog.__doc__ or '\n')
-            for name, cog in self.bot.cogs.items() if name and not cog.__hidden__
-        )
-
-        formatted_cogs = [
-            f'`{name}` => {truncate(doc.splitlines()[0], 20, "...")}'
-            for name, doc in visible_cogs
-        ]
-
-        modules_embed = (discord.Embed(title="List of my modules",
-                                       description='\n'.join(formatted_cogs),
-                                       colour=self.bot.colour)
-                         .set_footer(text=f'Type `{ctx.prefix}help` for help.')
-                         )
-        await ctx.send(embed=modules_embed)
 
     @commands.command(name='commands', aliases=['cmds'])
     async def commands_(self, ctx, category: Category = None):
