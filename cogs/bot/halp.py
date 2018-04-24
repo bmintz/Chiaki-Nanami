@@ -6,8 +6,7 @@ import random
 from discord.ext import commands
 from datetime import datetime
 
-from ..utils.commands import command_category
-from ..utils.converter import BotCommand
+from ..utils.converter import BotCommand, Category
 from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
 from ..utils.misc import emoji_url
@@ -122,23 +121,6 @@ _bracket_repls = {
     '[': ']', ']': '[',
     '<': '>', '>': '<',
 }
-
-class Category(commands.Converter):
-    @staticmethod
-    def __get_categories(ctx):
-        return (command_category(c, 'other') for c in ctx.bot.commands)
-
-    async def convert(self, ctx, arg):
-        parents = set(map(str.lower, self.__get_categories(ctx)))
-        lowered = arg.lower()
-        if lowered not in parents:
-            raise commands.BadArgument(f'"{arg}" is not a category.')
-        return lowered
-
-    @staticmethod
-    def random_example(ctx):
-        categories = set(map(str.title, Category.__get_categories(ctx)))
-        return random.sample(categories, 1)[0]
 
 
 class Help:

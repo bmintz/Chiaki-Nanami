@@ -4,23 +4,29 @@ import random
 from collections import OrderedDict
 from discord.ext import commands
 
+from .commands import command_category
 from .examples import get_example, wrap_example
 
 def _unique(iterable):
     return iter(OrderedDict.fromkeys(iterable))
 
 
-class BotCogConverter(commands.Converter):
-    async def convert(self, ctx, arg):
-        result = ctx.bot.get_cog(arg)
-        if result is None:
-            raise commands.BadArgument(f"Module {arg} not found")
+class Category(commands.Converter):
+    @staticmethod
+    def __get_categories(ctx):
+        return (command_category(c, 'other') for c in ctx.bot.commands)
 
-        return result
+    async def convert(self, ctx, arg):
+        parents = set(map(str.lower, self.__get_categories(ctx)))
+        lowered = arg.lower()
+        if lowered not in parents:
+            raise commands.BadArgument(f'"{arg}" is not a category.')
+        return lowered
 
     @staticmethod
     def random_example(ctx):
-        return random.sample(ctx.bot.cogs.keys(), 1)[0]
+        categories = set(map(str.title, Category.__get_categories(ctx)))
+        return random.sample(categories, 1)[0]
 
 
 class BotCommand(commands.Converter):

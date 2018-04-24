@@ -2,7 +2,6 @@ import asyncpg
 import discord
 import functools
 import itertools
-import random
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
@@ -10,7 +9,7 @@ from more_itertools import partition
 
 from ..utils import cache, formats, disambiguate
 from ..utils.commands import command_category, walk_parents
-from ..utils.converter import BotCommand, BotCogConverter
+from ..utils.converter import BotCommand, Category
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
 
@@ -105,38 +104,6 @@ class CommandName(BotCommand):
             raise commands.BadArgument("You can't modify this command.")
 
         return _command_node(command)
-
-
-class ModuleName(BotCogConverter):
-    def _maybe_module(self, ctx, arg):
-        parents = {command_category(c).lower() for c in ctx.bot.commands}
-        lowered = arg.lower()
-        if lowered not in parents:
-            raise commands.BadArgument('No module called {arg} found.')
-
-        if lowered == 'owner':
-            raise commands.BadArgument("You can't modify this cog...")
-
-        return lowered
-
-    async def convert(self, ctx, arg):
-        try:
-            cog = await super().convert(ctx, arg)
-        except commands.BadArgument:
-            return self._maybe_module(ctx, arg)
-        else:
-            name = type(cog).__name__
-
-            if name in {'Permissions', 'Owner'}:
-                raise commands.BadArgument("You can't modify this cog...")
-
-            command = next(c for c in ctx.bot.all_commands.values() if c.instance is cog)
-            return f'{command_category(command)}/{name}'
-
-    @staticmethod
-    def random_example(ctx):
-        categories = {command_category(c).lower() for c in ctx.bot.commands}
-        return random.sample(categories, 1)[0]
 
 
 PermissionEntity = disambiguate.union(discord.Member, discord.Role, discord.TextChannel)
@@ -344,7 +311,7 @@ class Permissions:
         parent = command_category(ctx.command)
         names = itertools.chain(
             map(_command_node, walk_parents(ctx.command)),
-            (f'{parent}/{ctx.command.cog_name}', parent, ALL_MODULES_KEY)
+            (parent, ALL_MODULES_KEY)
         )
 
         # The following code is roughly along the lines of this:
@@ -438,15 +405,7 @@ class Permissions:
         @commands.group(name=name, help=base_doc_string)
         @commands.has_permissions(manage_guild=True)
         async def group(self, ctx):
-            # XXX: I'm not exactly sure whether this should be the same
-            #      as ->enable command, or if should take cogs as well.
-            #      The former might make it easier to parse and disambiguate,
-            #      while the latter might be way simpler for the end user.
-            #      (or harder since there are some commands that have the
-            #       name as cogs.)
-            #
-            # Just gonna do some input checking for now.
-
+            # TODO: Make this:, ->enable <command, category, or all>
             if ctx.invoked_subcommand:
                 return
 
@@ -502,7 +461,7 @@ class Permissions:
             name='category', help=cog_doc_string,
             aliases=['cog', 'module'], usage='<category> [channels, members or roles...]'
         )
-        async def group_category(self, ctx, category: ModuleName, *entities: PermissionEntity):
+        async def group_category(self, ctx, category: Category, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, category, *entities,
                                                 whitelist=value, type_='Category')
 
