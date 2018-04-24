@@ -36,15 +36,15 @@ __schema__ = """
     CREATE INDEX IF NOT EXISTS plonks_idx ON plonks (guild_id, entity_id);
 """
 
-ALL_MODULES_KEY = '*'
+ALL_COMMANDS_KEY = '*'
 
 
 class _PermissionFormattingMixin:
     def _get_header(self):
         if self.command:
             return f'Command **{self.command}** is'
-        elif self.cog == ALL_MODULES_KEY:
-            return 'All modules are'
+        elif self.cog == ALL_COMMANDS_KEY:
+            return 'All commands are'
         else:
             category, _, cog = self.cog.partition('/')
             if cog:
@@ -348,7 +348,7 @@ class Permissions(Cog):
         parent = ctx.cog.__parent_category__
         names = itertools.chain(
             map(_command_node, _walk_parents(ctx.command)),
-            (f'{parent}/{ctx.command.cog_name}', parent, ALL_MODULES_KEY)
+            (f'{parent}/{ctx.command.cog_name}', parent, ALL_COMMANDS_KEY)
         )
 
         # The following code is roughly along the lines of this:
@@ -404,7 +404,7 @@ class Permissions(Cog):
                      .set_author(name=f'{type_} {action}!', icon_url=icon)
                      )
 
-            if name not in {ALL_MODULES_KEY, None}:
+            if name not in {ALL_COMMANDS_KEY, None}:
                 cog, _, name = _extract_from_node(name)
                 embed.add_field(name=type_, value=name or cog)
 
@@ -435,8 +435,8 @@ class Permissions(Cog):
         base_doc_string = f'Group for {participle.lower()} commands or cogs.'
         cmd_doc_string = f'{desc} a command.\n{format_entity(thing="a command")}'
         cog_doc_string = f'{desc} a category.\n{format_entity(thing="a category")}'
-        all_doc_string = (f'{desc} all cogs, and subsequently all commands.\n'
-                          f'{format_entity(thing="all cogs")}')
+        all_doc_string = (f'{desc} all commands.\n'
+                          f'{format_entity(thing="all commands")}')
 
         # TODO: ->enable without ANY subcommands
         @commands.group(name=name, help=base_doc_string)
@@ -512,8 +512,8 @@ class Permissions(Cog):
 
         @group.command(name='all', help=all_doc_string, usage='[channels, members or roles...]')
         async def group_all(self, ctx, *entities: PermissionEntity):
-            await self._set_permissions_command(ctx, ALL_MODULES_KEY, *entities,
-                                                whitelist=value, type_='All Modules')
+            await self._set_permissions_command(ctx, ALL_COMMANDS_KEY, *entities,
+                                                whitelist=value, type_='All commands')
 
         # Must return all of these otherwise the subcommands won't get added
         # properly -- they will end up having no instance.
