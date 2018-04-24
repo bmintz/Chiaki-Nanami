@@ -496,7 +496,7 @@ class Permissions:
 
         """
         query = 'DELETE FROM permissions WHERE guild_id = $1;'
-        status = await ctx.deb.execute(query, ctx.guild.id)
+        status = await ctx.db.execute(query, ctx.guild.id)
         print(status)
         self._get_permissions.invalidate(None, None, ctx.guild.id)
 
