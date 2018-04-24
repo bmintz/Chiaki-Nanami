@@ -1,6 +1,5 @@
 import asyncpg
 import discord
-import functools
 import itertools
 
 from collections import defaultdict, namedtuple
@@ -133,18 +132,6 @@ class _DummyEntry(namedtuple('_DummyEntry', 'id')):
     @property
     def mention(self):
         return f'<Not Found: {self.id}>'
-
-
-ENTITY_EXPLANATION = """
-You can {action} {thing} for a channel, member, or role,
-or any combination of the three.
-
-(Keep in mind that names with more that one word must be
-put in quotes.)
-
-If you don't specify a channel, member, or role, it will
-{action} {thing} for this server.
-"""
 
 
 # TODO: Make this an enum
@@ -390,16 +377,10 @@ class Permissions:
         await self._display_embed(ctx, name, *entities, whitelist=whitelist, type_=type_)
 
     def _make_command(value, name, *, desc):
-        format_entity = functools.partial(ENTITY_EXPLANATION.format, action=name.lower())
-
         participle = desc.split(' ', 1)[0][:-1]
         participle = (participle[:-1] if participle[-1] == 'e' else participle) + 'ing'
 
         base_doc_string = f'Group for {participle.lower()} commands or cogs.'
-        cmd_doc_string = f'{desc} a command.\n{format_entity(thing="a command")}'
-        cog_doc_string = f'{desc} a category.\n{format_entity(thing="a category")}'
-        all_doc_string = (f'{desc} all commands.\n'
-                          f'{format_entity(thing="all commands")}')
 
         # TODO: ->enable without ANY subcommands
         @commands.group(name=name, help=base_doc_string)
@@ -445,7 +426,7 @@ class Permissions:
             await ctx.send(message)
 
         @group.command(
-            name='command', help=cmd_doc_string,
+            name='command', help=f'{desc} a command.',
             aliases=['cmd'], usage='<command> [channels, members or roles...]'
         )
         async def group_command(self, ctx, command: CommandName, *entities: PermissionEntity):
@@ -458,14 +439,14 @@ class Permissions:
         #
         # Not sure whether that would be good or bad for the end user.
         @group.command(
-            name='category', help=cog_doc_string,
+            name='category', help=f'{desc} a category.',
             aliases=['cog', 'module'], usage='<category> [channels, members or roles...]'
         )
         async def group_category(self, ctx, category: Category, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, category, *entities,
                                                 whitelist=value, type_='Category')
 
-        @group.command(name='all', help=all_doc_string, usage='[channels, members or roles...]')
+        @group.command(name='all', help=f'{desc} all commands.\n', usage='[channels, members or roles...]')
         async def group_all(self, ctx, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, ALL_COMMANDS_KEY, *entities,
                                                 whitelist=value, type_='All commands')
