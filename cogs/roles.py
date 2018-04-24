@@ -155,7 +155,7 @@ class Roles(Cog):
         await _check_role(ctx, role, thing='a self-assignable')
         try:
             query = 'INSERT INTO selfroles (guild_id, role_id) VALUES ($1, $2);'
-            await query.execute(query, ctx.guild.id, role.id)
+            await ctx.db.execute(query, ctx.guild.id, role.id)
         except asyncpg.UniqueViolationError:
             await ctx.send(f'{role} is already a self-assignable role.')
         else:
