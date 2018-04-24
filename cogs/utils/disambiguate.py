@@ -101,7 +101,7 @@ class IDConverter(Converter):
         if not match:
             return None
 
-        return self._get_from_id(ctx, match[1])
+        return self._get_from_id(ctx, int(match[1]))
 
 
 class UserConverterMixin:
@@ -125,7 +125,7 @@ class UserConverterMixin:
 
 class User(UserConverterMixin, IDConverter):
     def _get_from_id(self, ctx, id):
-        return ctx.bot.get_user(int(id))
+        return ctx.bot.get_user(id)
 
     def _get_possible_entries(self, ctx):
         return ctx._state._users.values()
@@ -133,7 +133,7 @@ class User(UserConverterMixin, IDConverter):
 
 class Member(UserConverterMixin, IDConverter):
     def _get_from_id(self, ctx, id):
-        return ctx.guild.get_member(int(id))
+        return ctx.guild.get_member(id)
 
     def _get_possible_entries(self, ctx):
         return ctx.guild._members.values()
