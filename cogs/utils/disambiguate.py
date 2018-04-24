@@ -69,10 +69,10 @@ class Converter(commands.Converter):
     def _get_possible_results(self, ctx, argument):
         entries = self._get_possible_entries(ctx)
         if self.ignore_case:
-            lowered = argument
+            lowered = argument.lower()
             predicate = self._predicate_ignore_case
         else:
-            lowered = argument.lower()
+            lowered = argument
             predicate = self._predicate
 
         return [obj for obj in entries if predicate(obj, lowered)]
