@@ -242,12 +242,6 @@ class Chiaki(commands.Bot):
             for _, command in inspect.getmembers(cog, lambda m: isinstance(m, commands.Command)):
                 command.hidden = True
 
-        # Hack to set the category until I can properly use command.module
-        cls = type(cog)
-        folder = cls.__module__.rpartition('.')[0]
-        cogs, _, tail = folder.partition('.')
-        cls.__parent_category__ = tail
-
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
         """Context manager for temporary listeners"""

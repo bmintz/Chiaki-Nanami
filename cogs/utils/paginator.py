@@ -487,7 +487,7 @@ import time
 
 from more_itertools import chunked, ilen, sliced, spy
 
-from .commands import all_names, walk_parents
+from .commands import all_names, command_category, walk_parents
 from .context_managers import temp_attr
 from .examples import command_example
 
@@ -498,15 +498,6 @@ def _unique(iterable):
 
 def _has_subcommands(command):
     return isinstance(command, commands.GroupMixin)
-
-
-def _command_category(command):
-    instance = command.instance
-    if instance is None:
-        return '\u200b\u200bNone'
-
-    category = instance.__class__.__parent_category__ or '\u200bOther'
-    return category.title()
 
 
 def _all_checks(command):
@@ -669,7 +660,7 @@ class HelpCommandPage(BaseReactionPaginator):
 
         # if usages is not None:
         #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
-        category = _command_category(command)
+        category = command_category(command, 'Other')
         footer = f'Category: {category}'
         return cmd_embed.set_footer(text=func(footer))
 
@@ -752,10 +743,7 @@ CROSSED_NOTE = "**Note:** You can't use commands\nthat are ~~crossed out~~."
 
 
 def _get_category_commands(bot, category):
-    return {
-        c for c in bot.all_commands.values()
-        if getattr(c.instance, '__parent_category__', None) == category
-    }
+    return {c for c in bot.all_commands.values() if command_category(c, 'other') == category}
 
 class CogPages(ListPaginator):
     numbered = None
@@ -806,7 +794,7 @@ class GeneralHelpPaginator(ListPaginator):
     @classmethod
     async def create(cls, ctx):
         def sort_key(c):
-            return _command_category(c), c.qualified_name
+            return command_category(c), c.qualified_name
 
         entries = (cmd for cmd in sorted(ctx.bot.commands, key=sort_key) if not cmd.hidden)
 
@@ -816,7 +804,7 @@ class GeneralHelpPaginator(ListPaginator):
         # (cog, description, first 10 commands)
         # (cog, description, next 10 commands)
         # ...
-        for parent, cmds in itertools.groupby(entries, key=_command_category):
+        for parent, cmds in itertools.groupby(entries, key=command_category):
             command, cmds = spy(cmds)
             command = next(iter(command))  # spy returns (list, iterator)
 
@@ -828,7 +816,7 @@ class GeneralHelpPaginator(ListPaginator):
             description = inspect.getdoc(module) or 'No description... yet.'
 
             lines = [pair async for pair in _command_formatters(cmds, ctx)]
-            nested_pages.extend((parent, description, page) for page in sliced(lines, per_page))
+            nested_pages.extend((parent.title(), description, page) for page in sliced(lines, per_page))
 
         self = cls(ctx, nested_pages, lines_per_page=1)  # needed to break the slicing in __getitem__
         return self

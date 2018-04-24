@@ -9,7 +9,7 @@ from discord.ext import commands
 from more_itertools import partition
 
 from ..utils import cache, formats, disambiguate
-from ..utils.commands import walk_parents
+from ..utils.commands import command_category, walk_parents
 from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
@@ -109,7 +109,7 @@ class CommandName(BotCommand):
 
 class ModuleName(BotCogConverter):
     def _maybe_module(self, ctx, arg):
-        parents = {c.__parent_category__.lower() for c in ctx.bot.cogs.values()}
+        parents = {command_category(c).lower() for c in ctx.bot.commands}
         lowered = arg.lower()
         if lowered not in parents:
             raise commands.BadArgument('No module called {arg} found.')
@@ -130,11 +130,12 @@ class ModuleName(BotCogConverter):
             if name in {'Permissions', 'Owner'}:
                 raise commands.BadArgument("You can't modify this cog...")
 
-            return f'{cog.__parent_category__}/{name}'
+            command = next(c for c in ctx.bot.all_commands.values() if c.instance is cog)
+            return f'{command_category(command)}/{name}'
 
     @staticmethod
     def random_example(ctx):
-        categories = {c.__parent_category__.lower() for c in ctx.bot.cogs.values()}
+        categories = {command_category(c).lower() for c in ctx.bot.commands}
         return random.sample(categories, 1)[0]
 
 
@@ -340,7 +341,7 @@ class Permissions:
              ('server', dummy_server)],
         )
 
-        parent = ctx.cog.__parent_category__
+        parent = command_category(ctx.command)
         names = itertools.chain(
             map(_command_node, walk_parents(ctx.command)),
             (f'{parent}/{ctx.command.cog_name}', parent, ALL_MODULES_KEY)

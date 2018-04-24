@@ -16,7 +16,7 @@ import operator
 
 from more_itertools import iterate
 
-__all__ = ['all_names', 'all_qualified_names', 'walk_parents']
+__all__ = ['all_names', 'all_qualified_names', 'command_category', 'walk_parents']
 
 
 def all_names(command):
@@ -30,3 +30,13 @@ def walk_parents(command):
 def all_qualified_names(command):
     """Return an iterator of all possible names in a command"""
     return map(' '.join, itertools.product(*map(all_names, reversed(list(walk_parents(command))))))
+
+def command_category(command, default='\u200bOther'):
+    """Return the category that a command would fall into, using
+    the module the command was defined in.
+    """
+
+    # TODO: This assumes a command was defined in a cog in the 'cogs'
+    #       directory. Possibly remove that assumption?
+    cogs, category, *rest = command.module.split('.', 2)
+    return category if rest else default
