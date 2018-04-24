@@ -199,7 +199,7 @@ def _disambiguated(type_):
 class union(commands.Converter):
     _transform = '{0} ({0.__class__.__name__})'.format
 
-    def __init__(self, *types, ignore_case=False):
+    def __init__(self, *types, ignore_case=True):
         self.types = [
             type_(ignore_case=ignore_case)
             if isinstance(type_, type) and issubclass(type_, Converter)
