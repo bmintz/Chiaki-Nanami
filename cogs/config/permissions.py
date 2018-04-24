@@ -2,14 +2,14 @@ import asyncpg
 import discord
 import functools
 import itertools
-import operator
 import random
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
-from more_itertools import iterate, partition
+from more_itertools import partition
 
 from ..utils import cache, formats, disambiguate
+from ..utils.commands import walk_parents
 from ..utils.converter import BotCommand, BotCogConverter
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import ListPaginator
@@ -92,10 +92,6 @@ def _get_class_name(obj):
     # Thanks discord.py
     return obj.__class__.__name__.replace('Text', '')
 
-
-def _walk_parents(command):
-    """Walks up a command's parent chain."""
-    return iter(iterate(operator.attrgetter('parent'), command).__next__, None)
 
 # Some converter utilities I guess
 
@@ -346,7 +342,7 @@ class Permissions:
 
         parent = ctx.cog.__parent_category__
         names = itertools.chain(
-            map(_command_node, _walk_parents(ctx.command)),
+            map(_command_node, walk_parents(ctx.command)),
             (f'{parent}/{ctx.command.cog_name}', parent, ALL_MODULES_KEY)
         )
 

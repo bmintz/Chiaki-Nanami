@@ -485,18 +485,15 @@ import sys
 import textwrap
 import time
 
-from more_itertools import chunked, ilen, iterate, sliced, spy
+from more_itertools import chunked, ilen, sliced, spy
 
+from .commands import all_names, walk_parents
 from .context_managers import temp_attr
 from .examples import command_example
 
 
 def _unique(iterable):
     return list(OrderedDict.fromkeys(iterable))
-
-
-def _all_names(command):
-    return [command.name, *command.aliases]
 
 
 def _has_subcommands(command):
@@ -512,10 +509,6 @@ def _command_category(command):
     return category.title()
 
 
-def _walk_parents(command):
-    """Walks up a command's parent chain."""
-    return iter(iterate(operator.attrgetter('parent'), command).__next__, None)
-
 def _all_checks(command):
     # The main command's checks will be run regardless of if it's a group
     # and if command.invoke_without_command is True
@@ -523,7 +516,7 @@ def _all_checks(command):
     if not command.parent:
         return
 
-    for parent in _walk_parents(command.parent):
+    for parent in walk_parents(command.parent):
         if not parent.invoke_without_command:
             yield from parent.checks
 
@@ -651,7 +644,7 @@ class HelpCommandPage(BaseReactionPaginator):
         clean_prefix = ctx.clean_prefix
         # usages = self.command_usage
 
-        cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(_all_names(command))}`"
+        cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(all_names(command))}`"
 
         description = (command.help or '').format(prefix=clean_prefix)
         if isinstance(command, DeprecatedCommand):

@@ -12,6 +12,7 @@ from discord.ext import commands
 from more_itertools import iterate
 
 from . import varpos
+from .commands import all_qualified_names
 
 __all__ = [
     'command_example',
@@ -181,14 +182,6 @@ def static_example(converter):
 _get_converter = functools.partial(commands.Command._get_converter, None)
 
 
-def _all_names(command):
-    return [command.name, *command.aliases]
-
-def _all_qualified_names(command):
-    parent_chain = list(iter(iterate(operator.attrgetter('parent'), command).__next__, None))
-    return map(' '.join, itertools.product(*map(_all_names, reversed(parent_chain))))
-
-
 _quote_pattern = "|".join(map(re.escape, commands.view._all_quotes))
 
 # This regex is here so that we only escape quotes that weren't escaped
@@ -271,7 +264,7 @@ def command_example(command, ctx):
     If a command has optional arguments, it will generate two examples,
     one with required arguments only, and one with all args included.
     """
-    qual_names = list(_all_qualified_names(command))
+    qual_names = list(all_qualified_names(command))
 
     required, optional = _split_params(command)
 
