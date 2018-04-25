@@ -291,8 +291,8 @@ class Permissions:
         if not ctx.guild:  # Custom permissions don't really apply in DMs
             return True
 
-        # if await ctx.bot.is_owner(ctx.author):
-        #     return True
+        if await ctx.bot.is_owner(ctx.author):
+            return True
 
         # XXX: Should I have a check for if the table/relation actually exists?
         lookup = await self._get_permissions(ctx.db, ctx.guild.id)
