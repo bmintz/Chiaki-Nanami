@@ -1,6 +1,7 @@
 import asyncpg
 import discord
 import itertools
+import random
 
 from collections import defaultdict, namedtuple
 from discord.ext import commands
@@ -99,10 +100,31 @@ class CommandName(BotCommand):
         command = await super().convert(ctx, arg)
 
         root = command.root_parent or command
-        if root.name in {'enable', 'disable', 'undo'} or root.cog_name == 'Owner':
+        if root.name in {'enable', 'disable', 'undo'} or command_category(root) == 'owner':
             raise commands.BadArgument("You can't modify this command.")
 
         return _command_node(command)
+
+class CommandCategoryOrAll(commands.Converter):
+    __converters = [CommandName, Category]
+    __converter_name_pairs = list(zip(__converters, ['Command', 'Category']))
+
+    async def convert(self, ctx, arg):
+        for type_, name in self.__converter_name_pairs:
+            try:
+                return (await ctx.command.do_conversion(ctx, type_, arg), name)
+            except Exception:
+                continue
+        raise commands.BadArgument(f'{arg} is not a command or a category.')
+
+    @staticmethod
+    def random_example(ctx):
+        try:
+            converters = ctx.__cmd_cat_or_all_converters__
+        except AttributeError:
+            c = CommandCategoryOrAll.__converters
+            ctx.__cmd_cat_or_all_converters__ = converters = iter(random.sample(c, len(c)))
+        return next(converters).random_example(ctx)
 
 
 PermissionEntity = disambiguate.union(discord.Member, discord.Role, discord.TextChannel)
@@ -269,8 +291,8 @@ class Permissions:
         if not ctx.guild:  # Custom permissions don't really apply in DMs
             return True
 
-        if await ctx.bot.is_owner(ctx.author):
-            return True
+        # if await ctx.bot.is_owner(ctx.author):
+        #     return True
 
         # XXX: Should I have a check for if the table/relation actually exists?
         lookup = await self._get_permissions(ctx.db, ctx.guild.id)
@@ -377,76 +399,37 @@ class Permissions:
         await self._display_embed(ctx, name, *entities, whitelist=whitelist, type_=type_)
 
     def _make_command(value, name, *, desc):
-        participle = desc.split(' ', 1)[0][:-1]
-        participle = (participle[:-1] if participle[-1] == 'e' else participle) + 'ing'
-
-        base_doc_string = f'Group for {participle.lower()} commands or cogs.'
-
-        # TODO: ->enable without ANY subcommands
-        @commands.group(name=name, help=base_doc_string)
+        @commands.group(
+            name=name, help=f'{desc} a command, category, or *all* commands.',
+            usage='<command, category, or all> [channels, members or roles...]',
+            invoke_without_command=True
+        )
         @commands.has_permissions(manage_guild=True)
-        async def group(self, ctx):
-            # TODO: Make this:, ->enable <command, category, or all>
-            if ctx.invoked_subcommand:
-                return
-
-            arg = ctx.subcommand_passed
-            if not arg:
-                subs = '\n'.join(map(f'`{ctx.prefix}{{}}`'.format, ctx.command.commands))
-                message = (f"{ctx.command.name.title()} what? You're gonna have "
-                           f"to be a little more specific here... I think. Here "
-                           f"are the commands:\n{subs}"
-                           )
-                return await ctx.send(message)
-
-            # In case someone attempts to do for example, ->enable "random colour"
-            arg = arg.strip('"')
-
-            maybe_command = ctx.bot.get_command(arg)
-            if maybe_command is not None:
-                message = (f'Hm... this looks like a command... I think.\n'
-                           f'Use `{ctx.command} command {arg} ` if '
-                           f"you're planning to {ctx.command} it...?"
-                           )
-                return await ctx.send(message)
-
-            lowered = arg.lower()
-            if any(cog.lower() == lowered for cog in ctx.bot.cogs):
-                message = (f'This looks like a cog... I think.\n'
-                           f'Use `{ctx.command} cog {arg} ` if '
-                           f"you're planning to {ctx.command} it...?"
-                           )
-                return await ctx.send(message) 
-
-            subs = '\n'.join(map(f'`{ctx.prefix}{{0}}` - {{0.short_doc}}'.format,
-                                 ctx.command.commands))
-            message = ("\N{THINKING FACE} I don't even know what you want to "
-                       f"{ctx.command}... here are the commands again... \n{subs}"
-                       )
-            await ctx.send(message)
+        async def group(self, ctx, command_category_or_all: CommandCategoryOrAll, *entities: PermissionEntity):
+            thing, type_ = command_category_or_all
+            await self._set_permissions_command(ctx, thing, *entities,
+                                                whitelist=value, type_=type_)
 
         @group.command(
-            name='command', help=f'{desc} a command.',
-            aliases=['cmd'], usage='<command> [channels, members or roles...]'
+            name='command', help=f'{desc} a command.', aliases=['cmd'],
+            usage='<command> [channels, members or roles...]',
         )
+        @commands.has_permissions(manage_guild=True)
         async def group_command(self, ctx, command: CommandName, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, command, *entities,
                                                 whitelist=value, type_='Command')
 
-        # Providing these helper commands to allow users to "bulk"-disable certain
-        # certain commands. Theoretically I COULD allow for ->enable command_or_module
-        # but that would force me to make the commands case sensitive.
-        #
-        # Not sure whether that would be good or bad for the end user.
         @group.command(
-            name='category', help=f'{desc} a category.',
-            aliases=['cog', 'module'], usage='<category> [channels, members or roles...]'
+            name='category', help=f'{desc} a category.', aliases=['cog', 'module'],
+            usage='<category> [channels, members or roles...]',
         )
+        @commands.has_permissions(manage_guild=True)
         async def group_category(self, ctx, category: Category, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, category, *entities,
                                                 whitelist=value, type_='Category')
 
         @group.command(name='all', help=f'{desc} all commands.\n', usage='[channels, members or roles...]')
+        @commands.has_permissions(manage_guild=True)
         async def group_all(self, ctx, *entities: PermissionEntity):
             await self._set_permissions_command(ctx, ALL_COMMANDS_KEY, *entities,
                                                 whitelist=value, type_='All commands')
