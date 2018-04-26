@@ -36,7 +36,8 @@ def base_filename(name):
 
 
 def emoji_url(emoji):
-    return f'https://twemoji.maxcdn.com/2/72x72/{hex(ord(emoji))[2:]}.png'
+    hexes = '-'.join(hex(ord(c))[2:] for c in str(emoji))
+    return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
 
 
 def unique(iterable):
