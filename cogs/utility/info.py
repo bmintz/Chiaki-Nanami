@@ -229,7 +229,7 @@ class ChannelPaginator(ListPaginator):
         )
         parse_voice_channel = functools.partial(
             _parse_channel, prefix='', predicate=lambda c: permissions_in(c).connect
-        ),
+        )
 
         _channel_parsers = {
             discord.TextChannel: parse_text_channel,
