@@ -594,7 +594,7 @@ class Information(Cog):
         """Shows all the members of the server, sorted by their top role, then by join date"""
         # TODO: Status
         hierarchy = sorted(ctx.guild.members, key=attrgetter("top_role", "joined_at"), reverse=True)
-        members = map(str, hierarchy)
+        members = tuple(map(str, hierarchy))
         pages = ListPaginator(ctx, members, title=f'Members in {ctx.guild} ({len(members)})')
         await pages.interact()
 
