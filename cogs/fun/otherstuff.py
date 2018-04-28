@@ -432,6 +432,61 @@ class OtherStuffs:
         embed.set_thumbnail(url=ctx.author.avatar_url)
         await message.edit(embed=embed)
 
+    @commands.command(name='reactiontest', aliases=['reacttest'])
+    async def reaction_test(self, ctx):
+        """Starts a reaction test. How good are your reactions?"""
+        await ctx.release()  # delaaaaaaaaays
+
+        def check(reaction, user):
+            return (reaction.message.id == message.id
+                    and user.id == ctx.author.id
+                    and reaction.emoji == TEN_SEC_REACTION
+                    )
+
+        async def reacted(timeout):
+            try:
+                await ctx.bot.wait_for('reaction_add', timeout=timeout, check=check)
+            except asyncio.TimeoutError:
+                return False
+            return True
+
+        description = (
+            'In just a few moments, this message will turn green.\n'
+            f'When that happens, click {TEN_SEC_REACTION}.\n\n'
+            'In the meantime, please wait...'
+        )
+
+        embed = (discord.Embed(colour=0xFFFF00, description=description)
+                 .set_author(name='Reaction Test', icon_url=emoji_url('\N{HOURGLASS}'))
+                 )
+
+        message = await ctx.send(embed=embed)
+        await message.add_reaction(TEN_SEC_REACTION)
+        if await reacted(random.uniform(2, 5)):
+            embed.colour = 0xFF0000
+            embed.description = 'You clicked it too early. Please wait next time.'
+            embed.set_author(name='No cheating!', icon_url=emoji_url('\N{POUTING FACE}'))
+            return await message.edit(embed=embed)
+
+        embed.colour = 0x00FF00
+        embed.set_author(name='GO!', icon_url=emoji_url('\N{ALARM CLOCK}'))
+        embed.description = f'Click {TEN_SEC_REACTION}!'
+        await message.edit(embed=embed)
+
+        start = time.perf_counter()
+        if not await reacted(60):
+            embed.colour = 0x607d8b
+            embed.description = f'Please click {TEN_SEC_REACTION} quickly next time...'
+            embed.set_author(name='You took too long...')
+            await message.edit(embed=embed)
+            return
+
+        end = time.perf_counter()
+        embed.colour = 0x2196f3
+        embed.description = f'**{end - start :.3f}** seconds'
+        embed.set_author(name='Your reaction time is...', icon_url=emoji_url('\N{CHEQUERED FLAG}'))
+        await message.edit(embed=embed)
+
     # TODO: Make hi be an alias to this (it's an alias for ->welcome rn)
     @commands.command(hidden=True)
     async def hello(self, ctx):
