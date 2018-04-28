@@ -484,7 +484,8 @@ class OtherStuffs:
         end = time.perf_counter()
         embed.colour = 0x2196f3
         embed.description = f'**{end - start :.3f}** seconds'
-        embed.set_author(name='Your reaction time is...', icon_url=emoji_url('\N{CHEQUERED FLAG}'))
+        icon = ctx.author.avatar_url_as(static_format='png')
+        embed.set_author(name="Your reaction time is...", icon_url=icon)
         await message.edit(embed=embed)
 
     # TODO: Make hi be an alias to this (it's an alias for ->welcome rn)
