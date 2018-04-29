@@ -702,10 +702,13 @@ class ModLog:
 
         await self._check_modlog_channel(ctx, config.channel_id, embed=embed)
 
-    async def _set_actions(self, ctx, query, flags, *, colour):
+    async def _set_actions(self, ctx, query, flags, *, colour, default_op):
         flags = unique(flags)
         reduced = reduce(operator.or_, flags)
-        channel_id, events = await ctx.db.fetchrow(query, ctx.guild.id, reduced)
+
+        # For some reason I can't do DEFAULT | $2 so I have to do it manually.
+        default = default_op(reduced)
+        channel_id, events = await ctx.db.fetchrow(query, ctx.guild.id, reduced.value, default)
 
         enabled_flags = ', '.join(f.name for f in ActionFlag if events & f)
 
@@ -725,13 +728,14 @@ class ModLog:
         """Enables case creation for all the given mod-actions."""
 
         # The duplicated query is to prevent potential SQL injections.
-        query = """INSERT INTO modlog_config (guild_id, enabled) VALUES ($1, DEFAULT | $2)
+        query = """INSERT INTO modlog_config (guild_id, events) VALUES ($1, $3)
                    ON CONFLICT (guild_id)
-                   DO UPDATE SET events = events | $2
+                   DO UPDATE SET events = modlog_config.events | $2
                    RETURNING channel_id, events;
                 """
 
-        await self._set_actions(ctx, query, actions, colour=0x4CAF50)
+        await self._set_actions(ctx, query, actions, colour=0x4CAF50,
+                                default_op=partial(operator.or_, _default_flags))
 
     @_mod_action_command(name='disable')
     @commands.has_permissions(manage_guild=True)
@@ -739,13 +743,17 @@ class ModLog:
         """Disables case creation for all the given mod-actions."""
 
         # The duplicated query is to prevent potential SQL injections.
-        query = """INSERT INTO modlog_config (guild_id, events) VALUES ($1, DEFAULT & ~$2)
+        query = """INSERT INTO modlog_config (guild_id, events) VALUES ($1, $3)
                    ON CONFLICT (guild_id)
-                   DO UPDATE SET events = events & ~$2
+                   -- CAST is necessary due to weird ambiguities and I
+                   -- don't know what why it's being a bad. ~ is somehow not
+                   -- unique???
+                   DO UPDATE SET events = modlog_config.events & ~CAST($2 AS INTEGER)
                    RETURNING channel_id, events;
         """
 
-        await self._set_actions(ctx, query, actions, colour=0xF44336)
+        await self._set_actions(ctx, query, actions, colour=0xF44336,
+                                default_op=lambda f: _default_flags & ~f)
 
     del _mod_action_command
 
