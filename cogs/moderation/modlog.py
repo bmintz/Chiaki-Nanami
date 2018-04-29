@@ -688,7 +688,9 @@ class ModLog:
         For this command to work, you have to make sure that you've
         set a channel for logging cases first.
         """
-        config = await self._get_config(ctx)
+        config = await self._get_case_config(ctx.guild.id, connection=ctx.db)
+        if not config:
+            return await ctx.send(f'Please set a channel with `{ctx.clean_prefix}modlog channel` first.')
 
         flags = ', '.join(f.name for f in ActionFlag)
         enabled_flags = ', '.join(f.name for f in ActionFlag if config.events & f)
@@ -698,7 +700,7 @@ class ModLog:
                  .add_field(name='Actions that will be logged', value=enabled_flags)
                  )
 
-        await self._check_modlog_channel(ctx, config['channel_id'], embed=embed)
+        await self._check_modlog_channel(ctx, config.channel_id, embed=embed)
 
     async def _set_actions(self, ctx, query, flags, *, colour):
         flags = unique(flags)
