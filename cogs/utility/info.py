@@ -307,7 +307,7 @@ def _format_activity(activity):
             f'[**{activity.title}**]({url})\n'
             f'by **{",".join(activity.artists)}**'
         )
-    elif activity.details:
+    elif getattr(activity, 'details', ''):
         playing = f'{playing}\n{activity.details}\n{activity.state or ""}'
 
     return playing
