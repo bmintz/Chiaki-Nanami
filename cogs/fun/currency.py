@@ -398,7 +398,7 @@ class Money(Cog):
             message = 'Yay, you got it!'
             colour = 0x4CAF50
             if is_betting:
-                new_amount = amount * 2  # 2 + 5 * (actual == Side.edge))
+                new_amount += amount * 2  # 2 + 5 * (actual == Side.edge))
                 message += f'\nYou won **{new_amount}**{self.money_emoji}'
         else:
             message = "Noooooooo, you didn't get it. :("
