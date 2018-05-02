@@ -13,6 +13,7 @@ from discord.ext import commands
 from ..utils import varpos
 from ..utils.converter import number
 from ..utils.examples import get_example, wrap_example
+from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
 
 from core.errors import InvalidUserArgument
@@ -352,7 +353,7 @@ class RNG:
         if n < 8:
             raise InvalidUserArgument(f"How can you expect a secure password in just {n} characters?")
 
-        await ctx.send(_password(n))
+        await ctx.send(escape_markdown(_password(n)))
 
     @password.error
     async def password_error(self, ctx, error):
