@@ -107,5 +107,10 @@
         "free money",
         "install chiakibot"
     ],
+    "unban.reason": [
+        "Appealed",
+        "oops",
+        "2nd chance"
+    ],
     "welcome message.message": "Welcome {user} to {server}!"
 }
