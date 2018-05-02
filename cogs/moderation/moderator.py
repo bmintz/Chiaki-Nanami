@@ -870,7 +870,7 @@ class Moderator:
         await ctx.guild.ban(member, reason=reason)
         await ctx.send("Done. Please don't make me do that again...")
 
-    @commands.command(unban='@Nadeko#6685 oops')
+    @commands.command()
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
     async def unban(self, ctx, user: BannedMember, *, reason: Reason=None):
