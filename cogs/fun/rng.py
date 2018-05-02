@@ -134,7 +134,7 @@ def _random_8ball_name():
     return eight + ball
 
 
-_default_letters = string.ascii_letters + string.digits
+_default_letters = string.ascii_letters + string.digits + string.punctuation
 
 
 def _password(length, alphabet=_default_letters):
@@ -343,7 +343,7 @@ class RNG:
 
     @random.command(aliases=['pw'])
     @dm_only()
-    async def password(self, ctx, n: int=8, *rest: str):
+    async def password(self, ctx, n: int=8):
         """Generates a random password
 
         Don't worry, this uses a cryptographically secure RNG.
@@ -352,15 +352,7 @@ class RNG:
         if n < 8:
             raise InvalidUserArgument(f"How can you expect a secure password in just {n} characters?")
 
-        rest = list(map(str.lower, rest))
-        letters = _default_letters
-        if 'symbols' in rest:
-            letters += string.punctuation
-        if 'microsoft' in rest:
-            symbol_deletion = dict.fromkeys(map(ord, string.punctuation), None)
-            letters = letters.translate(symbol_deletion)
-        password = _password(n, letters)
-        await ctx.send(password)
+        await ctx.send(_password(n))
 
     @password.error
     async def password_error(self, ctx, error):
