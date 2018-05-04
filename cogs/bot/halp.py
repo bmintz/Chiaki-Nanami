@@ -108,7 +108,13 @@ async def default_help(ctx, command=None, func=lambda s: s):
     try:
         await paginator.interact()
     except commands.BotMissingPermissions as e:
-        await _maybe_dm_help(ctx, paginator, e)
+        # Don't DM the user if the bot can't send messages. We should
+        # err on the side of caution and assume the bot was muted for a
+        # good reason, and a DM wouldn't be a good idea in this case.
+        if ctx.me.permissions_in(ctx.channel).send_messages:
+            # We shouldn't let this error propagate, since the bot wouldn't
+            # be able to notify the user of missing perms anyways.
+            await _maybe_dm_help(ctx, paginator, e)
 
 
 def default_help_command(func=lambda s: s, **kwargs):
