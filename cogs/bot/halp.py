@@ -167,6 +167,11 @@ class Help(Cog):
     Halp = default_help_command(str.title, name='Halp', hidden=True)
 
     async def _invite_embed(self, ctx):        
+        # TODO: Move this somewhere else as this is also duplicated in meta.py
+        source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami'
+        if ctx.bot.version_info.releaselevel != 'alpha':
+            source_url = f'{source_url}/tree/v{ctx.bot.__version__}'
+
         invite = (discord.Embed(description=self.bot.description, title=str(self.bot.user), colour=self.bot.colour)
                   .set_thumbnail(url=self.bot.user.avatar_url_as(format=None))
                   .add_field(name="Want me in your server?",
@@ -176,7 +181,7 @@ class Help(Cog):
                   .add_field(name="Need help with using me?",
                              value=f"[Here's the official server!]({self.bot.support_invite})", inline=False)
                   .add_field(name="If you're curious about how I work...",
-                             value="[Check out the source code!](https://github.com/Ikusaba-san/Chiaki-Nanami/tree/rewrite)", inline=False)
+                             value=f"[Check out the source code!]({source_url})", inline=False)
                   )
         await ctx.send(embed=invite)
 
