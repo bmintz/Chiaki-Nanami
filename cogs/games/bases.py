@@ -1,11 +1,19 @@
 import asyncio
 import contextlib
 import discord
+import enum
 import functools
 import inspect
 import random
 
 from discord.ext import commands
+
+
+class Status(enum.Enum):
+    PLAYING = enum.auto()
+    END = enum.auto()
+    TIMEOUT = enum.auto()
+    QUIT = enum.auto()
 
 
 class _TwoPlayerWaiter:

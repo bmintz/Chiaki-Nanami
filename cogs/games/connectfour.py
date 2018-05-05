@@ -9,7 +9,7 @@ from collections import namedtuple
 from more_itertools import first_true, locate, one, windowed
 
 from . import errors
-from .bases import TwoPlayerGameCog
+from .bases import Status, TwoPlayerGameCog
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
@@ -113,8 +113,7 @@ class ConnectFourSession:
 
         xo = random.sample((Tile.X, Tile.O), 2)
         self._players = random.sample(list(map(Player, (self.ctx.author, self.opponent), xo)), 2)
-        self._stopped = False
-        self._timed_out = False
+        self._status = Status.PLAYING
         self._turn = random.random() > 0.5
         self._runner = None
         self._board = Board()
@@ -136,9 +135,10 @@ class ConnectFourSession:
         current = self.current
         if not (m.channel == self.ctx.channel and m.author.id == current.user.id):
             return
+
         lowered = m.content.lower()
         if lowered in {'quit', 'stop'}:
-            self._stopped = True
+            self._status = Status.QUIT
             return True
 
         if not lowered.isdigit():
@@ -155,9 +155,6 @@ class ConnectFourSession:
         message = await self.ctx.bot.wait_for('message', timeout=60, check=self._check)
         with contextlib.suppress(discord.HTTPException):
             await message.delete()
-
-        if self._stopped:
-            raise errors.RageQuit
 
     def _update_display(self):
         screen = self._game_screen
@@ -182,10 +179,10 @@ class ConnectFourSession:
         if winner:
             user = winner.user
             screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
-        elif self._stopped:
+        elif self._status is Status.QUIT:
             screen.colour = 0
             screen.set_author(name=f'{user} forefited...', icon_url=FOREFIT_ICON)
-        elif self._timed_out:
+        elif self._status is Status.TIMEOUT:
             screen.colour = 0
             screen.set_author(name=f'{user} ran out of time...', icon_url=TIMEOUT_ICON)
         elif self._board.is_full():
@@ -202,8 +199,10 @@ class ConnectFourSession:
             async with temp_message(self.ctx, embed=self._game_screen):
                 try:
                     await self.wait_for_player_move()
-                except (asyncio.TimeoutError, errors.RageQuit):
-                    self._timed_out = True
+                except asyncio.TimeoutError:
+                    self._status = Status.TIMEOUT
+
+                if self._status is not Status.PLAYING:
                     return Stats(self._players[not self._turn], turn)
 
                 winner = self.winner

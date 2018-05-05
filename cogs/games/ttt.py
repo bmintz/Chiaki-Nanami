@@ -7,8 +7,7 @@ from collections import namedtuple
 import discord
 from more_itertools import chunked
 
-from . import errors
-from .bases import TwoPlayerGameCog
+from .bases import Status, TwoPlayerGameCog
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
@@ -88,8 +87,7 @@ class TicTacToeSession:
         self._turn = random.random() > 0.5
 
         self._board = Board()
-        self._stopped = False
-        self._timed_out = False
+        self._status = Status.PLAYING
 
         self._game_screen = discord.Embed(colour=0x00FF00)
 
@@ -102,7 +100,7 @@ class TicTacToeSession:
         lowered = string.lower()
 
         if lowered in {'quit', 'stop'}:
-            self._stopped = True
+            self._status = Status.QUIT
             return True
 
         if not string.isdigit():
@@ -122,9 +120,6 @@ class TicTacToeSession:
         message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
         with contextlib.suppress(discord.HTTPException):
             await message.delete()
-
-        if self._stopped:
-            raise errors.RageQuit
 
     def _update_display(self):
         screen = self._game_screen
@@ -150,10 +145,10 @@ class TicTacToeSession:
         if winner:
             user = winner.user
             screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
-        elif self._stopped:
+        elif self._status is Status.QUIT:
             screen.colour = 0
             screen.set_author(name=f'{user} forefited...', icon_url=FOREFIT_ICON)
-        elif self._timed_out:
+        elif self._status is Status.TIMEOUT:
             screen.colour = 0
             screen.set_author(name=f'{user} ran out of time...', icon_url=TIMEOUT_ICON)
         elif self._board.is_full():
@@ -170,13 +165,16 @@ class TicTacToeSession:
             async with temp_message(self.ctx, content=f'{user.mention} It is your turn.',
                                     embed=self._game_screen):
                 try:
-                    spot = await self.get_input()
-                except (asyncio.TimeoutError, errors.RageQuit):
-                    self._timed_out = True
+                    await self.get_input()
+                except asyncio.TimeoutError:
+                    self._status = Status.TIMEOUT
+
+                if self._status is not Status.PLAYING:
                     return Stats(self._players[not self._turn], counter)
 
                 winner = self.winner
                 if winner or self._board.is_full():
+                    self._status = Status.END
                     return Stats(winner, counter)
 
             self._turn = not self._turn
