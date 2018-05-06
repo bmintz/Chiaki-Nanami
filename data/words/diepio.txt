@@ -34,6 +34,7 @@ Pentashot
 Predator
 Quad Tank
 Ranger
+Rocketeer
 Smasher
 Sniper
 Spike

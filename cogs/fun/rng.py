@@ -84,6 +84,7 @@ _diepio_tanks = [
     'Predator',
     'Quad Tank',
     'Ranger',
+    'Rocketeer',
     'Skimmer',
     'Smasher',
     'Sniper',
