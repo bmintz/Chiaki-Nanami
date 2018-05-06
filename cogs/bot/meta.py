@@ -34,26 +34,35 @@ class Meta:
 
         self._source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/{branch}'
 
+    @property
+    def source_url(self):
+        source_url = self._source_url
+        return source_url.rsplit('/', 2)[0] if source_url.endswith('/tree/master') else source_url
+
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
     async def about(self, ctx):
         """Shows some info about the bot."""
         bot = ctx.bot
-        useful_links = (
-            f'[Click here to go to the support server!]({bot.support_invite})\n'
-            f'[Click me to invite me to your server!]({bot.invite_url})\n'
-            "[Check the code out here (it's fire!)](https://github.com/Ikusaba-san/Chiaki-Nanami)\n"
+
+        links = (
+            f'**[Add me]({bot.invite_url})** | '
+            f'**[Support]({bot.support_invite})** | '
+            f'**[Github]({self.source_url})**'
         )
 
-        embed = (discord.Embed(colour=bot.colour)
+        field_value = (
+            f'Created by **{bot.creator}**\n'
+            f'Version: **{bot.__version__}**\n'
+            f'Watching **{bot.guild_count}** servers\n'
+            f'Playing with **{bot.user_count}** people\n'
+            f'Running **Python {platform.python_version()}**\n'
+        )
+
+        embed = (discord.Embed(colour=bot.colour, description=f'{links}\n{bot.description}')
                  .set_thumbnail(url=bot.user.avatar_url)
-                 .set_author(name=str(bot.user))
-                 .add_field(name='Creator', value=bot.creator)
-                 .add_field(name='Servers', value=bot.guild_count)
-                 .add_field(name='Python', value=platform.python_version())
-                 .add_field(name='Library', value=DISCORD_PY_LIB)
-                 .add_field(name='Useful links', value=useful_links, inline=False)
-                 .set_footer(text=f'Chiaki is on Version {bot.__version__} <3')
+                 .set_author(name=f'About {bot.user.name}')
+                 .add_field(name='\u200b', value=field_value, inline=False)
                  )
         await ctx.send(embed=embed)
 
