@@ -12,16 +12,6 @@ from ..utils.subprocesses import run_subprocess
 from ..utils.paginator import ListPaginator, paginated
 
 
-try:
-    import pkg_resources
-except ImportError:
-    # TODO: Get the version AND commit number without pkg_resources
-    DISCORD_PY_LIB = 'discord.py {discord.__version__}'
-else:
-    DISCORD_PY_LIB = str(pkg_resources.get_distribution('discord.py'))
-    del pkg_resources
-
-
 class Meta:
     """Need some info about the bot? Here you go!"""
     def __init__(self, bot):
