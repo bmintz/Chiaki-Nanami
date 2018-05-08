@@ -264,7 +264,7 @@ class DefaultTriviaSession(BaseTriviaSession):
         params = dict(amount=self.AMOUNT, token=self.__token)
         async with self._session.get(self.BASE, params=params) as r:
             response = await r.json()
-            self.__last_used = time.monotonic()
+            self.__class__.__last_used = time.monotonic()
 
         if response['response_code'] == 3:
             # Ensure this is None as initialize checks for None token.
