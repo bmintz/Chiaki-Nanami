@@ -226,7 +226,7 @@ class DefaultTriviaSession(BaseTriviaSession):
             # We should probably pre-fill this because most trivia games
             # don't last very long. So we don't need to make an HTTP request
             # when we don't have to.
-            self._pending.extend(random.sample(self._cache, 15))
+            self._pending.extend(random.sample(self.__cache, 15))
 
     @classmethod
     async def initialize(cls):
