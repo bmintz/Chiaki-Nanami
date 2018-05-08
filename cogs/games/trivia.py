@@ -267,6 +267,8 @@ class DefaultTriviaSession(BaseTriviaSession):
             self.__last_used = time.monotonic()
 
         if response['response_code'] == 3:
+            # Ensure this is None as initialize checks for None token.
+            self.__class__.__token = None
             # The token has expired. We need to regenerate it
             await self.initialize()
             # We don't need the cache because we're going to get dupes anyway.
