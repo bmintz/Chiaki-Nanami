@@ -404,6 +404,8 @@ class OtherStuffs:
     @commands.bot_has_permissions(embed_links=True, add_reactions=True)
     async def ten_seconds(self, ctx):
         """Starts a 10s test. How well can you judge 10 seconds?"""
+        await ctx.release()
+
         title = f'10 Seconds Test - {ctx.author}'
         description = f'Click the {TEN_SEC_REACTION} when you think 10 second have passed'
 
