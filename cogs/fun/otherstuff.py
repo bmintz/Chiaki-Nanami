@@ -423,7 +423,15 @@ class OtherStuffs:
                     )
 
         start = time.perf_counter()
-        reaction, user = await ctx.bot.wait_for('reaction_add', check=check)
+        try:
+            await ctx.bot.wait_for('reaction_add', check=check, timeout=120)
+        except asyncio.TimeoutError:
+            embed.colour = 0x9E9E9E
+            embed.set_author(name='Took too long')
+            embed.description = "It's been 2 minutes. where are you?"
+            await message.edit(embed=embed)
+            return
+
         now = time.perf_counter()
         duration = now - start
 
