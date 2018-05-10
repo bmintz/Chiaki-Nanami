@@ -273,6 +273,7 @@ def permission(arg):
     permission = arg.replace(' ', '_').lower()
     if permission not in _valid_names:
         raise commands.BadArgument(f'{arg} is not a permission')
+    return permission
 
 @wrap_example(permission)
 def _permission_example(ctx):
