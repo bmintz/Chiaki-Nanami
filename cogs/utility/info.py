@@ -90,18 +90,6 @@ _status_colors = {
 }
 
 
-def _normal_member_status_format(_, statuses):
-    return '\n'.join(starmap('{1} {0}'.format, statuses.items()))
-
-
-def _status_with_emojis(self, statuses):
-    c = self.context.bot.emoji_config
-    return '\n'.join(
-        f'{getattr(c, "bot_tag" if k == "Bots" else k.lower())} {v}'
-        for k, v in statuses.items()
-    )
-
-
 def default_last_n(n=50):
     return lambda: collections.deque(maxlen=n)
 
@@ -142,9 +130,15 @@ _CHANNEL_TYPES = {
     discord.VoiceChannel   : 'Voice',
 }
 
-class ServerPages(BaseReactionPaginator):
-    _formatter = _normal_member_status_format
+_STATUS_NAMES = {
+    'online' : 'Online',
+    'idle'   : 'Idle',
+    'dnd'    : 'DND',
+    'offline': 'Offline',
+    'bot_tag': 'Bots',
+}
 
+class ServerPages(BaseReactionPaginator):
     async def server_color(self):
         try:
             result = self._colour
@@ -154,6 +148,13 @@ class ServerPages(BaseReactionPaginator):
             if url:
                 result = self._colour = await url_color(url)
         return result
+
+    def _format_statuses_without_emojis(self, statuses):
+        return ' | '.join(f'{v} {_STATUS_NAMES[k]}' for k, v in statuses.items() if v)
+
+    def _format_statuses_with_emojis(self, statuses):
+        c = self.context.bot.emoji_config
+        return ' | '.join(f'{getattr(c, k)} {v}' for k, v in statuses.items() if v)
 
     @property
     def guild(self):
@@ -172,11 +173,16 @@ class ServerPages(BaseReactionPaginator):
         region = _SERVER_REGIONS.get(str(server.region))
 
         odfkeys = collections.OrderedDict.fromkeys
-        config = self.context.bot.emoji_config
         statuses = odfkeys(['online', 'idle', 'dnd', 'offline'], 0)
         statuses.update(collections.Counter(m.status.name for m in server.members if not m.bot))
         statuses['bot_tag'] = sum(m.bot for m in server.members)
-        status_field = ' | '.join(f'{getattr(config, k)} {v}' for k, v in statuses.items() if v)
+
+        if self.context.bot_has_permissions(external_emojis=True):
+            formatter = self._format_statuses_with_emojis
+        else:
+            formatter = self._format_statuses_without_emojis
+
+        status_field = formatter(statuses)
 
         channel_types = odfkeys([discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel], 0)
         channel_types.update(collections.Counter(map(type, server.channels)))
@@ -343,22 +349,6 @@ class Information:
     def __init__(self, bot):
         self.bot = bot
         self.process = psutil.Process()
-        # When this cog is reloaded the on_ready won't be called again.
-        # But if the bot isn't ready the guild won't be in the cache, creating
-        # a false negative.
-        if bot.is_ready():
-            self._init_emojis()
-
-    def has_config_emojis(self):
-        attributes = ('online', 'idle', 'dnd', 'offline', 'streaming', 'bot_tag')
-        return all(map(self.bot.emoji_config.__getattribute__, attributes))
-
-    def _init_emojis(self):
-        if self.has_config_emojis():
-            ServerPages._formatter = _status_with_emojis
-
-    async def on_ready(self):
-        self._init_emojis()
 
     @commands.command()
     @commands.guild_only()
