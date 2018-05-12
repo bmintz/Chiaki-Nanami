@@ -46,7 +46,7 @@ class PrivateMessagesOnly(commands.CheckFailure):
 
 def dm_only():
     def predicate(ctx):
-        if isinstance(ctx.channel, (discord.GroupChannel, discord.DMChannel)):
+        if ctx.guild is None:
             return True
         raise PrivateMessagesOnly('This command can only be used in private messages.')
     return commands.check(predicate)
