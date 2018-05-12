@@ -11,7 +11,7 @@ import time
 from discord.ext import commands
 from itertools import accumulate, chain, count, dropwhile, starmap
 from math import log10
-from more_itertools import sliced
+from more_itertools import chunked, sliced
 from operator import attrgetter
 
 from ..utils import cache, disambiguate, varpos
@@ -105,6 +105,42 @@ def _status_with_emojis(self, statuses):
 def default_last_n(n=50):
     return lambda: collections.deque(maxlen=n)
 
+_vl = discord.VerificationLevel
+_VERIF_FIELDS = {
+    _vl.none: 'None',
+    _vl.low: 'Low',
+    _vl.medium: 'Medium',
+    _vl.high: '(\u256f\xb0\u25a1\xb0\uff09\u256f\ufe35 \u253b\u2501\u253b',
+    _vl.extreme: '\u253b\u2501\u253b \uff90\u30fd(\u0ca0\u76ca\u0ca0)\u30ce\u5f61\u253b\u2501\u253b'
+}
+del _vl
+
+_SERVER_REGIONS = {
+    'us-west'       : 'West \U0001f1fa\U0001f1f8',
+    'us-east'       : 'East \U0001f1fa\U0001f1f8',
+    'us-south'      : 'South \U0001f1fa\U0001f1f8',
+    'us-central'    : 'Central \U0001f1fa\U0001f1f8',
+    'eu-west'       : 'West \U0001f1ea\U0001f1fa',
+    'eu-central'    : 'Central \U0001f1ea\U0001f1fa',
+    'singapore'     : '\U0001f1f8\U0001f1ec',
+    'london'        : '\U0001f1ec\U0001f1e7',
+    'sydney'        : '\U0001f1e6\U0001f1fa',
+    'amsterdam'     : '\U0001f1f3\U0001f1f1',
+    'frankfurt'     : '\U0001f1e9\U0001f1ea',
+    'brazil'        : '\U0001f1e7\U0001f1f7',
+    'hongkong'      : '\U0001f1ed\U0001f1f0',
+    'russia'        : '\U0001f1f7\U0001f1fa',
+    'japan'         : '\U0001f1ef\U0001f1f5',
+    'vip-us-east'   : '\U0001f60e \U0001f1ea\U0001f1fa',
+    'vip-us-west'   : '\U0001f60e \U0001f1ea\U0001f1fa',
+    'vip-amsterdam' : '\U0001f60e \U0001f1f3\U0001f1f1',
+}
+
+_CHANNEL_TYPES = {
+    discord.CategoryChannel: 'Categories',
+    discord.TextChannel    : 'Text',
+    discord.VoiceChannel   : 'Voice',
+}
 
 class ServerPages(BaseReactionPaginator):
     _formatter = _normal_member_status_format
@@ -124,43 +160,45 @@ class ServerPages(BaseReactionPaginator):
         return self.context.guild
 
     @page('\N{INFORMATION SOURCE}')
-    async def default_(self):
+    async def default(self):
         server = self.guild
+        owner = server.owner
+        owner_field = str(owner)
+        if owner:
+            # In very rare circumstances, server.owner can be None if
+            # the owner's account was deleted.
+            owner_field = f'{owner_field} ({owner.mention})'
 
-        highest_role = server.role_hierarchy[0]
-        description = f"Owned by {server.owner}"
-        features = '\n'.join(server.features) or 'None'
-        counts = (f'{len(getattr(server, thing))} {thing.title()}'
-                  for thing in ('roles', 'emojis'))
-        channels = (f'{len(getattr(server, thing))} {thing.replace("_channels", " ").title()}'
-                    for thing in ('categories', 'text_channels', 'voice_channels'))
+        region = _SERVER_REGIONS.get(str(server.region))
 
-        statuses = collections.OrderedDict.fromkeys(['Online', 'Idle', 'Dnd', 'Offline'], 0)
-        statuses.update(collections.Counter(m.status.name.title() for m in server.members if not m.bot))
-        statuses['DND'] = statuses.pop('Dnd')
-        statuses.move_to_end('Offline')
-        statuses['Bots'] = sum(m.bot for m in server.members)
-        member_stats = self._formatter(statuses)
+        odfkeys = collections.OrderedDict.fromkeys
+        config = self.context.bot.emoji_config
+        statuses = odfkeys(['online', 'idle', 'dnd', 'offline'], 0)
+        statuses.update(collections.Counter(m.status.name for m in server.members if not m.bot))
+        statuses['bot_tag'] = sum(m.bot for m in server.members)
+        status_field = ' | '.join(f'{getattr(config, k)} {v}' for k, v in statuses.items() if v)
 
-        explicit_filter = str(server.explicit_content_filter).title().replace('_', ' ')
+        channel_types = odfkeys([discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel], 0)
+        channel_types.update(collections.Counter(map(type, server.channels)))
+        channel_field = ' | '.join(f'{v} {_CHANNEL_TYPES[k]}' for k, v in channel_types.items() if v)
+
+        description = (
+            f'**ID:** {server.id}\n'
+            f'**Owner:** {owner_field}\n'
+            f'**Region:** {region}\n'
+            f'**Verification:** {_VERIF_FIELDS.get(server.verification_level)}\n'
+            f'**Content Filter:** {server.explicit_content_filter.name.title().replace("_", " ")}\n'
+            f'{pluralize(Role=len(server.roles))} | {pluralize(Emoji=len(server.emojis))}\n'
+            # FIXME: Discord markdown edit bug strikes here.
+            f'\n**{pluralize(Channel=len(server.channels))}**\n'
+            f'{channel_field}\n'
+            f'\n**{pluralize(Member=server.member_count)}**\n'
+            f'{status_field}\n'
+        )
 
         embed = (discord.Embed(description=description, timestamp=server.created_at)
                  .set_author(name=server.name)
-                 .add_field(name="Highest Role", value=highest_role)
-                 .add_field(name="Region", value=str(server.region).title())
-                 .add_field(name="Verification Level", value=server.verification_level.name.title())
-                 .add_field(name="Explicit Content Filter", value=explicit_filter)
-                 .add_field(name="Special Features", value=features)
-                 .add_field(name='Counts', value='\n'.join(counts))
-                 .add_field(name=pluralize(Channel=len(server.channels)), value='\n'.join(channels))
-                 # Members doesn't have to be pluralized because we can guarantee that there
-                 # will be at least two members in the server.
-                 # - The bot can't be the only person in the server, because that would imply
-                 #   that the bot owns the server, which is no longer possible.
-                 # - If the bot doesn't own the server, then the owner must be there,
-                 #   which means there is more than one person in the server.
-                 .add_field(name=f'{len(server.members)} Members', value=member_stats)
-                 .set_footer(text=f'ID: {server.id} | Created')
+                 .set_footer(text='Created')
                  )
 
         icon = server.icon_url_as(format='png')
@@ -169,15 +207,8 @@ class ServerPages(BaseReactionPaginator):
             embed.colour = await self.server_color()
         return embed
 
-    async def default(self):
-        """Shows this page (basic information about this server)"""
-        embed = await self.default_()
-        value = 'Confused? Click the \N{WHITE QUESTION MARK ORNAMENT} button for help.'
-        return embed.add_field(name='\u200b', value=value, inline=False)
-
     @page('\N{CAMERA}')
     async def icon(self):
-        """Shows the server's icon"""
         server = self.guild
         icon = (discord.Embed(title=f"{server}'s icon")
                 .set_footer(text=f"ID: {server.id}")
@@ -194,7 +225,6 @@ class ServerPages(BaseReactionPaginator):
 
     @page('\N{THINKING FACE}')
     async def emojis(self):
-        """Shows the server's emojis"""
         guild = self.guild
         emojis = guild.emojis
         description = (
@@ -205,13 +235,6 @@ class ServerPages(BaseReactionPaginator):
         return (discord.Embed(colour=await self.server_color(), description=description)
                 .set_author(name=f"{guild}'s custom emojis")
                 .set_footer(text=f'{len(emojis)} emojis')
-                )
-
-    @page('\N{WHITE QUESTION MARK ORNAMENT}')
-    def help_page(self):
-        """Shows this page"""
-        return (discord.Embed(description=self.reaction_help)
-                .set_author(name='Welcome to the help thing!')
                 )
 
 
