@@ -5,9 +5,14 @@ from collections import Counter
 from more_itertools import flatten, interleave_longest
 
 
+_X_CHR_START = ord('a')
+
 def _xy_to_i(xy):
     x, y = xy
-    return ord(x) - ord('a'), int(y) - 1
+    return ord(x) - _X_CHR_START, int(y) - 1
+
+def _i_to_xy(x, y):
+    return f'{chr(x + _X_CHR_START)}{y + 1}'
 
 
 class Board:
@@ -16,6 +21,7 @@ class Board:
         self._horizontal = [[None] * width for _ in range(height + 1)]
         self._boxes = [[None] * width for _ in range(height)]
         self._turn = 0
+        self._moves = 0
 
     def __repr__(self):
         return f'{self.__class__.__name__}(width={self.width!r}, height={self.height!r})'
@@ -91,6 +97,25 @@ class Board:
         if not filled:
             self._turn = not self._turn
 
+    def legal_moves(self):
+        """Generate all possible legal moves the current player can make"""
+        def iterate(lines, index):
+            for y, row in enumerate(lines):
+                for x, space in enumerate(row):
+                    if space is not None:
+                        continue
+
+                    start = [x, y]
+                    end = start[:]
+                    end[index] += 1
+
+                    start, end = _i_to_xy(*start), _i_to_xy(*end)
+                    yield start + end
+                    yield end + start
+
+        yield from iterate(self._horizontal, 0)
+        yield from iterate(self._vertical, 1)
+
     def move(self, move):
         """Parse a move, and update accordingly.
 
@@ -101,6 +126,7 @@ class Board:
         p1 = _xy_to_i(move[:2])
         p2 = _xy_to_i(move[2:4])
         self._make_line(p1, p2)
+        self._moves += 1
 
     def is_finished(self):
         """Return True if all possible lines have been made, i.e when
@@ -152,6 +178,9 @@ class Board:
     def height(self):
         return len(self._vertical)
 
+    @property
+    def moves(self):
+        return self._moves
 
 
 # Board that uses PIL for image. If you just want to copy the board, Ignore this.
@@ -323,16 +352,28 @@ class DotsAndBoxesSession:
         else:
             return True
 
+    def _instructions(self):
+        if self._board.moves >= 2:
+            return ''
+
+        moves = random.sample(list(self._board.legal_moves()), 5)
+        move_examples = ', '.join(f'`{m}`' for m in moves)
+        return f'**Instructions**\nType two points to form a line\nExamples: {move_examples}\n\n'
+
     async def _update_display(self):
+        board = self._board
+
         if self._status is Status.END:
-            winner = self._board.winner()
+            winner = board.winner()
             user = None if winner is None else self._players[winner]
         else:
             user = self.current
 
         if self._status is Status.PLAYING:
-            your_turn = f'{_EMOJIS[self._board.turn]} Your turn, {user}\n'
+            instructions = self._instructions()
+            your_turn = f'{_EMOJIS[board.turn]} Your turn, {user}\n'
         else:
+            instructions = ''
             your_turn = ''
 
         if user:
@@ -340,11 +381,10 @@ class DotsAndBoxesSession:
         else:
             header = "It's a tie!"
 
+        scores = ' | '.join(f'{_EMOJIS[turn]} {score}' for turn, score in board.scoreboard())
         self._display.set_author(name=header)
-        self._display.description = your_turn + ' | '.join(
-            f'{_EMOJIS[turn]} {score}' for turn, score in self._board.scoreboard()
-        )
-        file = await self._board.image_file(async_=True)
+        self._display.description = instructions + your_turn + scores
+        file = await board.image_file(async_=True)
         self._image = discord.File(file, 'dots-and-boxes.png')
 
     async def _loop(self):
