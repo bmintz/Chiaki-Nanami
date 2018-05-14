@@ -162,7 +162,7 @@ class Chiaki(commands.Bot):
 
         try:
             with open('data/command_image_urls.json') as f:
-                self.command_image_urls = __import__('json').load(f)
+                self.command_image_urls = json.load(f)
         except FileNotFoundError:
             self.command_image_urls = {}
 
