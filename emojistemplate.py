@@ -83,3 +83,8 @@ c4_winning_tiles = [
 sudoku_clues = [
     f'{n}\u20e3' for n in range(1, 9)
 ]
+
+# ------- Checkers -------
+
+checkers_black_king = '\N{HEAVY BLACK HEART}'
+checkers_white_king = '\N{BLUE HEART}'
