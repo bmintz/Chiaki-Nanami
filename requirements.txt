@@ -1,8 +1,8 @@
-git+https://github.com/carpedm20/emoji.git
 git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py[voice]
 
 asyncpg
 colorthief
+emoji>=0.5            # fixes multi-code emojis having spaces
 lru_dict
 more-itertools>=3.2,<4.0
 parsedatetime
