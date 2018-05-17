@@ -160,6 +160,18 @@ class ServerPages(BaseReactionPaginator):
     def guild(self):
         return self.context.guild
 
+    def _guild_icon(self):
+        features = self.guild.features
+        # XXX: These are emojis and it's unknown if these would be
+        #      still valid down the line.
+        if 'VERIFIED' in features:  # verified
+            return 'https://cdn.discordapp.com/emojis/444763961351602188.png?v=1'
+
+        if len(features) >= 3:      # partnered
+            return 'https://cdn.discordapp.com/emojis/314068430556758017.png?v=1'
+
+        return discord.Embed.Empty
+
     @page('\N{INFORMATION SOURCE}')
     async def default(self):
         server = self.guild
@@ -203,7 +215,7 @@ class ServerPages(BaseReactionPaginator):
         )
 
         embed = (discord.Embed(description=description, timestamp=server.created_at)
-                 .set_author(name=server.name)
+                 .set_author(name=server.name, icon_url=self._guild_icon())
                  .set_footer(text='Created')
                  )
 
