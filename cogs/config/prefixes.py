@@ -5,6 +5,8 @@ import string
 from discord.ext import commands
 from itertools import starmap
 
+from ..utils.formats import escape_markdown
+
 
 _prefixes = list(set(string.punctuation) - {'@', '#'})
 
@@ -70,6 +72,17 @@ class Prefixes:
         await ctx.bot.set_guild_prefixes(ctx.guild, prefixes)
         await ctx.send(f"Successfully added prefix \"{prefix}\"!")
 
+    @prefix.command(name='set', ignore_extra=False)
+    @commands.has_permissions(manage_guild=True)
+    async def set_prefix(self, ctx, prefix: Prefix):
+        """Sets the server's prefix.
+
+        If you want to have spaces in your prefix, use quotes.
+        e.g `{prefix}prefix set "Chiaki is best "`
+        """
+        await ctx.bot.set_guild_prefixes(ctx.guild, [prefix])
+        await ctx.send(f"Done. {escape_markdown(prefix)} is the new prefix now.")
+
     @prefix.command(name='remove', ignore_extra=False)
     @commands.has_permissions(manage_guild=True)
     async def remove_prefix(self, ctx, prefix: RemovablePrefix):
@@ -91,6 +104,7 @@ class Prefixes:
 
     @add_prefix.error
     @remove_prefix.error
+    @set_prefix.error
     async def prefix_error(self, ctx, error):
         if isinstance(error, commands.TooManyArguments):
             await ctx.send("Nya~~! Too many! Go slower or put it in quotes!")
