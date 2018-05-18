@@ -3,20 +3,17 @@ import asyncpg
 import discord
 import functools
 import io
-import os
 import random
 import secrets
 import time
 
 from collections import namedtuple
-from contextlib import suppress
-from datetime import datetime
 from discord.ext import commands
 from PIL import Image
 
 from ..utils.examples import wrap_example
 from ..utils.paginator import ListPaginator
-from ..utils.misc import emoji_url, load_async
+from ..utils.misc import emoji_url
 
 
 __schema__ = """
