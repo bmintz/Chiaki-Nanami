@@ -7,7 +7,10 @@
         },
         {
             "question" : "The **second** highest score of all time goes to Bela, who mains what tank?",
-            "answer" : "Penta-shot"
+            "answer" : [
+                "Penta-shot",
+                "Penta"
+            ]
         },
         {
             "question" : "Contrary to popular belief, people from MG **do not** always use what tank?",
@@ -51,7 +54,10 @@
         },
         {
             "question" : "What was Anokuu's **former** main tank?",
-            "answer" : "Necromancer"
+            "answer" : [
+                "Necromancer",
+                "Necro"
+            ]
             
         },
         {
@@ -66,7 +72,10 @@
         },
         {
             "question" : "What tank was merged with another?",
-            "answer" : "X-hunter and Predator"
+            "answer" : [
+                "X-hunter and Predator",
+                "Predator and X-hunter"
+            ]
             
         },
         {
@@ -121,7 +130,10 @@
         },
         {
             "question" : "From what two tanks can you upgrade to streamliner?",
-            "answer" : "Gunner and Hunter"         
+            "answer" : [
+                "Gunner and Hunter",
+                "Hunter and Gunner"
+            ]
         },
         {
             "question" : "Pressing F2 does...?",
@@ -140,7 +152,10 @@
         },
         {
             "question" : "When the Trapper branch was first released, which two tanks were unnamed?",
-            "answer" : "Gunner Trapper and Overtrapper"
+            "answer" : [
+                "Gunner Trapper and Overtrapper",
+                "Overtrapper and Gunner Trapper"
+            ]
             
         },
         {
@@ -160,7 +175,10 @@
         },
         {
             "question" : "Which two companies supply the servers for diep.io?",
-            "answer" : "Vultr and Linode"
+            "answer" : [
+                "Vultr and Linode",
+                "Linode and Vultr"
+            ]
         },
         {
             "question" : "Who started the RDT \"clan\"?",
@@ -209,7 +227,10 @@
         },
         {
             "question" : "There are two classes that have a two class gap between it and its previous upgrade. Name those tanks.",
-            "answer" : "Smasher and Sprayer"
+            "answer" : [
+                "Smasher and Sprayer",
+                "Sprayer and Smasher"
+            ]
             
         },
         {
@@ -249,7 +270,10 @@
         },
         {
             "question" : "Name one thing that Overlord was unable to do when it was first added.",
-            "answer" : "Repel Drones"
+            "answer" : [
+                "Repel Drones",
+                "Repel"
+            ]
             
         },
         {
@@ -264,7 +288,10 @@
         },
         {
             "question" : "Name the only tank that was achievable at lv60.",
-            "answer" : "Octo Tank"
+            "answer" : [
+                "Octo Tank",
+                "Octo"
+            ]
             
         },
         {
@@ -295,7 +322,10 @@
         },
         {
             "question" : "How were the tank upgrades arranged originally?",
-            "answer" : "Vertically"
+            "answer" : [
+                "Vertically",
+                "Vertical"
+            ]
             
         },
         {
@@ -325,7 +355,10 @@
         },
         {
             "question" : "What tank has the most barrels?",
-            "answer" : "Spread Shot"
+            "answer" : [
+                "Spread Shot",
+                "Spread"
+            ]
             
         },
         {

@@ -15,6 +15,7 @@ from html import unescape
 import aiohttp
 import discord
 from discord.ext import commands
+from more_itertools import always_iterable
 from PIL import Image
 
 from ..utils import cache
@@ -364,6 +365,10 @@ class DefaultTriviaSession(BaseTriviaSession):
 
 class _FuzzyMatchCheck:
     """Mixin for trivia sessions that rely on typing the answer"""
+    @staticmethod
+    def _check_answer(message, answer):
+        return message.lower() == answer.lower()
+
     def _check(self, message):
         if message.channel != self._ctx.channel:
             return False
@@ -374,7 +379,7 @@ class _FuzzyMatchCheck:
             return False
 
         self._answer_waiter.set()
-        return message.content.lower() == self._current_question.answer.lower()
+        return self._check_answer(message.content, self._current_question.answer)
 
 
 # ------------------ Diep.io --------------------
@@ -411,6 +416,25 @@ class DiepioTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
                  )
 
         await self._ctx.send(embed=embed)
+
+    def _answer_embed(self, user):
+        # Let us pray for the day that we can remove diep.io trivia...
+        # always_iterable is a tuple <4.0, but for easy support we should use this.
+        answer = next(iter(always_iterable(self._current_question.answer)))
+        score = self._score_board[user.id]
+        action = 'wins the game' if score >= POINTS_TO_WIN else 'got it'
+        description = f'The answer was **{answer}**.'
+
+        return (discord.Embed(colour=0x00FF00, description=description)
+                .set_author(name=f'{user} {action}!')
+                .set_thumbnail(url=user.avatar_url)
+                .set_footer(text=f'{user} now has {score} points.')
+                )
+
+    @staticmethod
+    def _check_answer(message, answer):
+        lowered = message.lower()
+        return any(lowered == a.lower() for a in always_iterable(answer))
 
 
 # ------------------ Pokemon --------------------
