@@ -3,7 +3,6 @@ import asyncpg
 import discord
 import functools
 import io
-import itertools
 import os
 import random
 import secrets
@@ -13,7 +12,6 @@ from collections import namedtuple
 from contextlib import suppress
 from datetime import datetime
 from discord.ext import commands
-from more_itertools import always_iterable
 from PIL import Image
 
 from ..utils.examples import wrap_example
@@ -188,8 +186,6 @@ TEN_SEC_REACTION = '\N{BLACK SQUARE FOR STOP}'
 class OtherStuffs:
     def __init__(self, bot):
         self.bot = bot
-        self.default_time = datetime.utcnow()
-        self.bot.loop.create_task(self._load())
 
         self._mask = open('data/images/heart.png', 'rb')
         self._future = asyncio.ensure_future(_change_ship_seed())
@@ -197,12 +193,6 @@ class OtherStuffs:
     def __unload(self):
         self._mask.close()
         self._future.cancel()
-
-    async def _load(self):
-        global _special_pairs
-
-        with suppress(FileNotFoundError):
-            _special_pairs = await load_async(os.path.join('data', 'pairings.json'))
 
     # -------------------- SHIP -------------------
     async def _load_user_avatar(self, user):
