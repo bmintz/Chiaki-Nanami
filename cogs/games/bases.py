@@ -149,13 +149,22 @@ class TwoPlayerGameCog:
             await ctx.send(message)
 
     def _create_invite(self, ctx, member):
-        action = 'invited you to' if member else 'created'
-        title = f'{ctx.author} has {action} a game of {self.__class__.name}!'
-        description = (
-            f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join and play!\n'
-            'This will expire in 5 minutes.'
-        )
+        if member:
+            action = 'invited you to'
+            description = (
+                '**Do you accept?**\n'
+                f'Yes: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} join``\n'
+                f'No: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} decline``\n'
+                'You have 5 minutes.'
+            )
+        else:
+            action = 'created'
+            description = (
+                f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join in!\n'
+                'This will expire in 5 minutes.'
+            )
 
+        title = f'{ctx.author} has {action} a game of {self.__class__.name}!'
         return (discord.Embed(colour=0x00FF00, description=description)
                 .set_author(name=title)
                 .set_thumbnail(url=ctx.author.avatar_url)
