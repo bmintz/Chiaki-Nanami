@@ -374,8 +374,7 @@ class _FuzzyMatchCheck:
             return False
 
         self._answer_waiter.set()
-        sm = SequenceMatcher(None, message.content.lower(), self._current_question.answer.lower())
-        return sm.ratio() >= .85
+        return message.content.lower() == self._current_question.answer.lower()
 
 
 # ------------------ Diep.io --------------------
