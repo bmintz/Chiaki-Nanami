@@ -6,13 +6,6 @@
             "answer" : "yes"
         },
         {
-            "question" : "The **second** highest score of all time goes to Bela, who mains what tank?",
-            "answer" : [
-                "Penta-shot",
-                "Penta"
-            ]
-        },
-        {
             "question" : "Contrary to popular belief, people from MG **do not** always use what tank?",
             "answer" : "Booster"
             
@@ -25,11 +18,6 @@
         {
             "question" : "Gabidou99's favourite class is...?",
             "answer" : "hybrid"
-            
-        },
-        {
-            "question" : "What name does MIkusaba give to the Destroyer?",
-            "answer" : "Junko Enoshima"
             
         },
         {
@@ -202,7 +190,7 @@
         },
         {
             "question" : "The FFA button shares its colour with what stat?",
-            "answer" : "regen"
+            "answer" : "movement speed"
             
         },
         {
@@ -241,11 +229,6 @@
         {
             "question" : "If you press 'K' in Sandbox, what color does your name become?",
             "answer" : "yellow"
-            
-        },
-        {
-            "question" : "What is the first tank-alias alphabetically for the ->wr command?",
-            "answer" : "adasba"
             
         },
         {
@@ -341,11 +324,6 @@
         {
             "question" : "What colour is a contested Dominator?",
             "answer" : "yellow"
-            
-        },
-        {
-            "question" : "In sandbox, what class comes **after** Mothership?",
-            "answer" : "Manager"
             
         },
         {
