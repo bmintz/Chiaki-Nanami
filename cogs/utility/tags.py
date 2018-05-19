@@ -37,17 +37,17 @@ class MemberTagPaginator(ListPaginator):
         super().__init__(*args, **kwargs)
         self.member = member
 
-    def _create_embed(self, idx, page):
+    def create_embed(self, page):
         header = f'Tags made by {self.member.display_name}'
-        return (super()._create_embed(idx, page)
+        return (super().create_embed(page)
                        .set_author(name=header, icon_url=self.member.avatar_url)
                 )
 
 
 class ServerTagPaginator(ListPaginator):
-    def _create_embed(self, idx, page):
+    def create_embed(self, page):
         guild = self.context.guild
-        embed = super()._create_embed(idx, page).set_author(name=f'Tags in {guild}')
+        embed = super().create_embed(page).set_author(name=f'Tags in {guild}')
         if guild.icon:
             return embed.set_author(name=embed.author.name, icon_url=guild.icon_url)
         return embed

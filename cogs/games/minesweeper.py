@@ -350,7 +350,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         desc = 'The goal is to clear the board without hitting a mine.'
         instructions = 'Click one of the reactions below'
 
-        return (discord.Embed(colour=self.colour, description=desc)
+        return (discord.Embed(colour=self._bot.colour, description=desc)
                 .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
                 .add_field(name=instructions, value=self.reaction_help)
                 )
@@ -373,7 +373,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
 
         Examples: {board.examples(scheme.x, scheme.y)}
         ''')
-        return (discord.Embed(colour=self.colour, description=text)
+        return (discord.Embed(colour=self._bot.colour, description=text)
                 .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
                 .add_field(name='In-game Reactions', value=self._game._controller.reaction_help)
                 )
@@ -398,21 +398,21 @@ class _MinesweeperHelp(BaseReactionPaginator):
             + self._possible_spaces()
         )
 
-        return (discord.Embed(colour=self.colour, description=description)
+        return (discord.Embed(colour=self._bot.colour, description=description)
                 .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
                 )
 
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Exit"""
-        await self._game.edit(self.colour, header=self._game._header)
+        await self._game.edit(self._bot.colour, header=self._game._header)
         self._stopped = True
         return super().stop()
 
     async def interact(self, *args, **kwargs):
         await super().interact(*args, **kwargs)
         if not self._stopped:
-            await self._game.edit(self.colour, header=self._game._header)
+            await self._game.edit(self._bot.colour, header=self._game._header)
 
 
 class _Controller(BaseReactionPaginator):
@@ -691,7 +691,7 @@ class _Leaderboard(BaseReactionPaginator):
         # decorator can't handle descriptors properly yet
         @page(emoji)
         async def get_fastest_times(self):
-            embed = (discord.Embed(colour=self.colour, title=f'Minesweeper - {difficulty}')
+            embed = (discord.Embed(colour=self._bot.colour, title=f'Minesweeper - {difficulty}')
                      .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)
                      )
 

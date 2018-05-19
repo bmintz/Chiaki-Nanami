@@ -283,9 +283,9 @@ class ChannelPaginator(ListPaginator):
             for entries in sliced(channels, 10)
         ]
 
-        super().__init__(ctx, entries, lines_per_page=1)
+        super().__init__(ctx, entries, per_page=1)
 
-    def _create_embed(self, idx, page):
+    def create_embed(self, page):
         category, channels = page[0]
 
         header = f'Channels in category {category}' if category else "Channels with no category..."
@@ -294,7 +294,7 @@ class ChannelPaginator(ListPaginator):
 
         return (discord.Embed(description=description, colour=self.colour)
                 .set_author(name=header)
-                .set_footer(text=f'Page {idx + 1}/{len(self)} | Category ID: {category_id}')
+                .set_footer(text=f'Page {self._index + 1}/{len(self._pages)} | Category ID: {category_id}')
                 )
 
 embedded = functools.partial(commands.bot_has_permissions, embed_links=True)

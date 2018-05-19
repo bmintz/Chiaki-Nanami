@@ -154,7 +154,7 @@ class Meta:
             for change in changes.splitlines()
         )
 
-        pages = ListPaginator(ctx, lines, title='Latest Changes', lines_per_page=10)
+        pages = ListPaginator(ctx, lines, title='Latest Changes', per_page=10)
         await pages.interact()
 
 

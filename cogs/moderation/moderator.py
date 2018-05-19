@@ -390,7 +390,7 @@ class Moderator:
         entries = zip(names, values)
 
         title = f'The {formats.pluralize(**{"newest members": len(members)})}'
-        pages = EmbedFieldPages(ctx, entries, lines_per_page=5, colour=0x00FF00, title=title)
+        pages = EmbedFieldPages(ctx, entries, per_page=5, colour=0x00FF00, title=title)
         await pages.interact()
 
     @commands.command(aliases=['clr'])

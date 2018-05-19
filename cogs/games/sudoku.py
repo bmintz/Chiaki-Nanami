@@ -452,7 +452,7 @@ class Controller(BaseReactionPaginator):
             if not await self._confirm_save():
                 d = self.display
                 d.description = str(self._game._board)
-                d.colour = self.colour
+                d.colour = self._bot.colour
                 return d
 
             await self._game.save()
@@ -464,7 +464,7 @@ class Controller(BaseReactionPaginator):
     @page('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Quit"""
-        super().stop()
+        await super().stop()
 
         if not self._future.done():
             self._future.cancel()

@@ -9,8 +9,9 @@ from datetime import datetime
 from ..utils.converter import BotCommand, Category
 from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
+from ..utils.help import CogPages, GeneralHelpPaginator, HelpCommandPage
 from ..utils.misc import emoji_url
-from ..utils.paginator import CogPages, GeneralHelpPaginator, HelpCommandPage, ListPaginator
+from ..utils.paginator import ListPaginator
 
 
 CHIAKI_TIP_EPOCH = datetime(2017, 8, 24)
@@ -42,14 +43,13 @@ def _positive_index_example(ctx):
 
 class TipPaginator(ListPaginator):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.per_page = 1
+        super().__init__(*args, per_page=1, **kwargs)
 
-    def _create_embed(self, idx, page):
+    def create_embed(self, page):
         # page returns a tuple (because it returns a slice of entries)
         p = page[0]
         return (discord.Embed(colour=self.colour, description=p['description'])
-                .set_author(name=f"#{idx + 1}: {p['title']}", icon_url=TIP_EMOJI)
+                .set_author(name=f"#{self._index + 1}: {p['title']}", icon_url=TIP_EMOJI)
                 )
 
 

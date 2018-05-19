@@ -560,7 +560,7 @@ class Permissions:
         if not entries:
             return await ctx.send("I'm not ignoring anything here...")
 
-        pages = ListPaginator(ctx, entries, title=f"Currently ignoring...", lines_per_page=20)
+        pages = ListPaginator(ctx, entries, title=f"Currently ignoring...", per_page=20)
         await pages.interact()
 
 

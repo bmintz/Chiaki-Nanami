@@ -113,7 +113,7 @@ class Reminder:
 
         pages = EmbedFieldPages(
             ctx, entries(),
-            lines_per_page=5, title=f'Reminders for {ctx.author}', inline=False
+            per_page=5, title=f'Reminders for {ctx.author}', inline=False
         )
 
         await pages.interact()
