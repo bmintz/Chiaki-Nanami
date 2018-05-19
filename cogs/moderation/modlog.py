@@ -523,8 +523,8 @@ class ModLog:
 
         # Solving some weird nasty edge cases first
         if num is None:
-            cases = await _get_number_of_cases(ctx.db, ctx.guild.id)
-            if not cases:
+            num = await _get_number_of_cases(ctx.db, ctx.guild.id)
+            if not num:
                 return await ctx.send('There are no cases here.')
 
         if num == 0:
