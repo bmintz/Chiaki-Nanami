@@ -239,7 +239,6 @@ class ModLog:
         time = time or datetime.utcnow()
         action = _mod_actions[action]
 
-        avatar_url = targets[0].avatar_url if len(targets) == 1 else MASSBAN_THUMBNAIL
         bot_avatar = self.bot.user.avatar_url
 
         if extra is None:
@@ -252,14 +251,22 @@ class ModLog:
         action_field = f'{action.repr.title()}{duration_string} by {mod}'
         reason = reason or 'No reason. Please enter one.'
 
-        return (discord.Embed(color=action.colour, timestamp=time)
-                .set_author(name=f"Case #{number}", icon_url=emoji_url(action.emoji))
-                .set_thumbnail(url=avatar_url)
-                .add_field(name=f'User{"s" * (len(targets) != 1)}', value=', '.join(map(str, targets)))
-                .add_field(name="Action", value=action_field, inline=False)
-                .add_field(name="Reason", value=reason, inline=False)
-                .set_footer(text=f'ID: {mod.id}', icon_url=bot_avatar)
-                )
+        embed = (discord.Embed(color=action.colour, timestamp=time)
+                 .set_author(name=f"Case #{number}", icon_url=emoji_url(action.emoji))
+                 .add_field(name=f'User{"s" * (len(targets) != 1)}', value=', '.join(map(str, targets)))
+                 .add_field(name="Action", value=action_field, inline=False)
+                 .add_field(name="Reason", value=reason, inline=False)
+                 .set_footer(text=f'ID: {mod.id}', icon_url=bot_avatar)
+                 )
+
+        if len(targets) == 1:
+            avatar_url = getattr(targets[0], 'avatar_url', None)
+        else:
+            avatar_url = MASSBAN_THUMBNAIL
+
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
+        return embed
 
     async def _insert_case(self, guild_id, targets, query, args, connection=None):
         connection = connection or self.bot.pool
