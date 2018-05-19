@@ -44,7 +44,7 @@ def _mee6_next_level(xp):
 
 
 _role_create = discord.AuditLogAction.role_create
-@cache.cache(maxsize=None)
+@cache.cache(maxsize=None, make_key=lambda a, kw: a[-1].id)
 async def _role_creator(role):
     """Returns the user who created the role.
 
@@ -56,19 +56,19 @@ async def _role_creator(role):
     # Integration roles don't have an audit-log entry when they're created.
     if role.managed:
         assert len(role.members) == 1, f"{role} is an integration role but somehow isn't a bot role"
-        return role.members[0]
+        return role.members[0].id
 
     # @everyone role, created when the server was created.
     # This doesn't account for transferring ownership but for all intents and
     # purposes this should be good enough.
     if role.is_default():
-        return role.guild.owner
+        return role.guild.owner.id
 
     delta = datetime.datetime.utcnow() - role.created_at
     # Audit log entries are deleted after 90 days, so we can guarantee that
     # there is no user to be found here.
     if delta.days >= 90:
-        return None
+        return "None -- role is too old."
 
     try:
         entry = await role.guild.audit_logs(action=_role_create).get(target=role)
@@ -77,8 +77,8 @@ async def _role_creator(role):
 
     # Just in case.
     if entry is None:
-        return entry
-    return entry.user
+        return "None -- role is too old."
+    return entry.user.id
 
 
 _status_colors = {
@@ -526,7 +526,8 @@ class Information:
         nice_created_at = nice_time(role.created_at)
         description = f"Just chilling as {server}'s {str_position} role"
         footer = f"Created at: {nice_created_at} | ID: {role.id}"
-        creator = await _role_creator(role) or "None -- role is too old."
+        c_id = await _role_creator(role)
+        creator = ctx.bot.get_user(c_id) or c_id
 
         # I think there's a way to make a solid color thumbnail, idk though
         role_embed = (discord.Embed(title=role.name, colour=role.colour, description=description)
