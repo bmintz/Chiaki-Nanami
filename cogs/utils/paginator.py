@@ -31,6 +31,20 @@ paginated = functools.partial(
 _validate_context = paginated()(lambda: 0).__commands_checks__[0]
 
 
+class _TriggerCooldown(commands.CooldownMapping):
+    def __init__(self):
+        super().__init__(commands.Cooldown(rate=5, per=2, type=commands.BucketType.user))
+
+    def _bucket_key(self, tup):
+        return tup
+
+    def is_rate_limited(self, message_id, user_id):
+        bucket = self.get_bucket((message_id, user_id))
+        return bucket.update_rate_limit() is not None
+
+_trigger_cooldown = _TriggerCooldown()
+
+
 class InteractiveSession:
     """Base class for all interactive sessions.
 
@@ -139,6 +153,7 @@ class InteractiveSession:
                 reaction.message.id == message.id
                 and user.id in self._users
                 and self.check(reaction, user)
+                and not _trigger_cooldown.is_rate_limited(message.id, user.id)
             ):
                 # We must prepend the whole lot as we want to remove the reaction
                 # *after* the callback was executed
