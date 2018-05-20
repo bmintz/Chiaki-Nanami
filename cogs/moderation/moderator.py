@@ -186,6 +186,11 @@ def warn_punishment(arg):
 def _warn_punishment_example(ctx):
     return random.choice(_warn_punishments)
 
+num_warns = functools.partial(int)
+@wrap_example(num_warns)
+def _num_warns_example(_):
+    return random.randint(3, 5)
+
 
 # TODO:
 # - implement anti-raid protocol
@@ -558,7 +563,7 @@ class Moderator:
 
     @commands.command(name='warnpunish')
     @commands.has_permissions(manage_messages=True, manage_guild=True)
-    async def warn_punish(self, ctx, num: int, punishment: warn_punishment, duration: time.Delta = 0):
+    async def warn_punish(self, ctx, num: num_warns, punishment: warn_punishment, duration: time.Delta = 0):
         """Sets the punishment a user receives upon exceeding a given warn limit.
 
         Valid punishments are:
