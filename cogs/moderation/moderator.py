@@ -171,20 +171,40 @@ class Reason(commands.Converter):
 
 
 _warn_punishments = ['mute', 'kick', 'softban', 'tempban', 'ban']
+_punishment_needs_duration = {'mute', 'tempban'}.__contains__
 _is_valid_punishment = frozenset(_warn_punishments).__contains__
 
 def warn_punishment(arg):
-    lowered = arg.lower()
-    if not _is_valid_punishment(arg):
+    # I guess we could use partition here but meh muh quotes
+    view = commands.view.StringView(arg)
+    punishment = commands.view.quoted_word(view)
+    lowered = punishment.lower()
+
+    if not _is_valid_punishment(lowered):
         raise commands.BadArgument(
-            f'{arg} is not a valid punishment.\n'
+            f'{punishment} is not a valid punishment.\n'
             f'Valid punishments: {", ".join(_warn_punishments)}'
         )
-    return lowered
+
+    if not _punishment_needs_duration(lowered):
+        return lowered, None
+
+    view.skip_ws()
+    duration = commands.view.quoted_word(view)
+    if not duration:
+        raise commands.BadArgument(f'A duration is required for {punishment}...')
+
+    duration = time.Delta(duration)
+    return lowered, duration
 
 @wrap_example(warn_punishment)
 def _warn_punishment_example(ctx):
-    return random.choice(_warn_punishments)
+    punishment = random.choice(_warn_punishments)
+    if not _punishment_needs_duration(punishment):
+        return punishment
+
+    duration = time.Delta.random_example(ctx)
+    return f'{punishment} {duration}'
 
 num_warns = functools.partial(int)
 @wrap_example(num_warns)
@@ -563,7 +583,7 @@ class Moderator:
 
     @commands.command(name='warnpunish')
     @commands.has_permissions(manage_messages=True, manage_guild=True)
-    async def warn_punish(self, ctx, num: num_warns, punishment: warn_punishment, duration: time.Delta = 0):
+    async def warn_punish(self, ctx, num: num_warns, *, punishment: warn_punishment):
         """Sets the punishment a user receives upon exceeding a given warn limit.
 
         Valid punishments are:
@@ -573,12 +593,9 @@ class Moderator:
         `tempban` (requires a duration argument)
         `ban`
         """
-        if punishment in {'tempban', 'mute'}:
-            if not duration:
-                return await ctx.send(f'A duration is required for {punishment}...')
-            true_duration = duration.duration
-        else:
-            true_duration = 0
+        punishment, duration = punishment
+        true_duration = None if duration is None else duration.duration
+
 
         query = """INSERT INTO warn_punishments (guild_id, warns, type, duration)
                    VALUES ($1, $2, $3, $4)
