@@ -212,6 +212,10 @@ class Paginator(InteractiveSession):
         """Return True if there is only one page, False otherwise"""
         return len(self._pages) == 1
 
+    def small(self):
+        """Return True if there are five pages or less, False otherwise"""
+        return len(self._pages) <= 5
+
     async def start(self):
         await super().start()
         if self.single_page():
@@ -226,7 +230,12 @@ class Paginator(InteractiveSession):
         if self.single_page():
             return
 
-        await super().add_reactions()
+        fast_forwards = {'\U000023ed', '\U000023ee'}
+        small = self.small()
+
+        for emoji in self._reaction_map:
+            if not (small and emoji in fast_forwards):
+                await self._message.add_reaction(emoji)
 
     # Main methods
     def create_embed(self, page):
