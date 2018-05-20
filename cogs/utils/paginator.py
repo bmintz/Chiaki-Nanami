@@ -291,97 +291,95 @@ class Paginator(InteractiveSession):
         """Last page"""
         return self.page_at(len(self._pages) - 1)
 
+    # --------- Go-to page ------------
+
+    def _goto_embed(self):
+        ctx = self.context
+        description = (
+            f'Please enter a number from 1 to {len(self._pages)}.\n\n'
+            'To cancel, click \N{INPUT SYMBOL FOR NUMBERS} again.'
+        )
+        return (discord.Embed(colour=self.colour, description=description)
+                .set_author(name=f'What page do you want to go to, {ctx.author.display_name}?')
+                )
+
+    def _goto_parse_input(self, content):
+        try:
+            index = int(content)
+        except ValueError:
+            return None
+
+        return self.page_at(index - 1)
+
+    # XXX: This needs to be fully refactored for the reaction-less paginator
+    #      or possibly not used at all.
+    # XXX: This needs to use the user who actually added the reaction, NOT ctx.author
     @page('\N{INPUT SYMBOL FOR NUMBERS}')
     async def numbered(self):
         """Go to page"""
         ctx = self.context
-        channel = self._message.channel
-        create_task = asyncio.ensure_future
-        wait_for = ctx.bot.wait_for
-
-        to_delete = []
+        return_result = None
+        user_message = None
 
         def check(m):
-            return (m.channel.id == channel.id
-                    and m.author.id == ctx.author.id
-                    and m.content.isdigit()
-                    )
+            nonlocal return_result, user_message
+            if not (m.channel.id == self._channel.id and m.author.id == ctx.author.id):
+                return False
+
+            result = self._goto_parse_input(m.content)
+            if result is None:
+                return False
+
+            return_result = result
+            user_message = m
+            return True
 
         def remove_check(reaction, user):
             return (reaction.message.id == self._message.id
-                    and user.id == self.context.author.id
+                    and user.id == ctx.author.id
                     and reaction.emoji == '\N{INPUT SYMBOL FOR NUMBERS}')
 
-        description = f'Please enter a number from 1 to {len(self._pages)}.'
-
-        embed = (discord.Embed(colour=self.colour, description=description)
-                 .set_author(name=f'What page do you want to go to, {ctx.author.display_name}?')
-                 .set_footer(text=f'We were on page {self._index + 1}')
-                 )
-
-        # The three futures are such that so the user doesn't get "stuck" in the
+        # The two futures are such that so the user doesn't get "stuck" in the
         # number page. If they click on the number page by accident, then they
         # should have an easy way out.
         #
-        # Thus we have to wait for three events:
-        # 1. the reaction if the user really wants to go to a different page,
-        # 2. the removal of the numbered reaction if the user wants to go back,m
-        # 3. and the actual number of the page they want to go to
-        event_checks = [
-            ('message', check), ('reaction_add', self.check), ('reaction_remove', remove_check)
+        # Thus we have to wait for one of two things:
+        # 1. The actual number of the page they want to go to
+        # 2. The removal of the numbered reaction if the user wants to go back
+
+        to_wait = [
+            self._bot.wait_for('message', check=check),
+            self._bot.wait_for('reaction_remove', check=remove_check),
         ]
-        futures = [create_task(wait_for(ev, check=check)) for ev, check in event_checks]
-
-        def reset_future(fut):
-            idx = futures.index(fut)
-            ev, check = event_checks[idx]
-            futures[idx] = create_task(wait_for(ev, check=check))
-
-        go_back = f'To go back, click \N{INPUT SYMBOL FOR NUMBERS} again.\n'
 
         try:
-            while True:
-                embed.description += f'\n\n{go_back}'
-                await self._message.edit(embed=embed)
+            embed = self._goto_embed()
+            delete_always = await self._channel.send(embed=embed)
 
-                done, _ = await asyncio.wait(
-                    futures,
-                    timeout=60,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                if not done:
-                    # Effectively a timeout.
-                    return self._current
+            done, pending = await asyncio.wait(
+                to_wait,
+                timeout=60,
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            for fut in pending:
+                fut.cancel()
 
-                fut = done.pop()
-                result = fut.result()
+            if not done:
+                # Effectively a timeout.
+                return None
 
-                if not isinstance(result, discord.Message):
-                    # The user probably added or removed a reaction.
-                    react, _ = result
-                    if react.emoji == '\N{INPUT SYMBOL FOR NUMBERS}':
-                        # User exited, go back to where we left off.
-                        return self._current
-                    return None
-                else:
-                    # The user imputted a message, let's parse it normally.
-                    to_delete.append(result)
+            result = done.pop().result()
 
-                    result = int(result.content)
-                    page = self.page_at(result - 1)
-                    if page:
-                        return page
-                    else:
-                        reset_future(fut)
-                        embed.description = f"That's not between 1 and {len(self._pages)}..."
-                        embed.colour = 0xf44336
+            if isinstance(result, discord.Message):
+                return return_result
+            # The user probably removed a reaction.
+            return None
         finally:
-            with contextlib.suppress(Exception):
-                await channel.delete_messages(to_delete)
+            for m in [delete_always, user_message]:
+                with contextlib.suppress(Exception):
+                    await m.delete()
 
-            for f in futures:
-                if not f.done():
-                    f.cancel()
+    # ------------- End go-to page -----------
 
     @property
     def total(self):
