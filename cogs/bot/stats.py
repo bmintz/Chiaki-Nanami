@@ -13,7 +13,7 @@ from more_itertools import all_equal, ilen
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
-from ..utils.paginator import ListPaginator, EmbedFieldPages
+from ..utils.paginator import Paginator, EmbedFieldPages
 from ..utils.time import human_timedelta
 
 from core import errors
@@ -80,7 +80,7 @@ class Stats:
                  for i, (c, u) in enumerate(entries, 1))
 
         title = pluralize(command=n)
-        await ListPaginator(ctx, lines, title=f'Top {title}').interact()
+        await Paginator(ctx, lines, title=f'Top {title}').interact()
 
     @commands.group(name='topcommands', aliases=['topcmds'], invoke_without_command=True)
     async def top_commands(self, ctx, n=10):

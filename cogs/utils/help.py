@@ -15,7 +15,7 @@ from .commands import all_names, command_category, walk_parents
 from .deprecated import DeprecatedCommand
 from .examples import command_example
 from .misc import maybe_awaitable
-from .paginator import BaseReactionPaginator, Paginator, page
+from .paginator import InteractiveSession, Paginator, trigger
 
 
 def _unique(iterable):
@@ -91,7 +91,7 @@ SEE_EXAMPLE = f'For an example, click {_example_key}'
 EXAMPLE_HEADER = '**Example**'
 
 
-class HelpCommandPage(BaseReactionPaginator):
+class HelpCommandPage(InteractiveSession):
     def __init__(self, ctx, command, func=None):
         super().__init__(ctx)
         self.command = command
@@ -112,7 +112,7 @@ class HelpCommandPage(BaseReactionPaginator):
 
         self._reaction_map = self._reaction_maps[has_example, needs_see_also]
 
-    @page(_example_key)
+    @trigger(_example_key)
     async def show_example(self):
         self._toggle = toggle = not self._toggle
         current, func = self._current, self.func
@@ -132,7 +132,7 @@ class HelpCommandPage(BaseReactionPaginator):
                 swap_fields(-1)
         return current
 
-    @page(_see_also_key)
+    @trigger(_see_also_key)
     def show_subcommands(self, embed=None):
         embed = embed or self._current
         command, func = self.command, self.func
@@ -272,7 +272,7 @@ def _get_category_commands(bot, category):
     return {c for c in bot.all_commands.values() if command_category(c, 'other') == category}
 
 class CogPages(Paginator):
-    numbered = None
+    goto = None
 
     # Don't feel like doing an async def __init__ and hacking through that.
     # We have to make this async because we need to make the entries in one go.
@@ -372,20 +372,20 @@ class GeneralHelpPaginator(Paginator):
 
     # These methods are overridden because docstrings are annoying
 
-    @page('\N{BLACK LEFT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}')
     def previous(self):
         """Back"""
         return super().previous() or (self.instructions() if self._index == 0 else None)
 
-    @page('\N{BLACK RIGHT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}')
     def next(self):
         """Next"""
         return super().next()
 
-    @page('\N{INPUT SYMBOL FOR NUMBERS}')
-    async def numbered(self):
+    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
+    async def goto(self):
         """Goto"""
-        return await maybe_awaitable(super().numbered)
+        return await maybe_awaitable(super().goto)
 
     # End of this overriding silliness
 
@@ -431,7 +431,7 @@ class GeneralHelpPaginator(Paginator):
 
     default = instructions
 
-    @page('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Exit"""
         await super().stop()

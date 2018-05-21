@@ -11,7 +11,7 @@ from ..utils import cache, formats, disambiguate
 from ..utils.commands import command_category, walk_parents
 from ..utils.converter import BotCommand, Category
 from ..utils.misc import emoji_url, truncate, unique
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 
 
 __schema__ = """
@@ -560,7 +560,7 @@ class Permissions:
         if not entries:
             return await ctx.send("I'm not ignoring anything here...")
 
-        pages = ListPaginator(ctx, entries, title=f"Currently ignoring...", per_page=20)
+        pages = Paginator(ctx, entries, title=f"Currently ignoring...", per_page=20)
         await pages.interact()
 
 

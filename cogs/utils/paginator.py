@@ -19,7 +19,6 @@ def trigger(emoji):
         return func
     return decorator
 
-page = trigger  # backwards compat
 
 paginated = functools.partial(
     commands.bot_has_permissions,
@@ -202,8 +201,6 @@ class InteractiveSession:
         return '\n'.join(itertools.starmap('{0} => {1.__doc__}'.format, self._reaction_map.items()))
 
 
-BaseReactionPaginator = InteractiveSession  # backwards compat
-
 # ------------- Paginator --------------
 
 class Paginator(InteractiveSession):
@@ -314,8 +311,8 @@ class Paginator(InteractiveSession):
     # XXX: This needs to be fully refactored for the reaction-less paginator
     #      or possibly not used at all.
     # XXX: This needs to use the user who actually added the reaction, NOT ctx.author
-    @page('\N{INPUT SYMBOL FOR NUMBERS}')
-    async def numbered(self):
+    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
+    async def goto(self):
         """Go to page"""
         ctx = self.context
         return_result = None
@@ -386,13 +383,10 @@ class Paginator(InteractiveSession):
         """Return the total number of entries in the list"""
         return sum(map(len, self._pages))
 
-ListPaginator = Paginator  # also backwards compat
-
-
 # -------------- Field Pages ----------------------
 
-class EmbedFieldPages(ListPaginator):
-    """Similar to ListPaginator, but uses the fields instead of the description"""
+class EmbedFieldPages(Paginator):
+    """Similar to Paginator, but uses the fields instead of the description"""
     def __init__(self, context, entries, *, inline=True, **kwargs):
         super().__init__(context, entries, **kwargs)
 

@@ -18,7 +18,7 @@ from more_itertools import chunked, tail
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url, REGIONAL_INDICATORS
-from ..utils.paginator import BaseReactionPaginator, page
+from ..utils.paginator import InteractiveSession, trigger
 from ..utils.time import duration_units
 
 
@@ -337,14 +337,14 @@ class _LockedMessage:
             await self._message.edit(**kwargs)
 
 
-class _MinesweeperHelp(BaseReactionPaginator):
+class _MinesweeperHelp(InteractiveSession):
     def __init__(self, ctx, game):
         super().__init__(ctx)
         self._game = game
         # Needed to distinguish between being stopped and letting the time run out.
         self._stopped = False
 
-    @page('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}')
     def default(self):
         """Reactions"""
         desc = 'The goal is to clear the board without hitting a mine.'
@@ -355,7 +355,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
                 .add_field(name=instructions, value=self.reaction_help)
                 )
 
-    @page('\N{VIDEO GAME}')
+    @trigger('\N{VIDEO GAME}')
     def controls(self):
         """Controls"""
         board = self._game._board
@@ -390,7 +390,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
         \u200b
         ''')
 
-    @page('\N{COLLISION SYMBOL}')
+    @trigger('\N{COLLISION SYMBOL}')
     def possible_spaces(self):
         """Tiles"""
         description = (
@@ -402,7 +402,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
                 .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
                 )
 
-    @page('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Exit"""
         await self._game.edit(self._bot.colour, header=self._game._header)
@@ -415,7 +415,7 @@ class _MinesweeperHelp(BaseReactionPaginator):
             await self._game.edit(self._bot.colour, header=self._game._header)
 
 
-class _Controller(BaseReactionPaginator):
+class _Controller(InteractiveSession):
     def __init__(self, ctx, game):
         super().__init__(ctx)
         self._game = game
@@ -426,7 +426,7 @@ class _Controller(BaseReactionPaginator):
     def can_poll(self):
         return self._help_future.done()
 
-    @page('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}')
     async def help_page(self):
         """Help"""
         if self._help_future.done():
@@ -436,7 +436,7 @@ class _Controller(BaseReactionPaginator):
                 timeout=300, release_connection=False
             ))
 
-    @page('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}')
     def stop(self):
         """Quit"""
         # In case the user has the help page open when canceling it
@@ -684,12 +684,12 @@ class MinesweeperSession:
                 done.pop().exception()  # suppress unused task warning
 
 
-class _Leaderboard(BaseReactionPaginator):
+class _Leaderboard(InteractiveSession):
     # XXX: Should I cache this?
     def _make_page_method(emoji, difficulty):
         # Can't use partialmethod because it's a descriptor, and my page
         # decorator can't handle descriptors properly yet
-        @page(emoji)
+        @trigger(emoji)
         async def get_fastest_times(self):
             embed = (discord.Embed(colour=self._bot.colour, title=f'Minesweeper - {difficulty}')
                      .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)

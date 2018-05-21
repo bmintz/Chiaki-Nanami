@@ -21,7 +21,7 @@ from ..utils.converter import union
 from ..utils.examples import wrap_example
 from ..utils.formats import *
 from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
-from ..utils.paginator import BaseReactionPaginator, ListPaginator, page
+from ..utils.paginator import InteractiveSession, Paginator, trigger
 
 
 async def _mee6_stats(session, member):
@@ -138,7 +138,7 @@ _STATUS_NAMES = {
     'bot_tag': 'Bots',
 }
 
-class ServerPages(BaseReactionPaginator):
+class ServerPages(InteractiveSession):
     async def server_color(self):
         try:
             result = self._colour
@@ -172,7 +172,7 @@ class ServerPages(BaseReactionPaginator):
 
         return discord.Embed.Empty
 
-    @page('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}')
     async def default(self):
         server = self.guild
         owner = server.owner
@@ -225,7 +225,7 @@ class ServerPages(BaseReactionPaginator):
             embed.colour = await self.server_color()
         return embed
 
-    @page('\N{CAMERA}')
+    @trigger('\N{CAMERA}')
     async def icon(self):
         server = self.guild
         icon = (discord.Embed(title=f"{server}'s icon")
@@ -241,7 +241,7 @@ class ServerPages(BaseReactionPaginator):
 
         return icon
 
-    @page('\N{THINKING FACE}')
+    @trigger('\N{THINKING FACE}')
     async def emojis(self):
         guild = self.guild
         emojis = guild.emojis
@@ -261,7 +261,7 @@ def _parse_channel(channel, prefix, predicate):
     return f'**{formatted}**' if predicate(channel) else formatted
 
 
-class ChannelPaginator(ListPaginator):
+class ChannelPaginator(Paginator):
     def __init__(self, ctx):
         permissions_in = ctx.author.permissions_in
 
@@ -620,7 +620,7 @@ class Information:
         # TODO: Status
         hierarchy = sorted(ctx.guild.members, key=attrgetter("top_role", "joined_at"), reverse=True)
         members = tuple(map(str, hierarchy))
-        pages = ListPaginator(ctx, members, title=f'Members in {ctx.guild} ({len(members)})')
+        pages = Paginator(ctx, members, title=f'Members in {ctx.guild} ({len(members)})')
         await pages.interact()
 
     @commands.command()
@@ -640,7 +640,7 @@ class Information:
         author_roles = ctx.author.roles
         get_name = functools.partial(bold_name, predicate=lambda r: r in author_roles)
         hierarchy = [f"`{len(role.members) :<{padding}}\u200b` {get_name(role)}" for role in roles]
-        pages = ListPaginator(ctx, hierarchy, title=f'Roles in {ctx.guild} ({len(hierarchy)})')
+        pages = Paginator(ctx, hierarchy, title=f'Roles in {ctx.guild} ({len(hierarchy)})')
         await pages.interact()
 
     @commands.command()
@@ -651,7 +651,7 @@ class Information:
             return await ctx.send("This server doesn't have any custom emojis. :'(")
 
         emojis = map('{0} = {0.name} ({0.id})'.format, ctx.guild.emojis)
-        pages = ListPaginator(ctx, emojis, title=f'Emojis in {ctx.guild}')
+        pages = Paginator(ctx, emojis, title=f'Emojis in {ctx.guild}')
         await pages.interact()
 
 
@@ -675,7 +675,7 @@ class Information:
         else:
             entries = ('There are no members :(', )
 
-        pages = ListPaginator(ctx, entries, colour=average_color, title=truncated_title)
+        pages = Paginator(ctx, entries, colour=average_color, title=truncated_title)
         await pages.interact()
 
     @commands.command()
@@ -729,7 +729,7 @@ class Information:
         get_name = functools.partial(bold_name, predicate=lambda r: r in author_roles)
         entries = map(get_name, roles)
 
-        pages = ListPaginator(ctx, entries, title=title)
+        pages = Paginator(ctx, entries, title=title)
         await pages.interact()
 
     @staticmethod

@@ -9,7 +9,7 @@ from discord.ext import commands
 from ..utils.converter import BotCommand
 from ..utils.formats import truncate
 from ..utils.subprocesses import run_subprocess
-from ..utils.paginator import ListPaginator, paginated
+from ..utils.paginator import Paginator, paginated
 
 
 class Meta:
@@ -154,7 +154,7 @@ class Meta:
             for change in changes.splitlines()
         )
 
-        pages = ListPaginator(ctx, lines, title='Latest Changes', per_page=10)
+        pages = Paginator(ctx, lines, title='Latest Changes', per_page=10)
         await pages.interact()
 
 

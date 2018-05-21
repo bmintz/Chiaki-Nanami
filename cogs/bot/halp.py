@@ -11,7 +11,7 @@ from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
 from ..utils.help import CogPages, GeneralHelpPaginator, HelpCommandPage
 from ..utils.misc import emoji_url
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 
 
 CHIAKI_TIP_EPOCH = datetime(2017, 8, 24)
@@ -41,7 +41,7 @@ def _positive_index_example(ctx):
     return random.randint(1, len(ctx.bot.get_cog('Help').tips_list))
 
 
-class TipPaginator(ListPaginator):
+class TipPaginator(Paginator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, per_page=1, **kwargs)
 

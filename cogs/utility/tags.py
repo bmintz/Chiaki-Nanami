@@ -6,7 +6,7 @@ import logging
 from discord.ext import commands
 
 from ..utils.examples import _get_static_example
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 from ..utils import formats
 
 
@@ -32,7 +32,7 @@ class TagError(commands.UserInputError):
     pass
 
 
-class MemberTagPaginator(ListPaginator):
+class MemberTagPaginator(Paginator):
     def __init__(self, *args, member, **kwargs):
         super().__init__(*args, **kwargs)
         self.member = member
@@ -44,7 +44,7 @@ class MemberTagPaginator(ListPaginator):
                 )
 
 
-class ServerTagPaginator(ListPaginator):
+class ServerTagPaginator(Paginator):
     def create_embed(self, page):
         guild = self.context.guild
         embed = super().create_embed(page).set_author(name=f'Tags in {guild}')
@@ -272,7 +272,7 @@ class Tags:
             ['No results found... :(']
         )
 
-        pages = ListPaginator(ctx, entries, title=f'Tags relating to {name}')
+        pages = Paginator(ctx, entries, title=f'Tags relating to {name}')
         await pages.interact()
 
     # XXX: too much repetition...

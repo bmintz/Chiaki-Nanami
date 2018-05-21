@@ -12,7 +12,7 @@ from discord.ext import commands
 from PIL import Image
 
 from ..utils.examples import wrap_example
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 from ..utils.misc import emoji_url
 
 
@@ -384,7 +384,7 @@ class OtherStuffs:
                 for user_id, partner_id, score in records
             )
 
-        paginator = ListPaginator(ctx, entries, title='Special pairings <3')
+        paginator = Paginator(ctx, entries, title='Special pairings <3')
         await paginator.interact()
 
     @commands.command(name='10s')

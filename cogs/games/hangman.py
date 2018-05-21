@@ -15,7 +15,7 @@ from .manager import SessionManager
 
 from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 
 
 # I hate string concatentation
@@ -244,7 +244,7 @@ class Hangman:
     @hangman.command(name='categories')
     async def hangman_categories(self, ctx):
         """Lists all the possible categories for Hangman."""
-        embeds = ListPaginator(
+        embeds = Paginator(
             ctx,
             sorted(self.categories),
             title=f'List of Categories for {ctx.guild}',

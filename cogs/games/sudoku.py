@@ -11,7 +11,7 @@ from discord.ext import commands
 from more_itertools import flatten, grouper, sliced
 
 from .manager import SessionManager
-from ..utils.paginator import BaseReactionPaginator, page
+from ..utils.paginator import InteractiveSession, trigger
 from ..utils.misc import emoji_url
 
 __schema__ = """
@@ -276,7 +276,7 @@ ON_HELP = 1
 ON_SAVE = 2
 
 
-class Controller(BaseReactionPaginator):
+class Controller(InteractiveSession):
     def __init__(self, ctx, game):
         super().__init__(ctx)
         self._game = game
@@ -311,7 +311,7 @@ class Controller(BaseReactionPaginator):
 
         self._future = asyncio.ensure_future(wait())
 
-    @page('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
+    @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
     def restart(self):
         """Restart"""
         if not self.in_game():
@@ -322,7 +322,7 @@ class Controller(BaseReactionPaginator):
         self.display.description = str(board)
         return self.display
 
-    @page('\N{WHITE HEAVY CHECK MARK}')
+    @trigger('\N{WHITE HEAVY CHECK MARK}')
     def validate(self):
         """Check"""
         if not self.in_game():
@@ -346,7 +346,7 @@ class Controller(BaseReactionPaginator):
 
         return self.display
 
-    @page('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}')
     def info(self):
         """Help"""
         self._state = ON_HELP
@@ -382,7 +382,7 @@ class Controller(BaseReactionPaginator):
                 .add_field(name='Buttons', value=self.reaction_help, inline=False)
                 )
 
-    @page('\N{INPUT SYMBOL FOR NUMBERS}')
+    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
     def resume(self):
         """Resume game"""
         if self.in_game():
@@ -437,7 +437,7 @@ class Controller(BaseReactionPaginator):
 
         return await self._confirm('A save game already exists. Overwrite it?', timeout=25)
 
-    @page('\N{FLOPPY DISK}')
+    @trigger('\N{FLOPPY DISK}')
     async def save(self):
         """Save game"""
         if not self.in_game():
@@ -461,7 +461,7 @@ class Controller(BaseReactionPaginator):
         finally:
             self._state = IN_GAME
 
-    @page('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}')
     async def stop(self):
         """Quit"""
         await super().stop()

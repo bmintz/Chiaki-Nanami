@@ -4,7 +4,7 @@ from discord.ext import commands
 from itertools import starmap
 
 from ..utils.examples import _get_static_example
-from ..utils.paginator import ListPaginator
+from ..utils.paginator import Paginator
 
 
 __schema__ = """
@@ -104,7 +104,7 @@ class Aliases:
                    ORDER BY alias;
                 """
         entries = starmap('`{0}` => `{1}`'.format, await ctx.db.fetch(query, ctx.guild.id))
-        pages = ListPaginator(ctx, entries)
+        pages = Paginator(ctx, entries)
         await pages.interact()
 
     async def _get_alias(self, guild_id, content, *, connection=None):

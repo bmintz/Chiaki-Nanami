@@ -17,7 +17,7 @@ from ..utils.converter import union
 from ..utils.examples import get_example, static_example, wrap_example
 from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
-from ..utils.paginator import ListPaginator, EmbedFieldPages
+from ..utils.paginator import Paginator, EmbedFieldPages
 
 from core import errors
 
@@ -622,7 +622,7 @@ class Moderator:
             for warns, type, duration in punishments
         )
 
-        pages = ListPaginator(ctx, entries, title=f'Punishments for {ctx.guild}')
+        pages = Paginator(ctx, entries, title=f'Punishments for {ctx.guild}')
         await pages.interact()
 
     @commands.command(name='warntimeout')
