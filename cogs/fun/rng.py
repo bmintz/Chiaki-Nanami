@@ -375,11 +375,11 @@ class RNG(Cog):
     @random.command()
     async def maze(self, ctx, w: int=5, h: int=5):
         """Generates a random maze"""
+        if (w * 3 + 1) * (h * 2 + 1) + (h * 2) > 2000:
+            return await ctx.send(f"The maze you've generated (**{w}** by **{h}**) is too large.")
+
         maze = '\n'.join(_make_maze(w, h))
-        try:
-            await ctx.send(f"```\n{maze}```")
-        except discord.HTTPException:
-            await ctx.send(f"The maze you've generated (**{w}** by **{h}**) is too large")
+        await ctx.send(f"```\n{maze}```")
 
 
 def setup(bot):
