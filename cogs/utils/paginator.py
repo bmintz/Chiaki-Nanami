@@ -12,10 +12,15 @@ from .misc import maybe_awaitable
 from .queue import SimpleQueue
 
 
-def trigger(emoji):
-    """Add a function that will be called with a certain reaction"""
+def trigger(emoji, *, block=False):
+    """Add a function that will be called with a certain reaction.
+
+    If block is True, reactions will be ignored for the duration of the
+    execution.
+    """
     def decorator(func):
         func.__reaction_emoji__ = emoji
+        func.__reaction_blocking__ = block
         return func
     return decorator
 
@@ -72,6 +77,7 @@ class InteractiveSession:
         self._channel = ctx.channel
         self._users = {ctx.author.id}
         self._message = None
+        self._blocking = False
 
         # XXX: Remove self._current
         self._current = None
@@ -83,6 +89,7 @@ class InteractiveSession:
     def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
+        cls._reaction_blocks = blocks = {}
 
         # Can't use inspect.getmembers for two reasons:
         # 1. It sorts the members lexographically, which is not what
@@ -98,9 +105,11 @@ class InteractiveSession:
 
             # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
             callbacks[emoji] = getattr(cls, name)
+            blocks[emoji] = member.__reaction_blocking__
 
         if stop_emoji is not None and stop_emoji not in callbacks:
             callbacks[stop_emoji] = cls.stop
+            blocks[stop_emoji] = False
 
     def check(self, reaction, _):
         """Extra checks for reactions"""
@@ -149,11 +158,13 @@ class InteractiveSession:
 
         async def on_reaction_add(reaction, user):
             if (
-                reaction.message.id == message.id
+                not self._blocking
+                and reaction.message.id == message.id
                 and user.id in self._users
                 and self.check(reaction, user)
                 and not _trigger_cooldown.is_rate_limited(message.id, user.id)
             ):
+                self._blocking = self._reaction_blocks[reaction.emoji]
                 # We must prepend the whole lot as we want to remove the reaction
                 # *after* the callback was executed
                 await self._queue.put((self._reaction_map[reaction.emoji], reaction.emoji, user))
@@ -176,6 +187,8 @@ class InteractiveSession:
 
                 with contextlib.suppress(discord.HTTPException):
                     await message.remove_reaction(emoji, user)
+
+                self._blocking = False
 
                 if result is None:
                     continue
@@ -311,7 +324,7 @@ class Paginator(InteractiveSession):
     # XXX: This needs to be fully refactored for the reaction-less paginator
     #      or possibly not used at all.
     # XXX: This needs to use the user who actually added the reaction, NOT ctx.author
-    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
+    @trigger('\N{INPUT SYMBOL FOR NUMBERS}', block=True)
     async def goto(self):
         """Go to page"""
         ctx = self.context

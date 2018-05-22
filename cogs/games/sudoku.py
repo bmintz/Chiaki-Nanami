@@ -461,7 +461,7 @@ class Controller(InteractiveSession):
         finally:
             self._state = IN_GAME
 
-    @trigger('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}', block=True)
     async def stop(self):
         """Quit"""
         await super().stop()
