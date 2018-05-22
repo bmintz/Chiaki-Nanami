@@ -537,7 +537,18 @@ async def _help(ctx, command=None, func=lambda s: s):
 def help_command(func=lambda s: s, **kwargs):
     """Create a help command with a given transformation function."""
 
-    @commands.command(help=func("Shows this message and stuff"), **kwargs)
     async def command(_, ctx, *, command: _HelpCommand=None):
         await _help(ctx, command, func=func)
-    return command
+
+    # command.module would be set to *here*. This is bad because the category
+    # utilizes the module itself, and that means that the category would be
+    # "utils" rather than what we really want. We could use some sort of proxy
+    # descriptor to avoid doing framehacks but this is the simplest way.
+    try:
+        module = sys._getframe(1).f_globals.get('__name__', '__main__')
+    except (AttributeError, ValueError):
+        pass
+
+    if module is not None:
+        command.__module__ = module
+    return commands.command(help=func("Shows this message and stuff"), **kwargs)(command)
