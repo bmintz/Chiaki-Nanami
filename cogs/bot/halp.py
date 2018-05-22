@@ -1,4 +1,3 @@
-import copy
 import discord
 import json
 import random
@@ -6,10 +5,10 @@ import random
 from discord.ext import commands
 from datetime import datetime
 
-from ..utils.converter import BotCommand, Category
+from ..utils.converter import Category
 from ..utils.examples import wrap_example
 from ..utils.formats import multi_replace
-from ..utils.help import CogPages, GeneralHelpPaginator, HelpCommandPage
+from ..utils.help import CogPages, help_command
 from ..utils.misc import emoji_url
 from ..utils.paginator import Paginator
 
@@ -53,75 +52,6 @@ class TipPaginator(Paginator):
                 )
 
 
-class HelpCommand(BotCommand):
-    _choices = [
-        'Help yourself.',
-        'https://cdn.discordapp.com/attachments/329401961688596481/366323237526831135/retro.jpg',
-        'Just remember the mitochondria is the powerhouse of the cell! \U0001f605',
-        'Save me!',
-    ]
-
-    async def convert(self, ctx, arg):
-        try:
-            return await super().convert(ctx, arg)
-        except commands.BadArgument:
-            if arg.lower() != 'me':
-                raise
-            raise commands.BadArgument(random.choice(self._choices))
-
-
-async def _dm_send_fail(ctx, error):
-    old_send = ctx.send
-
-    async def new_send(content, **kwargs):
-        content += ' You can also turn on DMs if you wish.'
-        await old_send(content, **kwargs)
-
-    ctx.send = new_send
-    await ctx.bot_missing_perms(error.missing_perms)
-
-
-async def _maybe_dm_help(ctx, paginator, error):
-    # We need to create a copy of the context object so that we can
-    # keep an old copy if a logger or something wants to use it.
-    new_ctx = copy.copy(ctx)
-    new_ctx.channel = await ctx.author.create_dm()
-    paginator.context = new_ctx
-
-    try:
-        await paginator.interact()
-    except discord.HTTPException:
-        # Avoid making another copy of the context if we don't need to.
-        new_ctx.channel = ctx.channel
-        await _dm_send_fail(new_ctx, error)
-
-
-async def default_help(ctx, command=None, func=lambda s: s):
-    if command is None:
-        paginator = await GeneralHelpPaginator.create(ctx)
-    else:
-        paginator = HelpCommandPage(ctx, command, func)
-
-    try:
-        await paginator.interact()
-    except commands.BotMissingPermissions as e:
-        # Don't DM the user if the bot can't send messages. We should
-        # err on the side of caution and assume the bot was muted for a
-        # good reason, and a DM wouldn't be a good idea in this case.
-        if ctx.me.permissions_in(ctx.channel).send_messages:
-            # We shouldn't let this error propagate, since the bot wouldn't
-            # be able to notify the user of missing perms anyways.
-            await _maybe_dm_help(ctx, paginator, e)
-
-
-def default_help_command(func=lambda s: s, **kwargs):
-    @commands.command(help=func("Shows this message and stuff"), **kwargs)
-    async def help_command(self, ctx, *, command: HelpCommand=None):
-        await default_help(ctx, command, func=func)
-    return help_command
-
-
-
 _bracket_repls = {
     '(': ')', ')': '(',
     '[': ']', ']': '[',
@@ -141,12 +71,12 @@ class Help:
         except FileNotFoundError:
             self.tips_list = []
 
-    help = default_help_command(name='help', aliases=['h'])
-    halp = default_help_command(str.upper, name='halp', aliases=['HALP'], hidden=True)
-    pleh = default_help_command((lambda s: multi_replace(s[::-1], _bracket_repls)), name='pleh', hidden=True)
-    pleh = default_help_command((lambda s: multi_replace(s[::-1].upper(), _bracket_repls)),
-                                name='plah', aliases=['PLAH'], hidden=True)
-    Halp = default_help_command(str.title, name='Halp', hidden=True)
+    help = help_command(name='help', aliases=['h'])
+    halp = help_command(str.upper, name='halp', aliases=['HALP'], hidden=True)
+    pleh = help_command((lambda s: multi_replace(s[::-1], _bracket_repls)), name='pleh', hidden=True)
+    pleh = help_command((lambda s: multi_replace(s[::-1].upper(), _bracket_repls)),
+                        name='plah', aliases=['PLAH'], hidden=True)
+    Halp = help_command(str.title, name='Halp', hidden=True)
 
     async def _invite_embed(self, ctx):        
         # TODO: Move this somewhere else as this is also duplicated in meta.py
