@@ -384,7 +384,7 @@ class GeneralHelpPaginator(Paginator):
         """Next"""
         return super().next()
 
-    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
+    @trigger('\N{INPUT SYMBOL FOR NUMBERS}', block=True)
     async def goto(self):
         """Goto"""
         return await maybe_awaitable(super().goto)
