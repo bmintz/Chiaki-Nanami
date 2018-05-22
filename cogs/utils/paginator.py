@@ -267,7 +267,7 @@ class Paginator(InteractiveSession):
         """Create an embed given a slice of entries"""
 
         return (discord.Embed(title=self.title, colour=self.colour, description='\n'.join(page))
-                .set_footer(text=f'Page: {self._index + 1} / {len(self._pages)} ({self.total} entries)')
+                .set_footer(text=f'Page: {self._index + 1} / {len(self._pages)} ({self.total} total)')
                 )
 
     def page_at(self, idx):
@@ -409,7 +409,7 @@ class EmbedFieldPages(Paginator):
 
     def create_embed(self, page):
         embed = (discord.Embed(title=self.title, colour=self.colour)
-                 .set_footer(text=f'Page: {self._index + 1} / {len(self._pages)} ({self.total} entries)')
+                 .set_footer(text=f'Page: {self._index + 1} / {len(self._pages)} ({self.total} total)')
                  )
 
         add_field = functools.partial(embed.add_field, inline=self.inline)
