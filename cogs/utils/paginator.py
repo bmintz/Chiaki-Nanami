@@ -50,6 +50,18 @@ class _TriggerCooldown(commands.CooldownMapping):
 _trigger_cooldown = _TriggerCooldown()
 
 
+class _Callback(collections.namedtuple('_Callback', 'func blocking')):
+    """Wrapper class to store both the resolved descriptor and blocking
+    attribute."""
+
+    __slots__ = ()
+
+    # InteractiveSession.reaction_help relies on the wrapped function's __doc__
+    @property
+    def __doc__(self):
+        return self.func.__doc__
+
+
 class InteractiveSession:
     """Base class for all interactive sessions.
 
@@ -90,7 +102,6 @@ class InteractiveSession:
     def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
-        cls._reaction_blocks = blocks = {}
 
         # Can't use inspect.getmembers for two reasons:
         # 1. It sorts the members lexographically, which is not what
@@ -105,12 +116,14 @@ class InteractiveSession:
                 continue
 
             # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
-            callbacks[trigger.emoji] = getattr(cls, name)
-            blocks[trigger.emoji] = trigger.blocking
+            resolved = getattr(cls, name)
+            callback = _Callback(resolved, trigger.blocking)
+
+            if trigger.emoji not in callbacks:
+                callbacks[trigger.emoji] = callback
 
         if stop_emoji is not None and stop_emoji not in callbacks:
-            callbacks[stop_emoji] = cls.stop
-            blocks[stop_emoji] = False
+            callbacks[stop_emoji] = _Callback(cls.stop, blocking=False)
 
     def check(self, reaction, _):
         """Extra checks for reactions"""
@@ -163,12 +176,12 @@ class InteractiveSession:
                 and reaction.message.id == message.id
                 and user.id in self._users
                 and self.check(reaction, user)
-                and not _trigger_cooldown.is_rate_limited(message.id, user.id)
+                and not _trigger_cooldown .is_rate_limited(message.id, user.id)
             ):
-                self._blocking = self._reaction_blocks[reaction.emoji]
+                callback, self._blocking = self._reaction_map[reaction.emoji]
                 # We must prepend the whole lot as we want to remove the reaction
                 # *after* the callback was executed
-                await self._queue.put((self._reaction_map[reaction.emoji], reaction.emoji, user))
+                await self._queue.put((callback, reaction.emoji, user))
 
         self._bot.add_listener(on_reaction_add)
         try:
