@@ -3,6 +3,7 @@ import collections
 import contextlib
 import functools
 import itertools
+import re
 
 import discord
 from discord.ext import commands
@@ -12,16 +13,19 @@ from .misc import maybe_awaitable
 from .queue import SimpleQueue
 
 
-_Trigger = collections.namedtuple('_Trigger', 'emoji blocking')
+_Trigger = collections.namedtuple('_Trigger', 'emoji pattern blocking')
 
-def trigger(emoji, *, block=False):
+def trigger(emoji, pattern=None, *, block=False):
     """Add a function that will be called with a certain reaction.
+
+    If pattern is a string, it will be used as a regex pattern for
+    messages to trigger that function.
 
     If block is True, reactions will be ignored for the duration of the
     execution.
     """
     def decorator(func):
-        func.__trigger__ = _Trigger(emoji=emoji, blocking=block)
+        func.__trigger__ = _Trigger(emoji=emoji, pattern=pattern, blocking=block)
         return func
     return decorator
 
@@ -99,9 +103,15 @@ class InteractiveSession:
         # spammed or if a callback unexpectedly takes a long time.
         self._queue = SimpleQueue()
 
-    def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', **kwargs):
+    def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', stop_pattern='exit', **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
+
+        # _message_callbacks is a list as opposed to a dict because we need
+        # to iterate through it to find a match, rather than looking it up in
+        # a table.
+        cls._message_callbacks = message_callbacks = []
+        seen_patterns = set()
 
         # Can't use inspect.getmembers for two reasons:
         # 1. It sorts the members lexographically, which is not what
@@ -122,8 +132,16 @@ class InteractiveSession:
             if trigger.emoji not in callbacks:
                 callbacks[trigger.emoji] = callback
 
+            pattern = trigger.pattern
+            if pattern and pattern not in seen_patterns:
+                seen_patterns.add(pattern)
+                message_callbacks.append((pattern, callback))
+
         if stop_emoji is not None and stop_emoji not in callbacks:
             callbacks[stop_emoji] = _Callback(cls.stop, blocking=False)
+
+        if stop_pattern and stop_pattern not in seen_patterns:
+            message_callbacks.append((stop_pattern, _Callback(cls.stop, blocking=False)))
 
     def check(self, reaction, _):
         """Extra checks for reactions"""
@@ -168,22 +186,46 @@ class InteractiveSession:
             raise RuntimeError('start() must set self._message')
 
         message = self._message
-        task = self._bot.loop.create_task(self.add_reactions())
+        task = None
 
-        async def on_reaction_add(reaction, user):
-            if (
-                not self._blocking
-                and reaction.message.id == message.id
-                and user.id in self._users
-                and self.check(reaction, user)
-                and not _trigger_cooldown .is_rate_limited(message.id, user.id)
-            ):
-                callback, self._blocking = self._reaction_map[reaction.emoji]
-                # We must prepend the whole lot as we want to remove the reaction
-                # *after* the callback was executed
-                await self._queue.put((callback, reaction.emoji, user))
+        # XXX: Can we accomplish without context???
+        if self._channel.permissions_for(self.context.me).add_reactions:
+            task = self._bot.loop.create_task(self.add_reactions())
 
-        self._bot.add_listener(on_reaction_add)
+            @self._bot.listen('on_reaction_add')
+            async def listener(reaction, user):
+                if (
+                    not self._blocking
+                    and reaction.message.id == message.id
+                    and user.id in self._users
+                    and self.check(reaction, user)
+                    and not _trigger_cooldown .is_rate_limited(message.id, user.id)
+                ):
+                    callback, self._blocking = self._reaction_map[reaction.emoji]
+                    cleanup = functools.partial(message.remove_reaction, reaction.emoji, user)
+                    await self._queue.put((callback, cleanup))
+        else:
+            @self._bot.listen('on_message')
+            async def listener(msg):
+                if (
+                    self._blocking
+                    or msg.channel != self._channel
+                    or msg.author.id not in self._users
+                ):
+                    return
+
+                patterns, callbacks = zip(*self._message_callbacks)
+                selectors = map(re.fullmatch, patterns, itertools.repeat(msg.content))
+                callback = next(itertools.compress(callbacks, selectors), None)
+                if callback is None:
+                    return
+
+                if _trigger_cooldown.is_rate_limited(message.id, msg.author.id):
+                    return
+
+                callback, self._blocking = callback
+                await self._queue.put((callback, msg.delete))
+
         try:
             while True:
                 # TODO: Would async_timeout be better here?
@@ -195,12 +237,12 @@ class InteractiveSession:
                 if job is None:
                     break
 
-                callback, emoji, user = job
+                callback, after = job
 
                 result = await maybe_awaitable(callback, self)
 
                 with contextlib.suppress(discord.HTTPException):
-                    await message.remove_reaction(emoji, user)
+                    await after()
 
                 self._blocking = False
 
@@ -214,8 +256,8 @@ class InteractiveSession:
                     break
 
         finally:
-            self._bot.remove_listener(on_reaction_add)
-            if not task.done():
+            self._bot.remove_listener(listener)
+            if not (task is None or task.done()):
                 task.cancel()
 
             consume(iter_except(self._queue.get_nowait, asyncio.QueueEmpty))
@@ -295,22 +337,22 @@ class Paginator(InteractiveSession):
         self._index = idx
         return self.create_embed(self._pages[idx])
 
-    @trigger('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
+    @trigger('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', r'\<\<')
     def default(self):
         """First page"""
         return self.page_at(0)
 
-    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}', r'\<')
     def previous(self):
         """Previous page"""
         return self.page_at(self._index - 1)
 
-    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}', r'\>')
     def next(self):
         """Next page"""
         return self.page_at(self._index + 1)
 
-    @trigger('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}')
+    @trigger('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', r'\>\>')
     def last(self):
         """Last page"""
         return self.page_at(len(self._pages) - 1)
