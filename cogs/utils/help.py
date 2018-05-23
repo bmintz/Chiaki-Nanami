@@ -374,12 +374,12 @@ class GeneralHelpPaginator(Paginator):
 
     # These methods are overridden because docstrings are annoying
 
-    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}', fallback=r'\<')
     def previous(self):
         """Back"""
         return super().previous() or (self.instructions() if self._index == 0 else None)
 
-    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}')
+    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}', fallback=r'\>')
     def next(self):
         """Next"""
         return super().next()
@@ -413,11 +413,22 @@ class GeneralHelpPaginator(Paginator):
         print(lines)
 
         # create the compacted controls field
-        emoji_docs = ((emoji, func.__doc__) for emoji, func in self._reaction_map.items())
-        controls = '\n'.join(
-            f'{p1[0]} `{p1[1]}` | `{p2[1]}` {p2[0]}'
-            for p1, p2 in chunked(emoji_docs, 2)
-        )
+
+        # XXX: Should probably make a method for this.
+        if self._channel.permissions_for(self.context.me).add_reactions:
+            docs = ((emoji, func.__doc__) for emoji, func in self._reaction_map.items())
+            controls = '\n'.join(
+                f'{p1[0]} `{p1[1]}` | `{p2[1]}` {p2[0]}'
+                for p1, p2 in chunked(docs, 2)
+            )
+            footer_text = 'Click one of the reactions below <3'
+        else:
+            controls = '\n'.join(
+                # "f-string expression cannot include a backslash"
+                f'`' + pattern.replace('\\', '') + f'` = `{func.__doc__}`'
+                for pattern, func in self._message_fallbacks
+            )
+            footer_text = 'Type one of these below <3'
 
         description = (
             f'For help on a command, type `{ctx.clean_prefix}help command`.\n'
@@ -428,12 +439,12 @@ class GeneralHelpPaginator(Paginator):
                 .set_author(name='Chiaki Nanami Help', icon_url=bot.user.avatar_url)
                 .add_field(name='Categories', value='\n'.join(lines), inline=False)
                 .add_field(name='Controls', value=controls, inline=False)
-                .set_footer(text='Click one of the reactions below <3')
+                .set_footer(text=footer_text)
                 )
 
     default = instructions
 
-    @trigger('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}', fallback='exit')
     async def stop(self):
         """Exit"""
         await super().stop()
