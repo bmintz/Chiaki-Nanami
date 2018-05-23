@@ -13,27 +13,32 @@ from .misc import maybe_awaitable
 from .queue import SimpleQueue
 
 
-_Trigger = collections.namedtuple('_Trigger', 'emoji pattern blocking')
+_Trigger = collections.namedtuple('_Trigger', 'emoji pattern blocking fallback')
 
-def trigger(emoji, pattern=None, *, block=False):
+
+def trigger(emoji, pattern=None, *, block=False, fallback=None):
     """Add a function that will be called with a certain reaction.
 
     If pattern is a string, it will be used as a regex pattern for
     messages to trigger that function.
 
+    If fallback is a string, it will be used as a regex pattern like
+    pattern. However, it will only be used if the bot can't add
+    reactions.
+
     If block is True, reactions will be ignored for the duration of the
     execution.
     """
     def decorator(func):
-        func.__trigger__ = _Trigger(emoji=emoji, pattern=pattern, blocking=block)
+        func.__trigger__ = _Trigger(emoji=emoji, pattern=pattern, blocking=block, fallback=fallback)
         return func
     return decorator
+
 
 
 paginated = functools.partial(
     commands.bot_has_permissions,
     embed_links=True,
-    add_reactions=True,
 )
 
 # Extract the predicate from the check...
@@ -103,14 +108,14 @@ class InteractiveSession:
         # spammed or if a callback unexpectedly takes a long time.
         self._queue = SimpleQueue()
 
-    def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', stop_pattern='exit', **kwargs):
+    def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', stop_pattern=None, stop_fallback='exit', **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
 
-        # _message_callbacks is a list as opposed to a dict because we need
-        # to iterate through it to find a match, rather than looking it up in
-        # a table.
+        # These are lists as opposed to dicts because we need to iterate 
+        # through it to find a match, rather than looking it up in a table.
         cls._message_callbacks = message_callbacks = []
+        cls._message_fallbacks = message_fallbacks = []
         seen_patterns = set()
 
         def trigger_iterator():
@@ -129,18 +134,22 @@ class InteractiveSession:
                 # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
                 resolved = getattr(cls, name)
                 callback = _Callback(resolved, trigger.blocking)
-                yield trigger.emoji, trigger.pattern, callback
+                yield trigger.emoji, trigger.pattern, trigger.fallback, callback
 
             if None not in (stop_emoji, stop_pattern):
-                yield stop_emoji, stop_pattern, _Callback(cls.stop, False)
+                yield stop_emoji, stop_pattern, stop_fallback, _Callback(cls.stop, False)
 
-        for emoji, pattern, callback in trigger_iterator():
+        for emoji, pattern, fallback, callback in trigger_iterator():
             if emoji not in callbacks:
                 callbacks[emoji] = callback
 
             if pattern and pattern not in seen_patterns:
                 seen_patterns.add(pattern)
                 message_callbacks.append((pattern, callback))
+
+            if fallback and fallback not in seen_patterns:
+                seen_patterns.add(fallback)
+                message_fallbacks.append((fallback, callback))
 
     def check(self, reaction, _):
         """Extra checks for reactions"""
@@ -185,14 +194,20 @@ class InteractiveSession:
             raise RuntimeError('start() must set self._message')
 
         message = self._message
+        triggers = self._message_callbacks.copy()
         task = None
+        listeners = []
+
+        def listen(func):
+            listeners.append(func)
+            return self._bot.listen()(func)
 
         # XXX: Can we accomplish without context???
         if self._channel.permissions_for(self.context.me).add_reactions:
             task = self._bot.loop.create_task(self.add_reactions())
 
-            @self._bot.listen('on_reaction_add')
-            async def listener(reaction, user):
+            @listen
+            async def on_reaction_add(reaction, user):
                 if (
                     not self._blocking
                     and reaction.message.id == message.id
@@ -204,8 +219,11 @@ class InteractiveSession:
                     cleanup = functools.partial(message.remove_reaction, reaction.emoji, user)
                     await self._queue.put((callback, cleanup))
         else:
-            @self._bot.listen('on_message')
-            async def listener(msg):
+            triggers.extend(self._message_fallbacks)
+
+        if triggers:
+            @listen
+            async def on_message(msg):
                 if (
                     self._blocking
                     or msg.channel != self._channel
@@ -213,7 +231,7 @@ class InteractiveSession:
                 ):
                     return
 
-                patterns, callbacks = zip(*self._message_callbacks)
+                patterns, callbacks = zip(*triggers)
                 selectors = map(re.fullmatch, patterns, itertools.repeat(msg.content))
                 callback = next(itertools.compress(callbacks, selectors), None)
                 if callback is None:
@@ -255,7 +273,9 @@ class InteractiveSession:
                     break
 
         finally:
-            self._bot.remove_listener(listener)
+            for listener in listeners:
+                self._bot.remove_listener(listener)
+
             if not (task is None or task.done()):
                 task.cancel()
 
@@ -336,22 +356,22 @@ class Paginator(InteractiveSession):
         self._index = idx
         return self.create_embed(self._pages[idx])
 
-    @trigger('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', r'\<\<')
+    @trigger('\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', fallback=r'\<\<')
     def default(self):
         """First page"""
         return self.page_at(0)
 
-    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}', r'\<')
+    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}',  fallback=r'\<')
     def previous(self):
         """Previous page"""
         return self.page_at(self._index - 1)
 
-    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}', r'\>')
+    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}',  fallback=r'\>')
     def next(self):
         """Next page"""
         return self.page_at(self._index + 1)
 
-    @trigger('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', r'\>\>')
+    @trigger('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}', fallback=r'\>\>')
     def last(self):
         """Last page"""
         return self.page_at(len(self._pages) - 1)
