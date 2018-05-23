@@ -113,35 +113,34 @@ class InteractiveSession:
         cls._message_callbacks = message_callbacks = []
         seen_patterns = set()
 
-        # Can't use inspect.getmembers for two reasons:
-        # 1. It sorts the members lexographically, which is not what
-        #    we want. We want them in definition order.
-        # 2. It resolves descriptors too early. This causes things like
-        #    x = page('emoji')(partialmethod(meth, ...)) to not be registered.
-        #
-        name_members = itertools.chain.from_iterable(b.__dict__.items() for b in cls.__mro__)
-        for name, member in unique_everseen(name_members, key=lambda p: p[0]):
-            trigger = getattr(member, '__trigger__', None)
-            if trigger is None:
-                continue
+        def trigger_iterator():
+            # Can't use inspect.getmembers for two reasons:
+            # 1. It sorts the members lexographically, which is not what
+            #    we want. We want them in definition order.
+            # 2. It resolves descriptors too early. This causes things like
+            #    x = page('emoji')(partialmethod(meth, ...)) to not be registered.
+            #
+            name_members = itertools.chain.from_iterable(b.__dict__.items() for b in cls.__mro__)
+            for name, member in unique_everseen(name_members, key=lambda p: p[0]):
+                trigger = getattr(member, '__trigger__', None)
+                if trigger is None:
+                    continue
 
-            # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
-            resolved = getattr(cls, name)
-            callback = _Callback(resolved, trigger.blocking)
+                # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
+                resolved = getattr(cls, name)
+                callback = _Callback(resolved, trigger.blocking)
+                yield trigger.emoji, trigger.pattern, callback
 
-            if trigger.emoji not in callbacks:
-                callbacks[trigger.emoji] = callback
+            if None not in (stop_emoji, stop_pattern):
+                yield stop_emoji, stop_pattern, _Callback(cls.stop, False)
 
-            pattern = trigger.pattern
+        for emoji, pattern, callback in trigger_iterator():
+            if emoji not in callbacks:
+                callbacks[emoji] = callback
+
             if pattern and pattern not in seen_patterns:
                 seen_patterns.add(pattern)
                 message_callbacks.append((pattern, callback))
-
-        if stop_emoji is not None and stop_emoji not in callbacks:
-            callbacks[stop_emoji] = _Callback(cls.stop, blocking=False)
-
-        if stop_pattern and stop_pattern not in seen_patterns:
-            message_callbacks.append((stop_pattern, _Callback(cls.stop, blocking=False)))
 
     def check(self, reaction, _):
         """Extra checks for reactions"""
