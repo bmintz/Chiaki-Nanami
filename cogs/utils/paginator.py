@@ -12,6 +12,8 @@ from .misc import maybe_awaitable
 from .queue import SimpleQueue
 
 
+_Trigger = collections.namedtuple('_Trigger', 'emoji blocking')
+
 def trigger(emoji, *, block=False):
     """Add a function that will be called with a certain reaction.
 
@@ -19,8 +21,7 @@ def trigger(emoji, *, block=False):
     execution.
     """
     def decorator(func):
-        func.__reaction_emoji__ = emoji
-        func.__reaction_blocking__ = block
+        func.__trigger__ = _Trigger(emoji=emoji, blocking=block)
         return func
     return decorator
 
@@ -99,13 +100,13 @@ class InteractiveSession:
         #
         name_members = itertools.chain.from_iterable(b.__dict__.items() for b in cls.__mro__)
         for name, member in unique_everseen(name_members, key=lambda p: p[0]):
-            emoji = getattr(member, '__reaction_emoji__', None)
-            if emoji is None or emoji in callbacks:
+            trigger = getattr(member, '__trigger__', None)
+            if trigger is None:
                 continue
 
             # Resolve any descriptors ahead of time so we can do _reaction_map[emoji](self)
-            callbacks[emoji] = getattr(cls, name)
-            blocks[emoji] = member.__reaction_blocking__
+            callbacks[trigger.emoji] = getattr(cls, name)
+            blocks[trigger.emoji] = trigger.blocking
 
         if stop_emoji is not None and stop_emoji not in callbacks:
             callbacks[stop_emoji] = cls.stop
