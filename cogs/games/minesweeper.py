@@ -44,8 +44,6 @@ class HitMine(Exception):
         x, y = self.point
         return f'You hit a mine on {ascii_uppercase[x]} {ascii_uppercase[y]}... ;-;'
 
-class BoardCancelled(Exception):
-    pass
 
 class AlreadyPlaying(commands.CheckFailure):
     pass
@@ -321,135 +319,6 @@ class CustomizableRowBoard(Board):
         )
 
 
-class _LockedMessage:
-    """Proxy message object to prevent concurrency issues when editing"""
-    __slots__ = ('_message', '_lock')
-
-    def __init__(self, message):
-        self._message = message
-        self._lock = asyncio.Lock()
-
-    def __getattr__(self, attr):
-        return getattr(self._message, attr)
-
-    async def edit(self, **kwargs):
-        async with self._lock:
-            await self._message.edit(**kwargs)
-
-
-class _MinesweeperHelp(InteractiveSession):
-    def __init__(self, ctx, game):
-        super().__init__(ctx)
-        self._game = game
-        # Needed to distinguish between being stopped and letting the time run out.
-        self._stopped = False
-
-    @trigger('\N{INFORMATION SOURCE}')
-    def default(self):
-        """Reactions"""
-        desc = 'The goal is to clear the board without hitting a mine.'
-        instructions = 'Click one of the reactions below'
-
-        return (discord.Embed(colour=self._bot.colour, description=desc)
-                .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
-                .add_field(name=instructions, value=self.reaction_help)
-                )
-
-    @trigger('\N{VIDEO GAME}')
-    def controls(self):
-        """Controls"""
-        board = self._game._board
-        scheme = self._game._control_scheme
-        text = textwrap.dedent(f'''
-        **Type in this format:**
-        ```
-        column row
-        ```
-        Use `{scheme.x_range(board.width)}` for the column
-        and `{scheme.y_range(board.height)}` for the row.
-        \u200b
-        To flag a tile, type `f` or `flag` after the row.
-        If you're unsure about a tile, type `u` or `unsure` after the row.
-
-        Examples: {board.examples(scheme.x, scheme.y)}
-        ''')
-        return (discord.Embed(colour=self._bot.colour, description=text)
-                .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
-                .add_field(name='In-game Reactions', value=self._game._controller.reaction_help)
-                )
-
-    @staticmethod
-    def _possible_spaces():
-        number = random.randint(1, 9)
-        return textwrap.dedent(f'''
-        \N{BLACK LARGE SQUARE} = Empty tile, reveals numbers or other empties around it.
-        {number}\u20e3 = Number of mines around it. This one has {pluralize(mine=number)}.
-        \N{COLLISION SYMBOL} = BOOM! Hitting a mine will instantly end the game.
-        \N{TRIANGULAR FLAG ON POST} = A flagged tile means it *might* be a mine.
-        \N{BLACK QUESTION MARK ORNAMENT} = It's either a mine or not. No one's sure.
-        \u200b
-        ''')
-
-    @trigger('\N{COLLISION SYMBOL}')
-    def possible_spaces(self):
-        """Tiles"""
-        description = (
-            'There are 5 types of tiles.\n'
-            + self._possible_spaces()
-        )
-
-        return (discord.Embed(colour=self._bot.colour, description=description)
-                .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
-                )
-
-    @trigger('\N{BLACK SQUARE FOR STOP}')
-    async def stop(self):
-        """Exit"""
-        await self._game.edit(self._bot.colour, header=self._game._header)
-        self._stopped = True
-        return super().stop()
-
-    async def interact(self, *args, **kwargs):
-        await super().interact(*args, **kwargs)
-        if not self._stopped:
-            await self._game.edit(self._bot.colour, header=self._game._header)
-
-
-class _Controller(InteractiveSession):
-    def __init__(self, ctx, game):
-        super().__init__(ctx)
-        self._game = game
-        self._help_future = ctx.bot.loop.create_future()
-        self._help_future.set_result(None)
-
-    # XXX: Should probably use an asyncio.Event
-    def can_poll(self):
-        return self._help_future.done()
-
-    @trigger('\N{INFORMATION SOURCE}')
-    async def help_page(self):
-        """Help"""
-        if self._help_future.done():
-            await self._game.edit(0x90A4AE, header='Currently on the help page...')
-            paginator = _MinesweeperHelp(self.context, self._game)
-            self._help_future = asyncio.ensure_future(paginator.interact(
-                timeout=300, release_connection=False
-            ))
-
-    @trigger('\N{BLACK SQUARE FOR STOP}')
-    def stop(self):
-        """Quit"""
-        # In case the user has the help page open when canceling it
-        # (this shouldn't technically happen but this is here just in case.)
-        if not self._help_future.done():
-            self._help_future.cancel()
-
-        return super().stop()
-
-    def default(self):
-        return self._game.display
-
-
 def _consecutive_groups(iterable, ordering=lambda x: x):
     # Copied from more-itertools
     #
@@ -507,18 +376,94 @@ CUSTOM_EMOJI_CONTROL_SCHEME = ControlScheme(
 )
 
 
-class MinesweeperSession:
-    def __init__(self, ctx, level, board):
-        self._board = board
-        self._ctx = ctx
-        self._header = f'Minesweeper - {level}'
-        self._controller = _Controller(ctx, self)
-        self._input = None
-        self._control_scheme = ctx.__msw_control_scheme__
+class _MinesweeperHelp(InteractiveSession):
+    def __init__(self, ctx, game):
+        super().__init__(ctx)
+        self._game = game
+        # Needed to distinguish between being stopped and letting the time run out.
+        self._stopped = False
 
-    @property
-    def display(self):
-        board, ctx = self._board, self._ctx
+    @trigger('\N{INFORMATION SOURCE}')
+    def default(self):
+        """Reactions"""
+        desc = 'The goal is to clear the board without hitting a mine.'
+        instructions = 'Click one of the reactions below'
+
+        return (discord.Embed(colour=self._bot.colour, description=desc)
+                .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
+                .add_field(name=instructions, value=self.reaction_help)
+                )
+
+    @trigger('\N{VIDEO GAME}')
+    def controls(self):
+        """Controls"""
+        board = self._game._board
+        scheme = self._game._control_scheme
+        text = textwrap.dedent(f'''
+        **Type in this format:**
+        ```
+        column row
+        ```
+        Use `{scheme.x_range(board.width)}` for the column
+        and `{scheme.y_range(board.height)}` for the row.
+        \u200b
+        To flag a tile, type `f` or `flag` after the row.
+        If you're unsure about a tile, type `u` or `unsure` after the row.
+
+        Examples: {board.examples(scheme.x, scheme.y)}
+        ''')
+        return (discord.Embed(colour=self._bot.colour, description=text)
+                .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
+                .add_field(name='In-game Reactions', value=self._game.reaction_help)
+                )
+
+    @staticmethod
+    def _possible_spaces():
+        number = random.randint(1, 9)
+        return textwrap.dedent(f'''
+        \N{BLACK LARGE SQUARE} = Empty tile, reveals numbers or other empties around it.
+        {number}\u20e3 = Number of mines around it. This one has {pluralize(mine=number)}.
+        \N{COLLISION SYMBOL} = BOOM! Hitting a mine will instantly end the game.
+        \N{TRIANGULAR FLAG ON POST} = A flagged tile means it *might* be a mine.
+        \N{BLACK QUESTION MARK ORNAMENT} = It's either a mine or not. No one's sure.
+        \u200b
+        ''')
+
+    @trigger('\N{COLLISION SYMBOL}')
+    def possible_spaces(self):
+        """Tiles"""
+        description = (
+            'There are 5 types of tiles.\n'
+            + self._possible_spaces()
+        )
+
+        return (discord.Embed(colour=self._bot.colour, description=description)
+                .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
+                )
+
+    @trigger('\N{BLACK SQUARE FOR STOP}')
+    async def stop(self):
+        """Exit"""
+        await self._game.edit(self._bot.colour, header=self._game._header)
+        self._stopped = True
+        return await super().stop()
+
+
+class _State(enum.Enum):
+    NORMAL, COMPLETED, STOPPED = range(3)
+
+class MinesweeperSession(InteractiveSession):
+    def __init__(self, ctx, level, board):
+        super().__init__(ctx)
+        self._board = board
+        self._control_scheme = ctx.__msw_control_scheme__
+        self._header = f'Minesweeper - {level}'
+        self._state = _State.NORMAL
+        self._help_future = None
+
+    # Overriding paginator stuffs...
+    def default(self):
+        board, ctx = self._board, self.context
         description = f'**Player:** {ctx.author}\n{board}'
 
         return (discord.Embed(colour=ctx.bot.colour, description=description)
@@ -526,18 +471,36 @@ class MinesweeperSession:
                 .add_field(name='Stuck?', value='For help, click \N{INFORMATION SOURCE}.')
                 )
 
-    def _check(self, message):
-        if not (self._controller.can_poll()
-                and message.channel == self._ctx.channel
-                and message.author == self._ctx.author):
-            return
+    # ---------- Triggers ------------
 
+    async def _trigger_help(self):
+        cancelled = False
         try:
-            self._input = self._parse_message(message.content)
-        except ValueError:
+            await _MinesweeperHelp(self.context, self).run(timeout=300)
+        except asyncio.CancelledError:
+            cancelled = True
+        finally:
+            if not cancelled:
+                await self._edit(self._bot.colour, header=self._header)
+
+    @trigger('\N{INFORMATION SOURCE}')
+    async def help_page(self):
+        """Help"""
+        if self._help_future and not self._help_future.done():
             return
 
-        return True
+        await self._edit(0x90A4AE, header='Currently on the help page...')
+        self._help_future = self._bot.loop.create_task(self._trigger_help())
+
+    @trigger('\N{BLACK SQUARE FOR STOP}')
+    async def stop(self):
+        """Quit"""
+        await super().stop()
+
+        if self._help_future and not self._help_future.done():
+            self._help_future.cancel()
+
+        self._state = _State.STOPPED
 
     def __validate_input(self, x, y, flag):
         tup = x, y
@@ -595,127 +558,252 @@ class MinesweeperSession:
                 return parse(string)
             except ValueError:
                 continue
-        raise ValueError(f'bad input {string}')
+        return None
 
-    async def _loop(self):
-        # TODO: Set an event and add a wait_until_ready method on the paginator
-        while not self._controller._message:
-            await asyncio.sleep(0)
+    # InteractiveSession.run passes self, we need to ignore that.
+    async def _edit_board(self, input, *_):
+        x, y, thing = input
+        getattr(self._board, thing.value)(x, y)
 
-        # Wrap message in a lock so we don't have the messages and the reactions
-        # making it go all wonky.
-        self._controller._message = _LockedMessage(self._controller._message)
-        wait_for = self._ctx.bot.wait_for
+        embed = self.default()
+        await self._message.edit(embed=embed)
 
-        while not self._board.is_solved():
-            try:
-                message = await wait_for('message', timeout=120, check=self._check)
-            except asyncio.TimeoutError:
-                if self._controller.can_poll():
-                    raise
-                continue
+        if self._board.is_solved():
+            self._state = _State.COMPLETED
+            await self._queue.put(None)
 
-            x, y, thing = self._input
-            getattr(self._board, thing.value)(x, y)
+    async def on_message(self, message):
+        if (
+            self._blocking
+            or message.channel != self._channel
+            or message.author.id not in self._users
+        ):
+            return
 
-            with contextlib.suppress(discord.HTTPException):
-                await message.delete()
+        parsed = self._parse_message(message.content.lower())
+        if not parsed:
+            return
 
-            await self._controller._message.edit(embed=self.display)
+        await self._queue.put((partial(self._edit_board, parsed), message.delete))
 
-    async def edit(self, colour, header, *, icon=None, delete_after=None):
-        icon = icon or self._ctx.author.avatar_url
-        display = self.display.set_author(name=header, icon_url=icon)
-        display.colour = colour
-        await self._controller._message.edit(embed=display, delete_after=delete_after)
+    async def _edit(self, colour, header, *, icon=None, delete_after=None):
+        icon = icon or self.context.author.avatar_url
+        embed = self.default().set_author(name=header, icon_url=icon)
+        embed.colour = colour
+        await self._message.edit(embed=embed, delete_after=delete_after)
 
     async def run(self):
-        f = asyncio.ensure_future(self._loop())
-        tasks = [
-            f,
-            self._controller.interact(timeout=None, delete_after=False, release_connection=False)
-        ]
+        delete_edit = partial(self._edit, delete_after=45)
 
-        # TODO: Timing context manager?
-        start = time.perf_counter()
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        end = time.perf_counter()
-
-        for p in pending:
-            p.cancel()
-
-        edit = self.edit
-        delete_edit = partial(edit, delete_after=45)
-
-        # This can probably be moved away and cleaned up somehow but whatever
-        try:
-            await f
-        except asyncio.CancelledError:
-            # The future would be cancelled above as any pending futures would
-            # be cancelled. This will only be executed if the controller had
-            # finished polling, either cleanly or with error, instead of the
-            # game loop.
+        with self._bot.temp_listener(self.on_message):
             try:
-                await next(iter(done))
-            except commands.BotMissingPermissions as e:
-                await self._ctx.bot_missing_perms(e.missing_perms)
-            else:
-                await delete_edit(0, 'Minesweeper Stopped')
-            return None, -1
-        except asyncio.TimeoutError:
-            await delete_edit(0, 'Out of time!')
-            return None, -1
-        except HitMine as e:
-            # Explode the first mine...
-            self._board.explode(*e.point)
-            await edit(0xFFFF00, header='BOOM!', icon=BOOM_ICON)
-            await asyncio.sleep(random.uniform(0.5, 1))
+                start = time.perf_counter()
+                await super().run(delete_after=False, timeout=120)
+            except HitMine as e:
+                # Explode the first mine...
+                self._board.explode(*e.point)
+                await self._edit(0xFFFF00, header='BOOM!', icon=BOOM_ICON)
+                await asyncio.sleep(random.uniform(0.5, 1))
 
-            # Then explode all the mines
-            self._board.reveal()
-            await delete_edit(0xFF0000, 'Game Over!', icon=GAME_OVER_ICON)
-            return False, -1
-        else:
-            self._board.reveal()
-            await delete_edit(0x00FF00, "You're winner!", icon=SUCCESS_ICON)
-            return True, end - start
-        finally:
-            with contextlib.suppress(BaseException):  # equivalent to bare except
-                done.pop().exception()  # suppress unused task warning
+                # Then explode all the mines
+                self._board.reveal()
+                await delete_edit(0xFF0000, 'Game Over!', icon=GAME_OVER_ICON)
+                return False, -1
+            else:
+                state = self._state
+                if state is _State.NORMAL:
+                    # If this happens then run() had timed out. As of now, there's
+                    # no easy way to distinguish between timeout and normal exit,
+                    # so this is the simplest way.
+                    await delete_edit(0, 'Out of time!')
+                    return None, -1
+
+                if state is _State.STOPPED:
+                    await delete_edit(0, 'Minesweeper Stopped')
+                    return None, -1
+
+                end = time.perf_counter()
+                self._board.reveal()
+                await delete_edit(0x00FF00, "You're winner!", icon=SUCCESS_ICON)
+                return True, end - start
 
 
 class _Leaderboard(InteractiveSession):
-    # XXX: Should I cache this?
-    def _make_page_method(emoji, difficulty):
-        # Can't use partialmethod because it's a descriptor, and my page
-        # decorator can't handle descriptors properly yet
-        @trigger(emoji)
-        async def get_fastest_times(self):
-            embed = (discord.Embed(colour=self._bot.colour, title=f'Minesweeper - {difficulty}')
-                     .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)
-                     )
+    # TDDO: Should I cache this?
+    async def get_fastest_times(self, difficulty):
+        embed = (discord.Embed(colour=self._bot.colour, title=f'Minesweeper - {difficulty}')
+                 .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)
+                 )
 
-            query = """SELECT user_id, time FROM minesweeper_games
-                       WHERE won AND level = $1
-                       ORDER BY time
-                       LIMIT 10;
-                    """
-            records = await self.context.pool.fetch(query, difficulty.value)
-            if not records:
-                embed.description = 'No records, yet. \N{WINKING FACE}'
-            else:
-                embed.description = '\n'.join(
-                    '\\' + f'\N{COLLISION SYMBOL} <@{user_id}>: {duration_units(time)}'
-                    for user_id, time in records
+        query = """SELECT user_id, time FROM minesweeper_games
+                   WHERE won AND level = $1
+                   ORDER BY time
+                   LIMIT 10;
+                """
+        records = await self.context.pool.fetch(query, difficulty.value)
+        if not records:
+            embed.description = 'No records, yet. \N{WINKING FACE}'
+        else:
+            embed.description = '\n'.join(
+                '\\' + f'\N{COLLISION SYMBOL} <@{user_id}>: {duration_units(time)}'
+                for user_id, time in records
+            )
+
+        return embed
+
+    default = trigger('1\u20e3')(partialmethod(get_fastest_times, Level.easy))
+    medium = trigger('2\u20e3')(partialmethod(get_fastest_times, Level.medium))
+    hard = trigger('3\u20e3')(partialmethod(get_fastest_times, Level.hard))
+
+
+_CUSTOM_DESCRIPTION_TEMPLATE = (
+    'Please type a board.\n'
+    '```\n'
+    '{0} x {1} ({2} mines)'
+    '```\n'
+    '{error}'
+)
+_CUSTOM_EXAMPLES = '`10 10 99`, `10 10 90`, `5 5 1`, `12 12 100`'
+
+
+class _MinesweeperCustomMenu(InteractiveSession):
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self.board = None
+        self.confirmed = False
+        self._args = (0, 0, 0)
+        self._error = ''
+
+    def default(self):
+        if self._error:
+            colour, error = 0xF44336, self._error
+        else:
+            colour = self._bot.colour
+            error = '**Click \N{WHITE HEAVY CHECK MARK} to play.**' if self.board else ''
+
+        description = _CUSTOM_DESCRIPTION_TEMPLATE.format(*self._args, error=error)
+        colour = 0xF44336 if self._error else self._bot.colour
+
+        return (discord.Embed(colour=colour, description=description)
+                .set_author(name='Custom Minesweeper', icon_url=MINESWEEPER_ICON)
+                .add_field(name='Examples', value=_CUSTOM_EXAMPLES)
                 )
 
-            return embed
-        return get_fastest_times
+    async def _parse_board(self, args, _):
+        self._args = args
+        ctx = self.context
+        try:
+            board = CustomizableRowBoard(*args, x_row=ctx.__msw_x_row__, y_row=ctx.__msw_y_row__)
+        except ValueError as e:
+            self.board = None
+            self._error = f'**{e}**'
+        else:
+            self._error = None
+            self.board = board
 
-    default = _make_page_method('1\u20e3', Level.easy)
-    medium = _make_page_method('2\u20e3', Level.medium)
-    hard = _make_page_method('3\u20e3', Level.hard)
-    del _make_page_method
+        await self._message.edit(embed=self.default())
+
+    async def on_message(self, message):
+        if (
+            self._blocking
+            or message.channel != self._channel
+            or message.author.id not in self._users
+        ):
+            return
+
+        try:
+            width, height, mines = map(int, message.content.split(None, 3))
+            args = width, height, mines
+        except ValueError:
+            return
+
+        await self._queue.put((partial(self._parse_board, args), message.delete))
+
+    async def start(self):
+        try:
+            await self._message.clear_reactions()
+        except:
+            await super().start()
+        else:
+            await self._message.edit(embed=self.default())
+
+    @trigger('\N{WHITE HEAVY CHECK MARK}')
+    async def confirm(self):
+        if self.board is not None:
+            self.confirmed = True
+            await self.stop()
+            return
+
+        if self._error:
+            return
+
+        error = '**Enter a board first.**'
+        embed = self.default()
+        embed.colour = 0xF44336
+        embed.description = _CUSTOM_DESCRIPTION_TEMPLATE.format(*self._args, error=error)
+        await self._message.edit(embed=embed)
+
+    async def run(self, **kwargs):
+        with self._bot.temp_listener(self.on_message):
+            await super().run(**kwargs)
+
+_CRB = CustomizableRowBoard
+
+
+class _MinesweeperMenu(InteractiveSession):
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self.board = None
+        self.level = None
+
+    async def _get_world_records(self):
+        query = 'SELECT level, MIN(time) FROM minesweeper_games WHERE won GROUP BY level;'
+
+        wrs = [0] * len(Level)
+        for level, wr in await self._bot.pool.fetch(query):
+            wrs[level - 1] = wr
+        wrs[-1] = 0  # don't include custom mode as a WR
+        return wrs
+
+    async def default(self):
+        wrs = await self._get_world_records() + [0]
+        names = [l.name.title() for l in Level] + ['Exit']
+
+        description = '\n'.join(
+            f'{em} = {level} {f"(WR: {wr:.2f}s)" if wr else ""}'
+            for em, level, wr in zip(self._reaction_map, names, wrs)
+        )
+        description = f'**Choose a level below.**\n{"-" * 20}\n{description}'
+
+        return (
+            discord.Embed(colour=self._bot.colour, description=description)
+            .set_author(name="Let's play Minesweeper!", icon_url=MINESWEEPER_ICON)
+        )
+
+    async def _set_board(self, level, clsmethod):
+        ctx = self.context
+        self.board = clsmethod(x_row=ctx.__msw_x_row__, y_row=ctx.__msw_y_row__)
+        self.level = level
+        await self.stop()
+
+    easy   = trigger('1\u20e3')(partialmethod(_set_board, Level.easy, _CRB.beginner))
+    medium = trigger('2\u20e3')(partialmethod(_set_board, Level.medium, _CRB.intermediate))
+    hard   = trigger('3\u20e3')(partialmethod(_set_board, Level.hard, _CRB.expert))
+
+    @trigger('4\u20e3', block=True)
+    async def custom(self):
+        custom_menu = _MinesweeperCustomMenu(self.context)
+        custom_menu._message = self._message
+        await custom_menu.run(timeout=60)
+
+        if custom_menu.confirmed:
+            self.board, self.level = custom_menu.board, Level.custom
+        else:
+            self.board = self.level = None
+
+        await self.stop()
+
+del _CRB
 
 
 def not_playing_minesweeper():
@@ -819,235 +907,10 @@ class Minesweeper:
             time,
         )
 
-    async def _get_custom_board(self, ctx, message):
-        # Shorthands
-        wait_for = ctx.bot.wait_for
-        create_task = asyncio.ensure_future
-
-        confirm = ctx.bot.emoji_config.confirm
-        str_confirm = str(confirm)
-        valid_reactions = [str_confirm, '\N{BLACK SQUARE FOR STOP}']
-        is_valid = frozenset(valid_reactions).__contains__
-
-        description_format = (
-            'Please type a board.\n'
-            '```\n'
-            '{0} x {1} ({2} mines)'
-            '```\n'
-            '{error}'
-        )
-
-        examples = '`10 10 99`, `10 10 90`, `5 5 1`, `12 12 100`'
-
-        args = (0, 0, 0)
-        board = None
-        error = ''
-        embed = (discord.Embed(colour=ctx.bot.colour)
-                 .set_author(name='Custom Minesweeper', icon_url=MINESWEEPER_ICON)
-                 .add_field(name='Examples', value=examples)
-                 )
-
-        # Prime the embed straight away to avoid an extra edit HTTP request
-        embed.description = description_format.format(
-            *args,
-            error=f'**{error}**' if error else '',
-        )
-
-        try:
-            # To clean up the numbers from the last message.
-            await message.clear_reactions()
-        except discord.HTTPException:
-            # If we can't do this then we're either in a DM channel or Chiaki
-            # doesn't have Manage Messages. In this case, we don't have much of
-            # a choice aside from deleting and then re-sending the messages,
-            # because the only alternative is to clear out all the numbers
-            # individually by calling message.remove_reactions and that would
-            # take a full second.
-            await message.delete()
-            message = await ctx.send(embed=embed)
-
-            # Hack to make sure the old message doesn't get deleted again
-            ctx.__msw_old_menu_deleted__ = True
-        else:
-            # The clear succeeded, which means we can edit it and change screens.
-            await message.edit(embed=embed)
-
-            # This is needed to distinguish between the message being edited and
-            # the message being deleted and re-sent
-            ctx.__msw_old_menu_deleted__ = False
-
-        # XXX: Refactor
-        async def put():
-            await message.add_reaction(confirm)
-            await message.add_reaction('\N{BLACK SQUARE FOR STOP}')
-        put_future = asyncio.ensure_future(put())
-
-        def message_check(m):
-            nonlocal args
-            if not (m.channel == ctx.channel and m.author == ctx.author):
-                return
-
-            try:
-                width, height, mines = map(int, m.content.split(None, 3))
-                args = width, height, mines
-            except ValueError:
-                return
-
-            return True
-
-        def message_future():
-            return create_task(wait_for('message', check=message_check))
-
-        def reaction_check(reaction, user):
-            if not (reaction.message.id == message.id and user == ctx.author):
-                return False
-
-            emoji = str(reaction.emoji)
-            if emoji == str_confirm and error:
-                return False
-
-            return is_valid(emoji)
-
-        def reaction_future():
-            return create_task(wait_for('reaction_add', check=reaction_check))
-
-        # XXX: Future.add_done_callback?
-        def reset_future(fut):
-            # We do this so we don't need to cancel both futures when we reset one.
-            future_makers = [message_future, reaction_future]
-            index = futures.index(fut)
-            futures[index] = future_makers[index]()
-
-        futures = [message_future(), reaction_future()]
-
-        try:
-            while True:
-                description = description_format.format(
-                    *args,
-                    error=f'**{error}**' if error else f'**Click {confirm} to play.**' if board else '',
-                )
-                # Only edit if there's actually a change, to save HTTP requests.
-                if description != embed.description:
-                    embed.colour = 0xf44336 if error else ctx.bot.colour
-                    embed.description = description
-                    await message.edit(embed=embed)
-
-                done, pending = await asyncio.wait(
-                    futures,
-                    timeout=60,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                if not done:
-                    raise asyncio.TimeoutError
-
-                done_future = done.pop()
-                result = done_future.result()
-
-                # Did we add a reaction?
-                if not isinstance(result, discord.Message):
-                    emoji = str(result[0].emoji)
-                    if emoji != str(confirm):
-                        raise BoardCancelled
-
-                    if board:
-                        return board
-                    error = 'Enter a board first.'
-
-                    reset_future(done_future)
-                    continue
-
-                if ctx.me.permissions_in(ctx.channel).manage_messages:
-                    # Save Discord the HTTP request
-                    await result.delete()
-
-                try:
-                    board = CustomizableRowBoard(
-                        *args,
-                        x_row=ctx.__msw_x_row__,
-                        y_row=ctx.__msw_y_row__,
-                    )
-                except ValueError as e:
-                    error = e
-                else:
-                    error = None
-                reset_future(done_future)
-        finally:
-            for f in [*futures, put_future]:
-                if not f.done():
-                    f.cancel()
-
-            # If clearing the reactions failed, then the old message would be
-            # deleted and a new one would be sent in its place. The problem is
-            # that we need to delete this message too when the user exits the
-            # menu anyway. However, this would get deleted again in _get_board,
-            # so we need to avoid that.
-            if ctx.__msw_old_menu_deleted__:
-                await message.delete()
-
-    async def _get_world_records(self, *, connection):
-        query = 'SELECT level, MIN(time) FROM minesweeper_games WHERE won GROUP BY level;'
-
-        wrs = [0] * len(Level)
-        for level, wr in await connection.fetch(query):
-            wrs[level - 1] = wr
-        wrs[-1] = 0  # don't include custom mode as a WR
-        return wrs
-
     async def _get_board(self, ctx):
-        emojis = [f'{l.value}\u20e3' for l in Level] + ['\N{BLACK SQUARE FOR STOP}']
-        is_valid = frozenset(emojis).__contains__
-
-        names = [l.name.title() for l in Level] + ['Exit']
-        wrs = await self._get_world_records(connection=ctx.db) + [0]
-        # We don't need the database for a while. Let's release while we still can.
-        await ctx.release()
-
-        description = '\n'.join(
-            f'{em} = {level} {f"(WR: {wr:.2f}s)" if wr else ""}'
-            for em, level, wr in zip(emojis, names, wrs)
-        )
-        description = f'**Choose a level below.**\n{"-" * 20}\n{description}'
-
-        async def put(msg, ems):
-            for e in ems:
-                await msg.add_reaction(e)
-
-        embed = discord.Embed(colour=ctx.bot.colour, description=description)
-        embed.set_author(name="Let's play Minesweeper!", icon_url=MINESWEEPER_ICON)
-
-        message = await ctx.send(embed=embed)
-        future = asyncio.ensure_future(put(message, emojis))
-
-        def check(reaction, user):
-            return (reaction.message.id == message.id
-                    and user == ctx.author
-                    and is_valid(reaction.emoji))
-
-        try:
-            reaction, _ = await ctx.bot.wait_for('reaction_add', timeout=60, check=check)
-            emoji = reaction.emoji
-            if emoji == emojis[-1]:
-                raise BoardCancelled
-            elif emoji == emojis[-2]:
-                return Level.custom, await self._get_custom_board(ctx, message)
-
-            index = int(emoji[0]) - 1
-            clsmethod = getattr(CustomizableRowBoard, names[index].lower())
-            board = clsmethod(x_row=ctx.__msw_x_row__, y_row=ctx.__msw_y_row__)
-            return Level(index + 1), board
-        finally:
-            # This attribute might not always be set. e.g if we didn't
-            # choose custom mode.
-            if not getattr(ctx, '__msw_old_menu_deleted__', None):
-                with contextlib.suppress(discord.HTTPException):
-                    await message.delete()
-
-            if hasattr(ctx, '__msw_old_menu_deleted__'):
-                # We don't need this attribute anymore.
-                del ctx.__msw_old_menu_deleted__
-
-            if not future.done():
-                future.cancel()
+        menu = _MinesweeperMenu(ctx)
+        await menu.run()
+        return menu.level, menu.board
 
     async def _do_minesweeper(self, ctx, level, board, *, record=True):
         await ctx.release()
@@ -1071,9 +934,8 @@ class Minesweeper:
                 return await ctx.reinvoke()
 
             if level is None:
-                try:
-                    level, board = await self._get_board(ctx)
-                except (asyncio.TimeoutError, BoardCancelled):
+                level, board = await self._get_board(ctx)
+                if level is None:
                     return
             else:
                 board = getattr(CustomizableRowBoard, level.name)(
