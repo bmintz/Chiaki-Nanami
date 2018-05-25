@@ -384,21 +384,16 @@ class Chiaki(commands.Bot):
             and not isinstance(error, commands.BotMissingPermissions)
             and await self.is_owner(ctx.author)
         ):
-            # There is actually a race here. When this command is invoked the
-            # first time, it's wrapped in a context manager that automatically
-            # starts and closes a DB session.
-            #
-            # The issue is that this event is dispatched, which means during the
-            # first invoke, it creates a task for this and goes on with its day.
-            # The problem is that it doesn't wait for this event, meaning it might
-            # accidentally close the session before or during this command's
-            # reinvoke.
-            #
-            # This solution is dirty but since I'm only doing it once here
-            # it's fine. Besides it works anyway.
-            while ctx.db:
-                await asyncio.sleep(0)
             try:
+                # Try to release the connection regardless of whether or not
+                # it has been released already. According to the asyncpg source,
+                # attempting to release an already released connection does
+                # nothing.
+                #
+                # This is important because we can't rely on the connection
+                # being released as this can be called from a command-local
+                # error handler where the connection wasn't released yet.
+                await ctx.release()
                 async with ctx.acquire():
                     await ctx.reinvoke()
             except Exception as exc:
