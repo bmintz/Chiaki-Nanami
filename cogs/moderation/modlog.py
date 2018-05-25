@@ -610,7 +610,7 @@ class ModLog(Cog):
         if not channel_id:
             message = (
                 'Mod-logging should have a channel. '
-                f'To set one, use `{ctx.clean_prefix}modlog channel`.\n\n'
+                f'To set one, use `{ctx.clean_prefix}modlog channel #channel`.\n\n'
                 + (message or '')
             )
 
@@ -621,7 +621,8 @@ class ModLog(Cog):
         if not config:
             return await ctx.send(
                 "Mod-logging hasn't been configured yet. "
-                f"To turn on mod-logging, use `{ctx.clean_prefix}{ctx.invoked_with} channel`"
+                'To turn on mod-logging, '
+                f'use `{ctx.clean_prefix}{ctx.invoked_with} channel #channel`'
             )
 
         will, colour = ('will', 0x4CAF50) if config.enabled else ("won't", 0xF44336)
