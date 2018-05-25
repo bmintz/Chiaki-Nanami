@@ -136,7 +136,7 @@ class InteractiveSession:
                 callback = _Callback(resolved, trigger.blocking)
                 yield trigger.emoji, trigger.pattern, trigger.fallback, callback
 
-            if None not in (stop_emoji, stop_pattern):
+            if stop_emoji or stop_pattern or stop_fallback:
                 yield stop_emoji, stop_pattern, stop_fallback, _Callback(cls.stop, False)
 
         for emoji, pattern, fallback, callback in trigger_iterator():
