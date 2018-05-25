@@ -459,7 +459,9 @@ class MinesweeperSession(InteractiveSession):
         self._control_scheme = ctx.__msw_control_scheme__
         self._header = f'Minesweeper - {level}'
         self._state = _State.NORMAL
-        self._help_future = None
+
+        self._help_future = self._bot.loop.create_future()
+        self._help_future.set_result(None)
 
     # Overriding paginator stuffs...
     def default(self):
@@ -486,7 +488,7 @@ class MinesweeperSession(InteractiveSession):
     @trigger('\N{INFORMATION SOURCE}')
     async def help_page(self):
         """Help"""
-        if self._help_future and not self._help_future.done():
+        if not self._help_future.done():
             return
 
         await self._edit(0x90A4AE, header='Currently on the help page...')
@@ -497,7 +499,7 @@ class MinesweeperSession(InteractiveSession):
         """Quit"""
         await super().stop()
 
-        if self._help_future and not self._help_future.done():
+        if not self._help_future.done():
             self._help_future.cancel()
 
         self._state = _State.STOPPED
@@ -568,6 +570,9 @@ class MinesweeperSession(InteractiveSession):
         embed = self.default()
         await self._message.edit(embed=embed)
 
+        if not self._help_future.done():
+            self._help_future.cancel()
+
         if self._board.is_solved():
             self._state = _State.COMPLETED
             await self._queue.put(None)
@@ -617,7 +622,6 @@ class MinesweeperSession(InteractiveSession):
                     # so this is the simplest way.
                     await delete_edit(0, 'Out of time!')
                     return None, -1
-
                 if state is _State.STOPPED:
                     await delete_edit(0, 'Minesweeper Stopped')
                     return None, -1
