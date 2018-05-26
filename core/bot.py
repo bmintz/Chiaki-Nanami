@@ -145,8 +145,8 @@ VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro releasele
 
 
 class Chiaki(commands.Bot):
-    __version__ = '1.2.7'
-    version_info = VersionInfo(major=1, minor=2, micro=7, releaselevel='final', serial=0)
+    __version__ = '1.2.8'
+    version_info = VersionInfo(major=1, minor=2, micro=8, releaselevel='final', serial=0)
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
