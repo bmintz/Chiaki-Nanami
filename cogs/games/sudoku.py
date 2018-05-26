@@ -1,6 +1,6 @@
 import asyncio
-import contextlib
 import enum
+import functools
 import itertools
 import random
 import re
@@ -254,103 +254,68 @@ _difficulties.remove('from_data')
 Difficulty = enum.Enum('Difficulty', _difficulties, type=_EnumConverter)
 
 
-class LockedMessage:
-    """Proxy message object to prevent concurrency issues when editing"""
-    __slots__ = ('_message', '_lock')
+_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([0-9]|clear)')
 
-    def __init__(self, message):
-        self._message = message
-        self._lock = asyncio.Lock()
-
-    def __getattr__(self, attr):
-        return getattr(self._message, attr)
-
-    async def edit(self, **kwargs):
-        async with self._lock:
-            await self._message.edit(**kwargs)
-
-
-# Controller States I guess...
-IN_GAME = 0
-ON_HELP = 1
-ON_SAVE = 2
-
-
-class Controller(InteractiveSession):
-    def __init__(self, ctx, game):
+class SudokuSession(InteractiveSession):
+    def __init__(self, ctx, board):
         super().__init__(ctx)
-        self._game = game
+        self._board = board
+
+        if ctx.bot_has_permissions(external_emojis=True):
+            self._board._clue_markers = ctx.bot.emoji_config.sudoku_clues
+
         self._future = ctx.bot.loop.create_future()
         self._future.set_result(None)  # We just need an already done future.
-        self._state = IN_GAME
-
-    @property
-    def display(self):
-        return self._game._display
 
     def default(self):
-        return self.display
+        a = self.context.author
+        help_text = 'Stuck? Click \N{INFORMATION SOURCE} for help'
 
-    def in_game(self):
-        return self._state == IN_GAME
+        return (discord.Embed(colour=self._bot.colour, description=str(self._board))
+                .set_author(name=f'Sudoku: {a.display_name}', icon_url=a.avatar_url)
+                .add_field(name='\u200b', value=help_text, inline=False)
+                )
 
-    def edit_message(self, colour, header):
+    # ----------- Triggers ----------
+
+    async def _queue_edit(self, colour, header):
         if not self._future.done():
             self._future.cancel()
 
-        board = self._game._board
-        d = self.display
-        d.description = f'**{header}**\n{board}'
+        d = self.default()
+        d.description = f'**{header}**\n{d.description}'
         d.colour = colour
+        await self._message.edit(embed=d)
 
         async def wait():
             await asyncio.sleep(3)
-            d.colour = self.context.bot.colour
-            d.description = str(board)
-            await self._message.edit(embed=self.display)
+            await self._message.edit(embed=self.default())
 
         self._future = asyncio.ensure_future(wait())
 
-    @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
-    def restart(self):
-        """Restart"""
-        if not self.in_game():
-            return None
-
-        board = self._game._board
-        board.clear()
-        self.display.description = str(board)
-        return self.display
-
     @trigger('\N{WHITE HEAVY CHECK MARK}')
-    def validate(self):
+    async def validate(self):
         """Check"""
-        if not self.in_game():
-            return None
-
-        board = self._game._board
         try:
-            board.validate()
+            self._board.validate()
         except ValueError as e:
-            self.edit_message(0xF44336, f'{e}\n')
+            await self._queue_edit(0xF44336, f'{e}\n')
+            return None
         else:
-            d = self.display
-            d.description = f'**Sudoku Complete!**\n\n{self._game._board}'
+            d = self.default()
+            d.description = f'**Sudoku Complete!**\n\n{self._board}'
             d.colour = 0x4CAF50
 
-            # stop() is a coro and it prompts if the user wants to save
-            # so we can't use that here.
-            self._paginating = False
+            # stop() prompts if the user wants to save so we can't use that here.
+            await self._queue.put(None)
             if not self._future.done():
                 self._future.cancel()
 
-        return self.display
+            return d
 
     @trigger('\N{INFORMATION SOURCE}')
     def info(self):
         """Help"""
-        self._state = ON_HELP
-
         help_text = textwrap.dedent('''
             The goal is to fill each space with a number
             from 1 to 9, such that each row, column, and
@@ -385,32 +350,36 @@ class Controller(InteractiveSession):
     @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
     def resume(self):
         """Resume game"""
-        if self.in_game():
-            return None
+        return self.default()
 
-        self._state = IN_GAME
-        return self.display
+    @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
+    def restart(self):
+        """Restart"""
+        self._board.clear()
+        return self.default()
+
+    # ---------- Save Game ---------------
 
     async def _confirm(self, prompt, *, timeout=None):
         ctx = self.context
         choices = {'y', 'yes', 'n', 'no'}
 
         def check(m):
-            return (m.channel == self._message.channel
+            return (m.channel == self._channel
                     and m.author == ctx.author
                     and m.content.lower() in choices
                     )
 
-        d = self.display
-        d.description = f'**{prompt}**\n(Type `yes` or `no`)\n\u200b\n{self._game._board}'
-
+        d = self.default()
+        d.description = f'**{prompt}**\n(Type `yes` or `no`)\n\u200b\n{self._board}'
         d.colour = 0xF44336
+
         await self._message.edit(embed=d)
 
         try:
             message = await ctx.bot.wait_for('message', check=check, timeout=timeout)
         except asyncio.TimeoutError:
-            return None
+            return False
 
         # XXX: This is LBYL to avoid excessive requests. Should I use EAFP anyway?
         if ctx.me.permissions_in(ctx.channel).manage_messages:
@@ -419,8 +388,7 @@ class Controller(InteractiveSession):
         return message.content.lower() in {'yes', 'y'}
 
     async def _confirm_save(self):
-        self._state = ON_SAVE
-        board = self._game._board
+        board = self._board
 
         if not board.new:
             return True
@@ -428,38 +396,42 @@ class Controller(InteractiveSession):
         ctx = self.context
 
         query = 'SELECT 1 FROM saved_sudoku_games WHERE user_id = $1;'
-        await ctx.acquire()
-        row = await ctx.db.fetchrow(query, ctx.author.id)
-        await ctx.release()
+        row = await self._bot.pool.fetchrow(query, ctx.author.id)
 
         if not row:
             return True
 
         return await self._confirm('A save game already exists. Overwrite it?', timeout=25)
 
-    @trigger('\N{FLOPPY DISK}')
+    async def _save(self):
+        ctx = self.context
+        args = self._board.to_data()
+
+        query = """INSERT INTO saved_sudoku_games (user_id, board, clues)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (user_id)
+                   DO UPDATE SET board=$2, clues=$3;
+                """
+
+        await self._bot.pool.execute(query, ctx.author.id, *args)
+        self._board.new = False
+        self._board.dirty = False  # We saved the game, no new changes to save
+
+    @trigger('\N{FLOPPY DISK}', block=True)
     async def save(self):
         """Save game"""
-        if not self.in_game():
-            return None
-
-        if not self._game._board.dirty:
+        if not self._board.dirty:
             # We don't need to save a game if we didn't make any changes.
             # So let's save us some requests and DB acquiring.
             return None
 
-        try:
-            if not await self._confirm_save():
-                d = self.display
-                d.description = str(self._game._board)
-                d.colour = self._bot.colour
-                return d
+        if not await self._confirm_save():
+            return self.default()
 
-            await self._game.save()
-            self.edit_message(0x3F51B5, 'Game saved!\n')
-            return self.display
-        finally:
-            self._state = IN_GAME
+        await self._save()
+        await self._queue_edit(0x3F51B5, 'Game saved!\n')
+
+    # ---------- Stop ----------
 
     @trigger('\N{BLACK SQUARE FOR STOP}', block=True)
     async def stop(self):
@@ -472,162 +444,133 @@ class Controller(InteractiveSession):
         # Description will be edited when we do the two prompts.
         old_description = self._current.description
 
-        if self._game._board.dirty:
-            # We don't want them to hang the game.
-            self._state = ON_SAVE
+        if self._board.dirty:
             save_changes = await self._confirm("There are unsaved changes. Save game?", timeout=25)
             if save_changes and await self._confirm_save():
-                await self._game.save()
+                await self._save()
 
-        self._current.colour = 0x607D8B
-        self._current.description = old_description
-        return self._current
+        d = self.default()
+        d.colour = 0x607D8B
+        return d
 
+    # ---------- Message Parsing ----------
 
-def _legacy_parse(string):
-    x, y, number, = string.lower().split()
+    @staticmethod
+    def _legacy_parse(string):
+        x, y, number, = string.lower().split()
 
-    number = int(number)
-    if not 1 <= number <= 9:
-        raise ValueError("number must be between 1 and 9")
-
-    return _letters.index(x), _letters.index(y), number
-
-_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([0-9]|clear)')
-
-def _parse(string):
-    match = _INPUT_REGEX.match(string.lower())
-    if match is None:
-        raise ValueError('invalid input format')
-
-    x, y, number = match.groups()
-
-    if number in ['clear', '0']:
-        number = EMPTY
-    else:
         number = int(number)
+        if not 1 <= number <= 9:
+            raise ValueError("number must be between 1 and 9")
 
-    return _letters.index(x), int(y) - 1, number
+        return _letters.index(x), _letters.index(y), number
 
+    @staticmethod
+    def _parse(string):
+        match = _INPUT_REGEX.match(string.lower())
+        if match is None:
+            raise ValueError('invalid input format')
 
-def _parse_input(string):
-    # Really not sure if I should put this in the board object...
-    for parser in [_parse, _legacy_parse]:
+        x, y, number = match.groups()
+
+        if number in ['clear', '0']:
+            number = EMPTY
+        else:
+            number = int(number)
+
+        return _letters.index(x), int(y) - 1, number
+
+    def _parse_input(self, string):
+        # Really not sure if I should put this in the board object...
+        for parse in [self._parse, self._legacy_parse]:
+            try:
+                return parse(string)
+            except ValueError:
+                continue
+        return None
+
+    async def _edit_board(self, x, y, number, *_):
         try:
-            return parser(string)
-        except ValueError:
-            continue
-    return None
+            self._board[x, y] = number
+        except (IndexError, ValueError):
+            pass
+        else:
+            await self._message.edit(embed=self.default())
 
-
-class SudokuSession:
-    __slots__ = ('_board', '_controller', '_ctx', '_display')
-
-    def __init__(self, ctx, board):
-        self._board = board
-        self._ctx = ctx
-        if ctx.bot_has_permissions(external_emojis=True):
-            self._board._clue_markers = ctx.bot.emoji_config.sudoku_clues
-
-        self._controller = Controller(ctx, self)
-
-        a = ctx.author
-        self._display = (discord.Embed(colour=ctx.bot.colour, description=str(self._board))
-                         .set_author(name=f'Sudoku: {a.display_name}', icon_url=a.avatar_url)
-                         .add_field(name='\u200b', value='Stuck? Click \N{INFORMATION SOURCE} for help', inline=False)
-                         )
-
-    def check(self, message):
-        if not (self._controller.in_game()
-                and message.channel == self._ctx.channel
-                and message.author == self._ctx.author):
+    async def on_message(self, message):
+        if (
+            self._blocking
+            or message.channel != self._channel
+            or message.author.id not in self._users
+        ):
             return
 
         # Parse the input right away so that we don't have any
         # random messages resetting the timer.
-        result = _parse_input(message.content)
+        result = self._parse_input(message.content)
         if result is None:
             return
-        x, y, number = result
 
-        try:
-            self._board[x, y] = number
-        except (IndexError, ValueError):
-            return
+        await self._queue.put((functools.partial(self._edit_board, *result), message.delete))
 
-        return True
-
-    async def _loop(self):
-        # TODO: Set an event and add a wait_until_ready method on the paginator
-        while not self._controller._message:
-            await asyncio.sleep(0)
-
-        # Wrap message in a lock so we don't have the messages and the reactions
-        # making it go all wonky.
-        self._controller._message = LockedMessage(self._controller._message)
-        wait_for = self._ctx.bot.wait_for
-
-        timeout = 300 * (self._board.difficulty + 1) / 2
-
-        while True:
-            try:
-                message = await wait_for('message', timeout=timeout, check=self.check)
-            except asyncio.TimeoutError:
-                if not self._controller.in_game():
-                    continue
-
-                await self._ctx.send(f'{self._ctx.author.mention} You took too long!')
-                break
-
-            with contextlib.suppress(discord.HTTPException):
-                await message.delete()
-
-            self._display.description = str(self._board)
-            await self._controller._message.edit(embed=self._display)
-
-    async def save(self):
-        ctx = self._ctx
-        args = self._board.to_data()
-
-        query = """INSERT INTO saved_sudoku_games (user_id, board, clues)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (user_id)
-                   DO UPDATE SET board=$2, clues=$3;
-                """
-
-        await ctx.acquire()
-        await ctx.db.execute(query, ctx.author.id, *args)
-        await ctx.release()
-
-        self._board.new = False
-        self._board.dirty = False  # We saved the game, no new changes to save
+    async def cleanup(self, **kwargs):
+        await asyncio.sleep(5)
+        await super().cleanup(**kwargs)
 
     async def run(self):
-        coros = [
-           self._loop(),
-           self._controller.interact(timeout=None, delete_after=False, release_connection=False),
-        ]
+        with self._bot.temp_listener(self.on_message):
+            try:
+                timeout = 300 * (self._board.difficulty + 1) / 2
+                await super().run(timeout=timeout)
+            except commands.BotMissingPermissions as e:
+                await self.context.bot_missing_perms(e.missing_perms)
 
-        await self._ctx.release()
-        done, pending = await asyncio.wait(coros, return_when=asyncio.FIRST_COMPLETED)
 
-        for p in pending:
-            p.cancel()
+def _board_setter(emoji, name, method):
+    @trigger(emoji)
+    async def set_func(self):
+        self.board = method()
+        await self.stop()
+    set_func.__name__ = name
+    return set_func
 
-        try:
-            await done.pop()
-        except commands.BotMissingPermissions as e:
-            await self._ctx.bot_missing_perms(e.missing_perms)
-            return
+class SudokuMenu(InteractiveSession, stop_emoji=None, stop_fallback=None):
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self._saved_board = None
+        self.board = None
+        self._reaction_map = SudokuMenu._reaction_map.copy()
 
-        # The message has to be deleted in order to mitigate lag from the emojis
-        # in the embed.
-        async def task():
-            await asyncio.sleep(5)
-            with contextlib.suppress(discord.HTTPException):
-                await self._controller._message.delete()
+    easy    = _board_setter('1\u20e3', 'Easy',    Board.easy)
+    medium  = _board_setter('2\u20e3', 'Medium',  Board.medium)
+    hard    = _board_setter('3\u20e3', 'Hard',    Board.hard)
+    extreme = _board_setter('4\u20e3', 'Extreme', Board.extreme)
 
-        self._ctx.bot.loop.create_task(task())
+    @trigger('\U0001f4be')
+    async def resume_game(self):
+        self.board = self._saved_board
+        await self.stop()
+
+    def default(self):
+        prompt = discord.Embed(colour=self._bot.colour)
+        prompt.set_author(name=f"Let's play Sudoku, {self.context.author.display_name}!", icon_url=SUDOKU_ICON)
+        prompt.description = '**Please choose a difficulty.**\n-----------------------\n'
+        prompt.description += '\n'.join(
+            f'{trig} = {callback.func.__name__.title().replace("_", " ")}'
+            for trig, callback in self._reaction_map.items()
+        )
+        return prompt
+
+    async def start(self):
+        query = 'SELECT * FROM saved_sudoku_games WHERE user_id = $1;'
+        board = await self._bot.pool.fetchrow(query, self.context.author.id)
+
+        if board is None:
+            del self._reaction_map['\U0001f4be']
+        else:
+            self._saved_board = Board.from_data(board)
+
+        await super().start()
 
 
 class Sudoku:
@@ -636,59 +579,13 @@ class Sudoku:
         self.sudoku_sessions = SessionManager()
 
     async def _get_difficulty(self, ctx):
-        # Get the saved board if it exists
-        reactions = ['1\u20e3', '2\u20e3', '3\u20e3', '4\u20e3']
-        difficulties = ['easy', 'medium', 'hard', 'extreme']
-
-        # Check if the user has a game saved already
-        query = 'SELECT * FROM saved_sudoku_games WHERE user_id = $1;'
-        board = await ctx.db.fetchrow(query, ctx.author.id)
-        if board is not None:
-            reactions.append('\U0001f4be')
-            difficulties.append('resume game')
-            board = Board.from_data(board)
-
-        is_valid = frozenset(reactions).__contains__
-
-        prompt = discord.Embed(colour=ctx.bot.colour)
-        prompt.set_author(name=f"Let's play Sudoku, {ctx.author.display_name}!", icon_url=SUDOKU_ICON)
-        prompt.description = '**Please choose a difficulty.**\n-----------------------\n'
-        prompt.description += '\n'.join(
-            f'{reaction} = {diff.title()}'
-            for reaction, diff in zip(reactions, difficulties)
-        )
-
-        message = await ctx.send(embed=prompt)
-
-        # TODO: I use this function a lot. Maybe I should make a
-        #       helper function...
-        async def put(message, emojis):
-            for e in emojis:
-                await message.add_reaction(e)
-
-        future = asyncio.ensure_future(put(message, reactions))
-
-        def check(reaction, user):
-            return (reaction.message.id == message.id
-                    and user == ctx.author
-                    and is_valid(reaction.emoji)
-                    )
-
+        menu = SudokuMenu(ctx)
         try:
-            reaction, _ = await ctx.bot.wait_for('reaction_add', check=check, timeout=20)
+            await asyncio.wait_for(menu.run(), timeout=20)
         except asyncio.TimeoutError:
-            await ctx.send('You took too long...')
+            await ctx.send('Took too long...')
             return None
-        finally:
-            await message.delete()
-            if not future.done():
-                future.cancel()
-
-        if reaction.emoji[-1] != '\u20e3':
-            return board
-
-        index = int(reaction.emoji[0]) - 1
-        return getattr(Board, difficulties[index])()
+        return menu.board
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, add_reactions=True)
