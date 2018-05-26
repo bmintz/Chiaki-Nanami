@@ -258,12 +258,28 @@ class Permissions(Cog):
                     f'{name} was neither disabled nor enabled...', name, whitelist
                 )
         else:
-            query = """INSERT INTO permissions (guild_id, snowflake, name, whitelist)
-                     VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (snowflake, name)
-                     DO UPDATE SET whitelist = $4
-                    """
-            await connection.execute(query, guild_id, id, name, whitelist)
+            if id is None:
+                # Multiple NULLs can be added in a UNIQUE column, which can lead
+                # to duplicate entries being added.
+                query = """UPDATE permissions SET whitelist = $3
+                           WHERE guild_id = $1 AND name = $2 AND snowflake is NULL
+                        """
+
+                status = await connection.execute(query, guild_id, name, whitelist)
+                if status.rpartition(' ')[-1] != '0':  # output is 'UPDATE N'
+                    return
+
+                query2 = """INSERT INTO permissions (guild_id, snowflake, name, whitelist)
+                            VALUES ($1, $2, $3, $4)
+                         """
+                await connection.execute(query2, guild_id, id, name, whitelist)
+            else:
+                query = """INSERT INTO permissions (guild_id, snowflake, name, whitelist)
+                         VALUES ($1, $2, $3, $4)
+                         ON CONFLICT (snowflake, name)
+                         DO UPDATE SET whitelist = $4
+                        """
+                await connection.execute(query, guild_id, id, name, whitelist)
 
     async def _bulk_set_permissions(self, connection, guild_id, name, *entities, whitelist):
         ids = tuple(unique(e.id for e in entities))
