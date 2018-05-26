@@ -140,9 +140,12 @@ class Board:
             for i, line in enumerate(self._board)
         )
 
+    def is_full(self):
+        return EMPTY not in flatten(self._board)
+
     def validate(self):
         # If the board is not full then it's not valid.
-        if EMPTY in flatten(self._board):
+        if not self.is_full():
             raise ValueError('Fill the board first.')
 
         row_markers = range(1, len(self._board[0]) + 1)
@@ -254,6 +257,44 @@ _difficulties.remove('from_data')
 Difficulty = enum.Enum('Difficulty', _difficulties, type=_EnumConverter)
 
 
+HELP_TEXT = '''
+The goal is to fill each space with a number
+from 1 to 9, such that each row, column, and
+3 x 3 box contains each number exactly **once**.
+'''
+
+INPUT_FIELD = '''
+Send a message in the following format:
+`letter number number`
+\u200b
+Use `A-I` for `row` and `column`.
+Use `1-9` for the number.
+Use `0` or `clear` for the second number
+if you want to clear the tile.
+-------------------------
+Examples: **`a 1 2`**, **`B65`**, **`D 7 clear`**
+\u200b
+If the board is correctly filled,
+you've completed the game!
+\u200b
+'''
+
+
+class SudokuHelp(InteractiveSession, stop_fallback='exit help'):
+    def default(self):
+        # TODO: Paginate?
+        return (discord.Embed(colour=self._bot.colour, description=HELP_TEXT)
+                .set_author(name='Sudoku Help!')
+                .add_field(name='How to play', value=INPUT_FIELD)
+                .add_field(name='Buttons', value=self.reaction_help, inline=False)
+                )
+
+    @property
+    def reaction_help(self):
+        # Hack needed because self.reaction_help returns the wrong class' reactions
+        return SudokuSession.reaction_help.fget(SudokuSession)
+
+
 _INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([0-9]|clear)')
 
 class SudokuSession(InteractiveSession):
@@ -265,7 +306,12 @@ class SudokuSession(InteractiveSession):
             self._board._clue_markers = ctx.bot.emoji_config.sudoku_clues
 
         self._future = ctx.bot.loop.create_future()
-        self._future.set_result(None)  # We just need an already done future.
+        self._future.set_result(None)
+
+        self._help_future = ctx.bot.loop.create_future()
+        self._help_future.set_result(None)
+
+        self._help = SudokuHelp(ctx).run
 
     def default(self):
         a = self.context.author
@@ -293,68 +339,20 @@ class SudokuSession(InteractiveSession):
 
         self._future = asyncio.ensure_future(wait())
 
-    @trigger('\N{WHITE HEAVY CHECK MARK}')
-    async def validate(self):
-        """Check"""
-        try:
-            self._board.validate()
-        except ValueError as e:
-            await self._queue_edit(0xF44336, f'{e}\n')
-            return None
-        else:
-            d = self.default()
-            d.description = f'**Sudoku Complete!**\n\n{self._board}'
-            d.colour = 0x4CAF50
-
-            # stop() prompts if the user wants to save so we can't use that here.
-            await self._queue.put(None)
-            if not self._future.done():
-                self._future.cancel()
-
-            return d
-
     @trigger('\N{INFORMATION SOURCE}')
     def info(self):
         """Help"""
-        help_text = textwrap.dedent('''
-            The goal is to fill each space with a number
-            from 1 to 9, such that each row, column, and
-            3 x 3 box contains each number exactly **once**.
-        ''')
+        if not self._help_future.done():
+            return
 
-        input_field = textwrap.dedent('''
-            Send a message in the following format:
-            `letter number number`
-            \u200b
-            Use `A-I` for `row` and `column`.
-            Use `1-9` for the number.
-            Use `0` or `clear` for the second number
-            if you want to clear the tile.
-            -------------------------
-            Examples: **`a 1 2`**, **`B65`**, **`D 7 clear`**
-            \u200b
-            To check your board, click \N{WHITE HEAVY CHECK MARK}.
-            You must fill the whole board first.
-            \u200b
-            If the board is correctly filled,
-            you've completed the game!
-            \u200b
-        ''')
-
-        return (discord.Embed(colour=self.context.bot.colour, description=help_text)
-                .set_author(name='Sudoku Help!')
-                .add_field(name='How to play', value=input_field)
-                .add_field(name='Buttons', value=self.reaction_help, inline=False)
-                )
-
-    @trigger('\N{INPUT SYMBOL FOR NUMBERS}')
-    def resume(self):
-        """Resume game"""
-        return self.default()
+        self._help_future = self._bot.loop.create_task(self._help(timeout=None))
 
     @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
     def restart(self):
         """Restart"""
+        if not self._help_future.done():
+            self._help_future.cancel()
+
         self._board.clear()
         return self.default()
 
@@ -425,6 +423,9 @@ class SudokuSession(InteractiveSession):
             # So let's save us some requests and DB acquiring.
             return None
 
+        if not self._help_future.done():
+            self._help_future.cancel()
+
         if not await self._confirm_save():
             return self.default()
 
@@ -440,6 +441,9 @@ class SudokuSession(InteractiveSession):
 
         if not self._future.done():
             self._future.cancel()
+
+        if not self._help_future.done():
+            self._help_future.cancel()
 
         # Description will be edited when we do the two prompts.
         old_description = self._current.description
@@ -489,13 +493,38 @@ class SudokuSession(InteractiveSession):
                 continue
         return None
 
+    async def __validate(self):
+        embed = self.default()
+        if not self._board.is_full():
+            return embed
+
+        try:
+            self._board.validate()
+        except ValueError as e:
+            await self._queue_edit(0xF44336, f'{e}\n')
+            return
+        else:
+            embed.description = f'**Sudoku Complete!**\n\n{self._board}'
+            embed.colour = 0x4CAF50
+
+            # stop() is a coro and it prompts if the user wants to save
+            # so we can't use that here.
+            await self._queue.put(None)
+            if not self._future.done():
+                self._future.cancel()
+
+            return embed
+
     async def _edit_board(self, x, y, number, *_):
+        if not self._help_future.done():
+            self._help_future.cancel()
+
         try:
             self._board[x, y] = number
         except (IndexError, ValueError):
-            pass
-        else:
-            await self._message.edit(embed=self.default())
+            return
+
+        return await self.__validate()
 
     async def on_message(self, message):
         if (
