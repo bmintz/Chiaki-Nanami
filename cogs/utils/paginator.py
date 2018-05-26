@@ -473,7 +473,7 @@ class Paginator(InteractiveSession):
 
 # -------------- Field Pages ----------------------
 
-class EmbedFieldPages(Paginator):
+class FieldPaginator(Paginator):
     """Similar to Paginator, but uses the fields instead of the description"""
     def __init__(self, context, entries, *, inline=True, **kwargs):
         super().__init__(context, entries, **kwargs)
@@ -491,3 +491,5 @@ class EmbedFieldPages(Paginator):
         for name, value in page:
             add_field(name=name, value=value)
         return embed
+
+EmbedFieldPages = FieldPaginator  # backwards compat

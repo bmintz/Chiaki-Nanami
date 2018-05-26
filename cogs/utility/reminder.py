@@ -5,7 +5,7 @@ import json
 from discord.ext import commands
 
 from ..utils.misc import emoji_url, truncate
-from ..utils.paginator import EmbedFieldPages
+from ..utils.paginator import FieldPaginator
 from ..utils.time import FutureTime, human_timedelta
 
 
@@ -111,7 +111,7 @@ class Reminder:
                 value = truncate(f'{channel}: {message}', 1024, '...')
                 yield name, value
 
-        pages = EmbedFieldPages(
+        pages = FieldPaginator(
             ctx, entries(),
             per_page=5, title=f'Reminders for {ctx.author}', inline=False
         )

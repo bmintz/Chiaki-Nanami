@@ -17,7 +17,7 @@ from ..utils.converter import union
 from ..utils.examples import get_example, static_example, wrap_example
 from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
-from ..utils.paginator import Paginator, EmbedFieldPages
+from ..utils.paginator import Paginator, FieldPaginator
 
 from core import errors
 
@@ -390,7 +390,7 @@ class Moderator:
         entries = zip(names, values)
 
         title = f'The {formats.pluralize(**{"newest members": len(members)})}'
-        pages = EmbedFieldPages(ctx, entries, per_page=5, colour=0x00FF00, title=title)
+        pages = FieldPaginator(ctx, entries, per_page=5, colour=0x00FF00, title=title)
         await pages.interact()
 
     @commands.command(aliases=['clr'])

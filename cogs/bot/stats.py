@@ -13,7 +13,7 @@ from more_itertools import all_equal, ilen
 
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
-from ..utils.paginator import Paginator, EmbedFieldPages
+from ..utils.paginator import Paginator, FieldPaginator
 from ..utils.time import human_timedelta
 
 from core import errors
@@ -171,7 +171,7 @@ class Stats:
         ]
 
         title = pluralize(command=n)
-        pages = EmbedFieldPages(ctx, lines, title=f"{ctx.author}'s last {title}",
+        pages = FieldPaginator(ctx, lines, title=f"{ctx.author}'s last {title}",
                                 inline=False, per_page=5)
         await pages.interact()
 
