@@ -295,7 +295,7 @@ class SudokuHelp(InteractiveSession, stop_fallback='exit help'):
         return SudokuSession.reaction_help.fget(SudokuSession)
 
 
-_INPUT_REGEX = re.compile('([a-i])\s{0,1}([1-9])\s{0,1}([0-9]|clear)')
+_INPUT_REGEX = re.compile('([a-i])\s?([1-9])\s?([0-9]|clear)')
 
 class SudokuSession(InteractiveSession):
     def __init__(self, ctx, board):

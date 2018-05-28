@@ -365,14 +365,14 @@ class ControlScheme(collections.namedtuple('ControlScheme', 'x y x_row y_row pat
 DEFAULT_CONTROL_SCHEME = ControlScheme(
     ascii_lowercase, [*map(str, range(1, 11)), *'abcdefgh'],
     REGIONAL_INDICATORS, [*_number_emojis, *REGIONAL_INDICATORS[:7]],
-    '([a-q])\s{0,1}(10|[1-9a-g])\s{0,1}(flag|unsure|u|f)?',
+    '([a-q])\s?(10|[1-9a-g])\s?(flag|unsure|u|f)?',
 )
 
 
 CUSTOM_EMOJI_CONTROL_SCHEME = ControlScheme(
     ascii_lowercase, list(map(str, range(1, 18))),
     REGIONAL_INDICATORS, [],
-    '([a-q])\s{0,1}(1?[0-9])\s{0,1}(flag|unsure|u|f)?',
+    '([a-q])\s?(1?[0-9])\s?(flag|unsure|u|f)?',
 )
 
 
