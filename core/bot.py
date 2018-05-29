@@ -158,7 +158,6 @@ class Chiaki(commands.Bot):
 
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
-        self.table_base = None
 
         try:
             with open('data/command_image_urls.json') as f:
