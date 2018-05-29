@@ -883,7 +883,7 @@ class Moderator(Cog):
         """Unbans the user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
-        await ctx.guild.unban(user.user)
+        await ctx.guild.unban(user.user, reason=reason)
         await self._remove_time_entry(ctx.guild, user.user, ctx.db, event='tempban_complete')
         await ctx.send(f"Done. What did {user.user} do to get banned in the first place...?")
 
