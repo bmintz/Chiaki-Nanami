@@ -108,6 +108,10 @@ class InteractiveSession:
         # spammed or if a callback unexpectedly takes a long time.
         self._queue = SimpleQueue()
 
+        # Simple flag variable to see if reactions are being used
+        # Might be refactored out later, but this is the simplest solution.
+        self._using_reactions = False
+
     def __init_subclass__(cls, *, stop_emoji='\N{BLACK SQUARE FOR STOP}', stop_pattern=None, stop_fallback='exit', **kwargs):
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
@@ -151,6 +155,14 @@ class InteractiveSession:
                 seen_patterns.add(fallback)
                 message_fallbacks.append((fallback, callback))
 
+    def using_reactions(self):
+        """Return True if reactions are being used for the current
+        session, False otherwise.
+
+        This can return False if the session is not running.
+        """
+        return self._using_reactions
+
     def check(self, reaction, _):
         """Extra checks for reactions"""
         return reaction.emoji in self._reaction_map
@@ -188,6 +200,10 @@ class InteractiveSession:
             with contextlib.suppress(AttributeError):
                 await self.context.release()
 
+        # XXX: Can we accomplish without context???
+        self._using_reactions = self._channel.permissions_for(self.context.me).add_reactions
+        using_reactions = self._using_reactions
+
         await self.start()
         if self._message is None:
             # start() was overridden but no message was set
@@ -202,8 +218,7 @@ class InteractiveSession:
             listeners.append(func)
             return self._bot.listen()(func)
 
-        # XXX: Can we accomplish without context???
-        if self._channel.permissions_for(self.context.me).add_reactions:
+        if using_reactions:
             task = self._bot.loop.create_task(self.add_reactions())
 
             @listen
@@ -273,6 +288,8 @@ class InteractiveSession:
                     break
 
         finally:
+            self._using_reactions = False
+
             for listener in listeners:
                 self._bot.remove_listener(listener)
 

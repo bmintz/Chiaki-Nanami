@@ -415,7 +415,7 @@ class GeneralHelpPaginator(Paginator):
         # create the compacted controls field
 
         # XXX: Should probably make a method for this.
-        if self._channel.permissions_for(self.context.me).add_reactions:
+        if self.using_reactions():
             docs = ((emoji, func.__doc__) for emoji, func in self._reaction_map.items())
             controls = '\n'.join(
                 f'{p1[0]} `{p1[1]}` | `{p2[1]}` {p2[0]}'
