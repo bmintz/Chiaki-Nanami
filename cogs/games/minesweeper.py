@@ -230,7 +230,9 @@ class Board:
     unsure = partialmethod(_modify, UNSURE)
 
     def flag(self, x, y):
-        if self.remaining_flags > 0:
+        # Removing flags should still work even when you've placed the max
+        # amount of flags.
+        if self.is_flag(x, y) or self.remaining_flags > 0:
             self._modify(FLAG, x, y)
 
     def reveal(self):
