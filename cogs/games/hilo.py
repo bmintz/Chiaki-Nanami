@@ -86,9 +86,9 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
         embed.set_author(name=f'Points: {self._score}', icon_url=embed.author.icon_url)
         return embed
 
-    higher = trigger('\N{UP-POINTING SMALL RED TRIANGLE}', block=True)(partialmethod(_compare, 1))
-    equal  = trigger('\N{LEFT RIGHT ARROW}', block=True)(partialmethod(_compare, 0))
-    lower  = trigger('\N{DOWN-POINTING SMALL RED TRIANGLE}', block=True)(partialmethod(_compare, -1))
+    higher = trigger('\N{UP-POINTING SMALL RED TRIANGLE}', fallback=r'higher|h|\>', block=True)(partialmethod(_compare, 1))
+    equal  = trigger('\N{LEFT RIGHT ARROW}', fallback=r'equal|e|\=', block=True)(partialmethod(_compare, 0))
+    lower  = trigger('\N{DOWN-POINTING SMALL RED TRIANGLE}', fallback=r'lower|l|\<', block=True)(partialmethod(_compare, -1))
 
     async def run(self):
         await super().run(timeout=7)
@@ -119,7 +119,7 @@ class HigherOrLower:
         self.user_sessions = SessionManager()     # because only one game per user
 
     @commands.group(invoke_without_command=True)
-    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def hilo(self, ctx):
         """Starts a game of Higher or Lower"""
         if self.channel_sessions.session_exists(ctx.channel.id):
