@@ -376,72 +376,51 @@ CUSTOM_EMOJI_CONTROL_SCHEME = ControlScheme(
 )
 
 
-class _MinesweeperHelp(InteractiveSession):
+_HELP_DESCRIPTION = '''
+The goal is to clear the board without hitting a mine.
+
+**How to Play**
+Type in this format:
+**`column row`**
+
+To flag: add `f` or `flag`.
+If you're unsure: add `u` or `unsure`.
+Examples: {examples}
+
+**Tiles**
+\N{BLACK LARGE SQUARE} = No mines around it.
+{number}\u20e3 = Number of mines around it. This one has {number_mines}.
+\N{COLLISION SYMBOL} = BOOM! Hitting a mine will instantly end the game.
+\N{TRIANGULAR FLAG ON POST} = Flag -- It *might* be a mine.
+\N{BLACK QUESTION MARK ORNAMENT} = Either a mine or not. No one's sure.
+'''
+
+
+class _MinesweeperHelp(InteractiveSession, stop_fallback=None):
     def __init__(self, ctx, game):
         super().__init__(ctx)
         self._game = game
         # Needed to distinguish between being stopped and letting the time run out.
         self._stopped = False
 
-    @trigger('\N{INFORMATION SOURCE}')
     def default(self):
-        """Reactions"""
-        desc = 'The goal is to clear the board without hitting a mine.'
-        instructions = 'Click one of the reactions below'
-
-        return (discord.Embed(colour=self._bot.colour, description=desc)
-                .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
-                .add_field(name=instructions, value=self.reaction_help)
-                )
-
-    @trigger('\N{VIDEO GAME}')
-    def controls(self):
-        """Controls"""
         board = self._game._board
         scheme = self._game._control_scheme
-        text = textwrap.dedent(f'''
-        **Type in this format:**
-        ```
-        column row
-        ```
-        Use `{scheme.x_range(board.width)}` for the column
-        and `{scheme.y_range(board.height)}` for the row.
-        \u200b
-        To flag a tile, type `f` or `flag` after the row.
-        If you're unsure about a tile, type `u` or `unsure` after the row.
-
-        Examples: {board.examples(scheme.x, scheme.y)}
-        ''')
-        return (discord.Embed(colour=self._bot.colour, description=text)
-                .set_author(name='Instructions', icon_url=MINESWEEPER_ICON)
-                .add_field(name='In-game Reactions', value=self._game.reaction_help)
-                )
-
-    @staticmethod
-    def _possible_spaces():
         number = random.randint(1, 9)
-        return textwrap.dedent(f'''
-        \N{BLACK LARGE SQUARE} = Empty tile, reveals numbers or other empties around it.
-        {number}\u20e3 = Number of mines around it. This one has {pluralize(mine=number)}.
-        \N{COLLISION SYMBOL} = BOOM! Hitting a mine will instantly end the game.
-        \N{TRIANGULAR FLAG ON POST} = A flagged tile means it *might* be a mine.
-        \N{BLACK QUESTION MARK ORNAMENT} = It's either a mine or not. No one's sure.
-        \u200b
-        ''')
-
-    @trigger('\N{COLLISION SYMBOL}')
-    def possible_spaces(self):
-        """Tiles"""
-        description = (
-            'There are 5 types of tiles.\n'
-            + self._possible_spaces()
+        description = _HELP_DESCRIPTION.format(
+            x_range=scheme.x_range(board.width),
+            y_range=scheme.y_range(board.height),
+            examples=board.examples(scheme.x, scheme.y),
+            controls=self._game.reaction_help,
+            number=number,
+            number_mines=pluralize(mine=number),
         )
 
         return (discord.Embed(colour=self._bot.colour, description=description)
-                .set_author(name='Tiles', icon_url=MINESWEEPER_ICON)
+                .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
                 )
 
-    @trigger('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}', fallback='exit help')
     async def stop(self):
         """Exit"""
         await self._game.edit(self._bot.colour, header=self._game._header)
