@@ -281,18 +281,26 @@ you've completed the game!
 
 
 class SudokuHelp(InteractiveSession, stop_fallback='exit help'):
+    def __init__(self, ctx, game):
+        super().__init__(ctx)
+        self._game = game
+
     def default(self):
         # TODO: Paginate?
         return (discord.Embed(colour=self._bot.colour, description=HELP_TEXT)
                 .set_author(name='Sudoku Help!')
                 .add_field(name='How to play', value=INPUT_FIELD)
-                .add_field(name='Buttons', value=self.reaction_help, inline=False)
+                .add_field(name='Controls', value=self.help(), inline=False)
                 )
 
-    @property
-    def reaction_help(self):
-        # Hack needed because self.reaction_help returns the wrong class' reactions
-        return SudokuSession.reaction_help.fget(SudokuSession)
+    def help(self):
+        if self._game.using_reactions():
+            return self._game.reaction_help
+
+        return '\n'.join(
+            f'`{name}` = {func.__doc__}'
+            for name, func in self._game._message_fallbacks
+        )
 
 
 _INPUT_REGEX = re.compile(r'([a-i])\s?([1-9])\s?([0-9]|clear)')
@@ -311,11 +319,14 @@ class SudokuSession(InteractiveSession):
         self._help_future = ctx.bot.loop.create_future()
         self._help_future.set_result(None)
 
-        self._help = SudokuHelp(ctx).run
+        self._help = SudokuHelp(ctx, self).run
 
     def default(self):
         a = self.context.author
-        help_text = 'Stuck? Click \N{INFORMATION SOURCE} for help'
+        if self.using_reactions():
+            help_text = 'Stuck? Click \N{INFORMATION SOURCE} for help'
+        else:
+            help_text = 'Stuck? Type `help` for help'
 
         return (discord.Embed(colour=self._bot.colour, description=str(self._board))
                 .set_author(name=f'Sudoku: {a.display_name}', icon_url=a.avatar_url)
@@ -339,7 +350,7 @@ class SudokuSession(InteractiveSession):
 
         self._future = asyncio.ensure_future(wait())
 
-    @trigger('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}', fallback='help')
     def info(self):
         """Help"""
         if not self._help_future.done():
@@ -347,7 +358,7 @@ class SudokuSession(InteractiveSession):
 
         self._help_future = self._bot.loop.create_task(self._help(timeout=None))
 
-    @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}')
+    @trigger('\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}', fallback='restart')
     def restart(self):
         """Restart"""
         if not self._help_future.done():
@@ -415,7 +426,7 @@ class SudokuSession(InteractiveSession):
         self._board.new = False
         self._board.dirty = False  # We saved the game, no new changes to save
 
-    @trigger('\N{FLOPPY DISK}', block=True)
+    @trigger('\N{FLOPPY DISK}', fallback='save', block=True)
     async def save(self):
         """Save game"""
         if not self._board.dirty:
@@ -434,7 +445,7 @@ class SudokuSession(InteractiveSession):
 
     # ---------- Stop ----------
 
-    @trigger('\N{BLACK SQUARE FOR STOP}', block=True)
+    @trigger('\N{BLACK SQUARE FOR STOP}', fallback='exit', block=True)
     async def stop(self):
         """Quit"""
         await super().stop()
@@ -556,7 +567,7 @@ class SudokuSession(InteractiveSession):
 
 
 def _board_setter(emoji, name, method):
-    @trigger(emoji)
+    @trigger(emoji, fallback=f'{emoji[0]}|{name.lower()}')
     async def set_func(self):
         self.board = method()
         await self.stop()
@@ -575,7 +586,7 @@ class SudokuMenu(InteractiveSession, stop_emoji=None, stop_fallback=None):
     hard    = _board_setter('3\u20e3', 'Hard',    Board.hard)
     extreme = _board_setter('4\u20e3', 'Extreme', Board.extreme)
 
-    @trigger('\U0001f4be')
+    @trigger('\U0001f4be', fallback='resume|load')
     async def resume_game(self):
         self.board = self._saved_board
         await self.stop()
@@ -617,7 +628,7 @@ class Sudoku:
         return menu.board
 
     @commands.command()
-    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def sudoku(self, ctx, difficulty: Difficulty=None):
         if self.sudoku_sessions.session_exists(ctx.author.id):
             return await ctx.send('Please finish your other Sudoku game first.')
