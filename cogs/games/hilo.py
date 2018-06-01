@@ -4,12 +4,14 @@ import discord
 import itertools
 
 from discord.ext import commands
+from functools import partialmethod
 from random import choice
 
 from .cards import Suit, Deck, images as card_images
 from .manager import SessionManager
 
 from ..utils.misc import emoji_url
+from ..utils.paginator import InteractiveSession, trigger
 
 
 __schema__ = """
@@ -27,99 +29,83 @@ def _cmp(a, b):
     return (a > b) - (a < b)
 
 
-EMOJI_CMPS = {
-    '\N{UP-POINTING SMALL RED TRIANGLE}': 1,
-    '\N{LEFT RIGHT ARROW}': 0,
-    '\N{DOWN-POINTING SMALL RED TRIANGLE}': -1,
-}
 SUIT_EMOJI_URLS = [emoji_url(s.emoji) for s in Suit]
 
 
-class HiloSession:
+class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
     def __init__(self, ctx):
-        self.ctx = ctx
+        super().__init__(ctx)
         self._deck = Deck()
-        self._message = None
+        self._score = 0
+        self._card = self._deck.draw_one()
         self._display = (discord.Embed(colour=ctx.bot.colour)
                          .set_author(name='Points: 0', icon_url=ctx.author.avatar_url)
                          )
+        self._timed_out = True
 
-    async def _get_cmp(self):
-        def check(reaction, user):
-            return (reaction.message.id == self._message.id
-                    and user.id == self.ctx.author.id
-                    and str(reaction.emoji) in EMOJI_CMPS)
+    def default(self):
+        image_url = card_images.get_card_image_url(self._card)
+        if image_url:
+            self._display.set_image(url=image_url)
 
-        reaction, user = await self.ctx.bot.wait_for('reaction_add', timeout=7, check=check)
+        return self._display
 
-        with contextlib.suppress(discord.HTTPException):
-            await self._message.remove_reaction(reaction, user)
-
-        return EMOJI_CMPS[reaction.emoji]
-
-    async def _get_ending_text(self, points, *, default):
-        connection = await self.ctx.acquire()
+    async def _get_ending_text(self, *, default):
+        connection = await self._bot.pool.acquire()
 
         # Check if it's a world record
         query = 'SELECT MAX(points) FROM hilo_games;'
         wr = await connection.fetchval(query)
 
-        if wr is None or points > wr:
+        if wr is None or self._score > wr:
             return "World Record!"
 
         # Check if it's a personal best
         query = 'SELECT MAX(points) FROM hilo_games WHERE player_id = $1;'
-        pb = await connection.fetchval(query, self.ctx.author.id)
+        pb = await connection.fetchval(query, self.context.author.id)
 
-        if pb is None or points > pb:
+        if pb is None or self._score > pb:
             return "New Personal Best!"
 
         return default
 
-    def _display_card(self, card):
-        image_url = card_images.get_card_image_url(card)
-        if image_url:
-            self._display.set_image(url=image_url)
+    async def _compare(self, cmp):
+        old, self._card = self._card, self._deck.draw_one(fill=True)
+        result = _cmp(self._card.rank.value, old.rank.value)
 
-    async def _loop(self):
-        display = self._display
-        current = self._deck.draw_one()
+        embed = self.default()
 
-        self._display_card(current)
-        self._message = message = await self.ctx.send(embed=display)
+        if cmp == result:
+            self._score += 1
+        else:
+            embed.title = await self._get_ending_text(default="Game Over!")
+            embed.colour = 0xF44336
+            self._timed_out = False
+            await self.stop()
 
-        for e in EMOJI_CMPS:
-            await message.add_reaction(e)
+        embed.set_author(name=f'Points: {self._score}', icon_url=embed.author.icon_url)
+        return embed
 
-        for i in itertools.count():
-            try:
-                success = False
-
-                try:
-                    user_cmp = await self._get_cmp()
-                except asyncio.TimeoutError:
-                    display.title = await self._get_ending_text(i, default="Time's up!")
-                    display.colour = 0x9E9E9E
-                    return i
-
-                old, current = current, self._deck.draw_one(fill=True)
-                result = _cmp(current.rank.value, old.rank.value)
-
-                success = result == user_cmp
-
-                if not success:
-                    display.title = await self._get_ending_text(i, default="Game Over!")
-                    display.colour = 0xF44336
-                    return i
-            finally:
-                display.set_author(name=f'Points: {i + success}', icon_url=display.author.icon_url)
-                self._display_card(current)
-
-                await message.edit(embed=display)
+    higher = trigger('\N{UP-POINTING SMALL RED TRIANGLE}', block=True)(partialmethod(_compare, 1))
+    equal  = trigger('\N{LEFT RIGHT ARROW}', block=True)(partialmethod(_compare, 0))
+    lower  = trigger('\N{DOWN-POINTING SMALL RED TRIANGLE}', block=True)(partialmethod(_compare, -1))
 
     async def run(self):
-        await self.ctx.release()
-        return await self._loop()
+        await super().run(timeout=7)
+        return self._score
+
+    async def cleanup(self, **kwargs):
+        await self.context.acquire()
+        with contextlib.suppress(Exception):
+            await self._message.clear_reactions()
+
+        if not self._timed_out:
+            return
+
+        embed = self.default()
+        embed.title = await self._get_ending_text(default="Time's up!")
+        embed.colour = 0x9E9E9E
+        await self._message.edit(embed=embed)
 
 
 class HigherOrLower:
