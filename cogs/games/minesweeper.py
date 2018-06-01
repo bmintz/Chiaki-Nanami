@@ -468,9 +468,14 @@ class MinesweeperSession(InteractiveSession):
         board, ctx = self._board, self.context
         description = f'**Player:** {ctx.author}\n{board}'
 
+        if self.using_reactions():
+            help_text = 'For help, click \N{INFORMATION SOURCE}'
+        else:
+            help_text = 'For help, type `help`'
+
         return (discord.Embed(colour=ctx.bot.colour, description=description)
                 .set_author(name=self._header, icon_url=ctx.author.avatar_url)
-                .add_field(name='Stuck?', value='For help, click \N{INFORMATION SOURCE}.')
+                .add_field(name='Stuck?', value=help_text)
                 )
 
     # ---------- Triggers ------------
@@ -485,7 +490,7 @@ class MinesweeperSession(InteractiveSession):
             if not cancelled:
                 await self._edit(self._bot.colour, header=self._header)
 
-    @trigger('\N{INFORMATION SOURCE}')
+    @trigger('\N{INFORMATION SOURCE}', fallback='help')
     async def help_page(self):
         """Help"""
         if not self._help_future.done():
@@ -494,7 +499,7 @@ class MinesweeperSession(InteractiveSession):
         await self._edit(0x90A4AE, header='Currently on the help page...')
         self._help_future = self._bot.loop.create_task(self._trigger_help())
 
-    @trigger('\N{BLACK SQUARE FOR STOP}')
+    @trigger('\N{BLACK SQUARE FOR STOP}', fallback='exit')
     async def stop(self):
         """Quit"""
         await super().stop()
@@ -731,7 +736,7 @@ class _MinesweeperCustomMenu(InteractiveSession):
         else:
             await self._message.edit(embed=self.default())
 
-    @trigger('\N{WHITE HEAVY CHECK MARK}')
+    @trigger('\N{WHITE HEAVY CHECK MARK}', fallback='play')
     async def confirm(self):
         if self.board is not None:
             self.confirmed = True
@@ -790,11 +795,11 @@ class _MinesweeperMenu(InteractiveSession):
         self.level = level
         await self.stop()
 
-    easy   = trigger('1\u20e3')(partialmethod(_set_board, Level.easy, _CRB.beginner))
-    medium = trigger('2\u20e3')(partialmethod(_set_board, Level.medium, _CRB.intermediate))
-    hard   = trigger('3\u20e3')(partialmethod(_set_board, Level.hard, _CRB.expert))
+    easy   = trigger('1\u20e3', fallback='1|easy|beginner')(partialmethod(_set_board, Level.easy, _CRB.beginner))
+    medium = trigger('2\u20e3', fallback='2|medium|intermediate')(partialmethod(_set_board, Level.medium, _CRB.intermediate))
+    hard   = trigger('3\u20e3', fallback='3|hard|expert')(partialmethod(_set_board, Level.hard, _CRB.expert))
 
-    @trigger('4\u20e3', block=True)
+    @trigger('4\u20e3', fallback='4|custom', block=True)
     async def custom(self):
         custom_menu = _MinesweeperCustomMenu(self.context)
         custom_menu._message = self._message
@@ -929,7 +934,7 @@ class Minesweeper:
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     @not_playing_minesweeper()
-    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def minesweeper(self, ctx, level: Level = None):
         """Starts a game of Minesweeper"""
         with self._create_session(ctx):
@@ -951,7 +956,7 @@ class Minesweeper:
 
     @minesweeper.command(name='custom')
     @not_playing_minesweeper()
-    @commands.bot_has_permissions(embed_links=True, add_reactions=True)
+    @commands.bot_has_permissions(embed_links=True)
     async def minesweeper_custom(self, ctx, width: int, height: int, mines: int):
         """Starts a custom game of Minesweeper"""
         with self._create_session(ctx):
