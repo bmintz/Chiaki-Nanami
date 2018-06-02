@@ -144,8 +144,8 @@ VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro releasele
 
 
 class Chiaki(commands.AutoShardedBot):
-    __version__ = '1.3.0'
-    version_info = VersionInfo(major=1, minor=3, micro=0, releaselevel='final', serial=0)
+    __version__ = '1.4.0a'
+    version_info = VersionInfo(major=1, minor=4, micro=0, releaselevel='alpha', serial=0)
 
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
