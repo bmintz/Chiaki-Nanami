@@ -76,6 +76,8 @@ class Board:
         WH_PIECE: '\N{LARGE BLUE CIRCLE}',
         BK_KING: '\N{HEAVY BLACK HEART}',
         WH_KING: '\N{BLUE HEART}',
+        'BK_LAST_MOVE': '',
+        'WH_LAST_MOVE': '',
     }
     X = '\u200b'.join(map(chr, range(0x1f1e6, 0x1f1ee)))
     Y = [f'{i}\u20e3' for i in Y]
@@ -83,10 +85,18 @@ class Board:
     def __init__(self):
         self._board = _STARTING_BOARD[:]
         self._half_moves = 0
+        self._last_move = None
         self.turn = WHITE
 
     def __str__(self):
-        board = '\n'.join(f'{y}{"".join(chunk)}' for y, chunk in zip(self.Y, chunked(self._tiles(), 8)))
+        rows = list(self._tiles())
+        if self._last_move:
+            last_move_tile = self.TILES[['WH_LAST_MOVE', 'BK_LAST_MOVE'][self.turn]]
+            if last_move_tile:
+                for i in map(_xy_to_i, chunked(self._last_move[:-2], 2)):
+                    rows[i] = last_move_tile
+
+        board = '\n'.join(f'{y}{"".join(chunk)}' for y, chunk in zip(self.Y, chunked(rows, 8)))
         return f'\N{BLACK LARGE SQUARE}{self.X}\n{board}'
 
     @property
@@ -187,6 +197,7 @@ class Board:
 
         board[squares[0]] = ' '
         board[end] = piece
+        self._last_move = move
         self._half_moves += 1
         self.turn = not self.turn
 
@@ -234,6 +245,8 @@ class CheckersSession:
                 **self._board.TILES,
                 BK_KING: str(config.checkers_black_king),
                 WH_KING: str(config.checkers_white_king),
+                'BK_LAST_MOVE': str(config.checkers_black_last_move),
+                'WH_LAST_MOVE': str(config.checkers_white_last_move),
             }
 
     def _check(self, message):

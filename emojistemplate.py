@@ -88,3 +88,5 @@ sudoku_clues = [
 
 checkers_black_king = '\N{HEAVY BLACK HEART}'
 checkers_white_king = '\N{BLUE HEART}'
+checkers_black_last_move = ''
+checkers_white_last_move = ''
