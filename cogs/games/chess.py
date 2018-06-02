@@ -265,6 +265,13 @@ def _translate(game, move):
             or _translate_uci(game, move)
             )
 
+
+def _safe_sample(population, k):
+    # random.sample complains if the number of items is less than k.
+    # We don't care about that really.
+    return random.sample(population, min(k, len(population)))
+
+
 class ChessSession:
     def __init__(self, ctx, opponent):
         self._game = chessnut.Game()
@@ -317,6 +324,19 @@ class ChessSession:
         except asyncio.TimeoutError:
             self._status = Status.TIMEOUT
 
+    def _instructions(self):
+        if self._game.state.turn > 1:
+            return ''
+
+        sample = _safe_sample(self._game.get_moves(), 5)
+        joined = ', '.join(f'`{c}`' for c in sample)
+        return (
+            '**Instructions:**\n'
+            'Type the position of the piece you want to move,\n'
+            'and where you want to move it.\n'
+            f'**Example:**\n{joined}'
+        )
+
     async def _update_display(self):
         game = self._game
         turn = game.state.player
@@ -335,9 +355,10 @@ class ChessSession:
         }
 
         status = self.status
+        is_playing = self._status is Status.PLAYING
 
         icon = discord.Embed.Empty
-        if self._status is Status.PLAYING:
+        if is_playing:
             formats[turn] = f'**{formats[turn]}**'
             icon = player.user.avatar_url
             if check:
@@ -348,6 +369,8 @@ class ChessSession:
             formats[turn] = f'\U0001f534 = {name}'
 
         screen.description = '\n'.join(formats.values())
+        if is_playing:
+            screen.description += '\n\n' + self._instructions()
 
         header, colour = _STATUS_MESSAGES[status]
         screen.colour = colour
