@@ -1,6 +1,7 @@
 git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py[voice]
 
 asyncpg
+Chessnut
 colorthief
 emoji>=0.5            # fixes multi-code emojis having spaces
 lru_dict
