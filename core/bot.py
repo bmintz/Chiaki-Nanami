@@ -150,7 +150,8 @@ class Chiaki(commands.AutoShardedBot):
     def __init__(self):
         super().__init__(command_prefix=_callable_prefix,
                          description=config.description,
-                         pm_help=None)
+                         pm_help=None,
+                         case_insensitive=True)
 
         # Case-insensitive dict so we don't have to override get_cog
         # or get_cog_commands
