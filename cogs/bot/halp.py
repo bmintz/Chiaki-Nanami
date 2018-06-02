@@ -72,11 +72,10 @@ class Help:
             self.tips_list = []
 
     help = help_command(name='help', aliases=['h'])
-    halp = help_command(str.upper, name='halp', aliases=['HALP'], hidden=True)
+    halp = help_command(str.upper, name='halp', hidden=True)
     pleh = help_command((lambda s: multi_replace(s[::-1], _bracket_repls)), name='pleh', hidden=True)
     pleh = help_command((lambda s: multi_replace(s[::-1].upper(), _bracket_repls)),
-                        name='plah', aliases=['PLAH'], hidden=True)
-    Halp = help_command(str.title, name='Halp', hidden=True)
+                        name='plah', hidden=True)
 
     async def _invite_embed(self, ctx):        
         # TODO: Move this somewhere else as this is also duplicated in meta.py
