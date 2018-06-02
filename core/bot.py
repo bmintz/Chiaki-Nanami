@@ -143,7 +143,7 @@ def _get_proper_activity(type, name, url=''):
 VersionInfo = collections.namedtuple('VersionInfo', 'major minor micro releaselevel serial')
 
 
-class Chiaki(commands.Bot):
+class Chiaki(commands.AutoShardedBot):
     __version__ = '1.3.0a'
     version_info = VersionInfo(major=1, minor=3, micro=0, releaselevel='alpha', serial=0)
 
