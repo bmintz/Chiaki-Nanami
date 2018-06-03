@@ -11,6 +11,7 @@ from discord.ext import commands
 from functools import partial
 from more_itertools import all_equal, ilen
 
+from ..utils import db
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url
 from ..utils.paginator import Paginator, FieldPaginator
@@ -19,21 +20,19 @@ from ..utils.time import human_timedelta
 from core import errors
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS commands (
-        id BIGSERIAL PRIMARY KEY NOT NULL,
-        guild_id BIGINT NULL,
-        channel_id BIGINT NOT NULL,
-        author_id BIGINT NOT NULL,
-        used TIMESTAMP NOT NULL,
-        prefix TEXT NOT NULL,
-        command TEXT NOT NULL
-    );
+class Commands(db.Table):
+    id = db.Column(db.BigSerial, primary_key=True)
+    guild_id = db.Column(db.BigInt, nullable=True)
+    channel_id = db.Column(db.BigInt)
+    author_id = db.Column(db.BigInt)
+    used = db.Column(db.Timestamp)
+    prefix = db.Column(db.Text)
+    command = db.Column(db.Text)
 
-    CREATE INDEX IF NOT EXISTS commands_author_id_idx ON commands (author_id);
-    CREATE INDEX IF NOT EXISTS commands_command_idx ON commands (command);
-    CREATE INDEX IF NOT EXISTS commands_guild_id_idx ON commands (guild_id);
-"""
+    commands_author_id_idx = db.Index(author_id)
+    commands_command_idx = db.Index(command)
+    commands_guild_id_idx = db.Index(guild_id)
+
 
 _ignored_exceptions = (
     commands.NoPrivateMessage,

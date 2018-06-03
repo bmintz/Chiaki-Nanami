@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from discord.ext import commands
 from functools import partial, reduce
 
-from ..utils import cache, varpos
+from ..utils import cache, db, varpos
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import FieldPaginator
 from ..utils.time import duration_units, parse_delta
@@ -23,45 +23,7 @@ from core import errors
 log = logging.getLogger(__name__)
 
 
-class ModLogError(errors.ChiakiException):
-    pass
-
-
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS modlog (
-        id SERIAL PRIMARY KEY,
-        channel_id BIGINT NOT NULL,
-        message_id BIGINT NOT NULL,
-        guild_id BIGINT NOT NULL,
-        action VARCHAR(16) NOT NULL,
-        mod_id BIGINT NOT NULL,
-        reason TEXT NOT NULL,
-        extra TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS modlog_guild_id_idx ON modlog (guild_id);
-
-    CREATE TABLE IF NOT EXISTS modlog_targets (
-        id SERIAL PRIMARY KEY,
-        entry_id INTEGER REFERENCES modlog ON DELETE CASCADE,
-        user_id BIGINT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS modlog_config (
-        guild_id BIGINT PRIMARY KEY,
-        channel_id BIGINT NOT NULL DEFAULT 0,
-
-        -- some booleans
-        enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        log_auto BOOLEAN NOT NULL DEFAULT TRUE,
-        dm_user BOOLEAN NOT NULL DEFAULT TRUE,
-        poll_audit_log BOOLEAN NOT NULL DEFAULT TRUE,
-
-        events INTEGER NOT NULL DEFAULT {default_flags}
-    );
-"""
-
 ModAction = collections.namedtuple('ModAction', 'repr emoji colour')
-
 
 _mod_actions = {
     'warn'    : ModAction('warned', '\N{WARNING SIGN}', 0xFFC107),
@@ -75,7 +37,6 @@ _mod_actions = {
     'hackban' : ModAction('prematurely banned', '\N{NO ENTRY}', 0x212121),
     'massban' : ModAction('massbanned', '\N{NO ENTRY}', 0xb71c1c),
 }
-
 
 class EnumConverter(enum.IntFlag):
     """Mixin used for converting enums"""
@@ -97,10 +58,43 @@ _default_flags = (2 ** len(_mod_actions) - 1) & ~ActionFlag.hackban
 for k, v in list(_mod_actions.items()):
     _mod_actions[f'auto-{k}'] = v._replace(repr=f'auto-{v.repr}')
 
-__schema__ = __schema__.format(default_flags=_default_flags.value)
+
+# ----------------- Schema ---------------------
+
+class ModLogError(errors.ChiakiException):
+    pass
+
+
+class ModlogEntry(db.Table, table_name='modlog'):
+    id = db.Column(db.Serial, primary_key=True)
+    channel_id = db.Column(db.BigInt)
+    message_id = db.Column(db.BigInt)
+    guild_id = db.Column(db.BigInt)
+    action = db.Column(db.String(length=16))
+    mod_id = db.Column(db.BigInt)
+    reason = db.Column(db.Text)
+    extra = db.Column(db.Text)
+
+    modlog_guild_id_idx = db.Index(guild_id)
+
+class ModlogTargets(db.Table, table_name='modlog_targets'):
+    id = db.Column(db.Serial, primary_key=True)
+    entry_id = db.ForeignKey(ModlogEntry.id)
+    mod_id = db.Column(db.BigInt)
+
+class ModlogConfig(db.Table, table_name='modlog_config'):
+    guild_id = db.Column(db.BigInt, primary_key=True)
+    channel_id = db.Column(db.BigInt, default=0)
+
+    enabled = db.Column(db.Boolean, default=True)
+    log_auto = db.Column(db.Boolean, default=True)
+    dm_user = db.Column(db.Boolean, default=True)
+    poll_audit_log = db.Column(db.Boolean, default=True)
+
+    events = db.Column(db.Integer, default=_default_flags.value)
+
 
 MASSBAN_THUMBNAIL = emoji_url('\N{NO ENTRY}')
-
 
 fields = 'channel_id enabled log_auto dm_user poll_audit_log events'
 ModLogConfig = collections.namedtuple('ModLogConfig', fields)

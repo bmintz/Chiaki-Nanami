@@ -4,17 +4,15 @@ import discord
 
 from discord.ext import commands
 
-from ..utils import disambiguate
+from ..utils import db, disambiguate
 from ..utils.misc import emoji_url, truncate
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS blacklist (
-        snowflake BIGINT PRIMARY KEY,
-        blacklisted_at TIMESTAMP NOT NULL,
-        reason TEXT NULL
-    );
-"""
+class Blacklist(db.Table):
+    snowflake = db.Column(db.BigInt, primary_key=True)
+    blacklisted_at = db.Column(db.Timestamp)
+    reason = db.Column(db.Text, nullable=True)
+
 
 _blocked_icon = emoji_url('\N{NO ENTRY}')
 _unblocked_icon = emoji_url('\N{WHITE HEAVY CHECK MARK}')

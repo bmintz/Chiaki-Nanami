@@ -7,23 +7,23 @@ from discord.ext import commands
 
 from ..utils.examples import _get_static_example
 from ..utils.paginator import Paginator
-from ..utils import formats
+from ..utils import db, formats
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS tags (
-        name TEXT NOT NULL,
-        content TEXT NOT NULL,
-        is_alias BOOLEAN NOT NULL,
-        -- metadata
-        owner_id BIGINT NOT NULL,
-        uses INTEGER NOT NULL DEFAULT 0,
-        location_id BIGINT NOT NULL,
-        created_at TIMESTAMP NOT NULL,
-        PRIMARY KEY(name, location_id)
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS tags_uniq_idx ON tags (LOWER(name), location_id);
-"""
+class Tag(db.Table, table_name='tags'):
+    name = db.Column(db.Text)
+    content = db.Column(db.Text)
+    is_alias = db.Column(db.Boolean)
+
+    # metadata
+    guild_id = db.Column(db.BigInt)
+    uses = db.Column(db.Integer)
+    location_id = db.Column(db.BigInt)
+    created_at = db.Column(db.Timestamp)
+
+    tags_uniq_idx = db.Index('LOWER(name)', location_id)
+    __create_extra__ = ['PRIMARY KEY(name, location_id)']
+
 
 tag_logger = logging.getLogger(__name__)
 

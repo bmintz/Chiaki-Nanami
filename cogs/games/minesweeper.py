@@ -16,24 +16,24 @@ import discord
 from discord.ext import commands
 from more_itertools import chunked, tail
 
+from ..utils import db
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url, REGIONAL_INDICATORS
 from ..utils.paginator import InteractiveSession, trigger
 from ..utils.time import duration_units
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS minesweeper_games (
-        id SERIAL PRIMARY KEY,
-        level SMALLINT NOT NULL,
-        won BOOLEAN NOT NULL,
-        guild_id BIGINT NOT NULL,
-        user_id BIGINT NOT NULL,
-        played_at TIMESTAMP NOT NULL,
-        time REAL NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS minesweeper_games_time_idx ON minesweeper_games (time);
-"""
+class MinesweeperGames(db.Table, table_name='minesweeper_games'):
+    id = db.Column(db.Serial, primary_key=True)
+    level = db.Column(db.SmallInt)
+    won = db.Column(db.Boolean)
+    guild_id = db.Column(db.BigInt)
+    user_id = db.Column(db.BigInt)
+    played_at = db.Column(db.Timestamp)
+    time = db.Column(db.Double)
+
+    minesweeper_games_time_idx = db.Index(time)
+
 
 class HitMine(Exception):
     def __init__(self, x, y):

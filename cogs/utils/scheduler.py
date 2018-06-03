@@ -251,25 +251,24 @@ class QueueScheduler(BaseScheduler):
 
 # Below here is the database form of the scheduler. If you want to just use the
 # scheduler without worrying about using a DB, then ignore everything below here.
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS schedule (
-        id SERIAL PRIMARY KEY,
-        expires TIMESTAMP NOT NULL,
+from . import db
 
-        -- metadata
-        event TEXT NOT NULL,
-        created TIMESTAMP NOT NULL DEFAULT (now() at time zone 'utc'),
-        args_kwargs JSONB NOT NULL DEFAULT '{}'::jsonb
-    );
-    CREATE INDEX IF NOT EXISTS schedule_expires_idx ON schedule (expires);
-"""
+class Schedule(db.Table):
+    id = db.Column(db.Serial, primary_key=True)
+    expires = db.Column(db.Timestamp)
+
+    event = db.Column(db.Text)
+    time = db.Column(db.Timestamp, default="now() at time zone 'utc'")
+    args_kwargs = db.Column(db.JSON, default="'{}'::jsonb")
+
+    schedule_expires_idx = db.Index(expires)
+
 
 class DatabaseScheduler(BaseScheduler):
     """An implementation of a Scheduler where a database is used.
 
     Only DBMSs that support JSON types are supported (so basically just PostgresSQL).
     """
-    __schema__ = __schema__
 
     def __init__(self, pool, *, safe_mode=True, **kwargs):
         super().__init__(**kwargs)

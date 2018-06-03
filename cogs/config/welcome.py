@@ -7,22 +7,20 @@ from discord.ext import commands
 from datetime import datetime
 from more_itertools import one
 
-from ..utils import time
+from ..utils import db, time
 from ..utils.examples import static_example
 from ..utils.formats import multi_replace
 from ..utils.misc import nice_time, ordinal
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS server_messages (
-        guild_id BIGINT,
-        is_welcome BOOLEAN,
-        channel_id BIGINT NULL,
-        message TEXT NULL,
-        delete_after SMALLINT DEFAULT 0,
-        enabled BOOLEAN DEFAULT FALSE
-    );
-"""
+class ServerMessages(db.Table, table_name='server_messages'):
+    guild_id = db.Column(db.BigInt)
+    is_welcome = db.Column(db.Boolean)
+    channel_id = db.Column(db.BigInt, nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    delete_after = db.Column(db.SmallInt, default=0)
+    enabled = db.Column(db.Boolean, default=False)
+
 
 _DEFAULT_CHANNEL_CHANGE_URL = ('https://github.com/discordapp/discord-api-docs/blob/master/docs/'
                                'Change_Log.md#breaking-change-default-channels')

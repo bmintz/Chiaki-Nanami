@@ -7,23 +7,19 @@ import random
 from discord.ext import commands
 from functools import partial
 
-from .utils import disambiguate
+from .utils import db, disambiguate
 from .utils.context_managers import temp_attr
 from .utils.misc import str_join
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS selfroles(
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        role_id BIGINT UNIQUE NOT NULL
-    );
+class Selfroles(db.Table):
+    id = db.Column(db.Serial, primary_key=True)
+    guild_id = db.Column(db.BigInt)
+    role_id = db.Column(db.BigInt, unique=True)
 
-    CREATE TABLE IF NOT EXISTS autoroles (
-        guild_id BIGINT PRIMARY KEY,
-        role_id BIGINT NOT NULL
-    );
-"""
+class Autoroles(db.Table):
+    guild_id = db.Column(db.BigInt, primary_key=True)
+    role_id = db.Column(db.BigInt)
 
 
 def _pick_random_role(ctx):

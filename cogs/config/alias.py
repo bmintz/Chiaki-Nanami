@@ -3,21 +3,19 @@ import copy
 from discord.ext import commands
 from itertools import starmap
 
+from ..utils import db
 from ..utils.examples import _get_static_example
 from ..utils.paginator import Paginator
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS command_aliases (
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        alias TEXT NOT NULL,
-        command TEXT NOT NULL
-    );
+class CommandAliases(db.Table, table_name='command_aliases'):
+    id = db.Column(db.Serial, primary_key=True)
+    guild_id = db.Column(db.BigInt)
+    alias = db.Column(db.Text)
+    command = db.Column(db.Text)
 
-    CREATE UNIQUE INDEX IF NOT EXISTS command_aliases_uniq_idx
-    ON command_aliases (guild_id, alias);
-"""
+    command_aliases_uniq_idx = db.Index(guild_id, alias, unique=True)
+
 
 def _first_word(string):
     return string.split(' ', 1)[0]

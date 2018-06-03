@@ -11,8 +11,19 @@ from discord.ext import commands
 from more_itertools import flatten, grouper, sliced
 
 from .manager import SessionManager
+from ..utils import db
 from ..utils.paginator import InteractiveSession, trigger
 from ..utils.misc import emoji_url
+
+
+class SavedSudokuGames(db.Table, table_name='saved_sudoku_games'):
+    @classmethod
+    def create_sql(cls):
+        # XXX: We have a bad schema here, we should not be using an array
+        #      for this. Instead, we should have the board be represented
+        #      by a string of digits, and the clues a character-delimited
+        #      string of numbers.
+        return __schema__
 
 __schema__ = """
     CREATE TABLE IF NOT EXISTS saved_sudoku_games (

@@ -12,15 +12,13 @@ from operator import attrgetter
 
 from .manager import SessionManager
 
-from ..utils import converter, formats
+from ..utils import converter, db, formats
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS racehorses (
-        user_id BIGINT PRIMARY KEY,
-        emoji TEXT NOT NULL
-    );
-"""
+class Racehorses(db.Table):
+    user_id = db.Column(db.BigInt, primary_key=True)
+    emoji = db.Column(db.Text)
+
 
 TRACK_LENGTH = 40
 DEFAULT_TRACK = '-' * TRACK_LENGTH

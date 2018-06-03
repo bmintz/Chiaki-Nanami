@@ -10,19 +10,17 @@ from random import choice
 from .cards import Suit, Deck, images as card_images
 from .manager import SessionManager
 
+from ..utils import db
 from ..utils.misc import emoji_url
 from ..utils.paginator import InteractiveSession, trigger
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS hilo_games (
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        player_id BIGINT NOT NULL,
-        played_at TIMESTAMP NOT NULL,
-        points INTEGER NOT NULL
-    );
-"""
+class HiloGames(db.Table, table_name='hilo_games'):
+    id = db.Column(db.Serial, primary_key=True)
+    guild_id = db.Column(db.BigInt)
+    player_id = db.Column(db.BigInt)
+    played_at = db.Column(db.Timestamp)
+    points = db.Column(db.Integer)
 
 
 def _cmp(a, b):

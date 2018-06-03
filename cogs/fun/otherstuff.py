@@ -11,28 +11,27 @@ from collections import namedtuple
 from discord.ext import commands
 from PIL import Image
 
+from ..utils import db
 from ..utils.examples import wrap_example
 from ..utils.paginator import Paginator
 from ..utils.misc import emoji_url
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS rigged_ships (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT NOT NULL,
-        partner_id BIGINT NOT NULL,
-        score SMALLINT NOT NULL,
-        comment TEXT NULL,
+class RiggedShips(db.Table, table_name='rigged_ships'):
+    id = db.Column(db.Serial, primary_key=True)
+    user_id = db.Column(db.BigInt)
+    partner_id = db.Column(db.BigInt)
+    score = db.Column(db.SmallInt)
+    comment = db.Column(db.Text, nullable=True)
 
-        -- Metadata
-        guild_id BIGINT NOT NULL,
-        rigger_id BIGINT NOT NULL,
+    # Metadata
+    guild_id = db.Column(db.BigInt)
+    rigger_id = db.Column(db.BigInt)
 
-        -- constraints
-        CHECK (user_id <= partner_id),
-        UNIQUE (guild_id, user_id, partner_id)
-    );
-"""
+    __create_extra__ = [
+        'CHECK (user_id <= partner_id)',
+        'UNIQUE (guild_id, user_id, partner_id)',
+    ]
 
 # ---------------- Ship-related utilities -------------------
 

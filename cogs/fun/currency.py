@@ -8,39 +8,33 @@ import random
 from discord.ext import commands
 from PIL import Image
 
+from ..utils import db
 from ..utils.converter import union
 from ..utils.examples import get_example, wrap_example
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS currency (
-        user_id BIGINT PRIMARY KEY,
-        amount INTEGER NOT NULL
-    );
+class Currency(db.Table):
+    user_id = db.Column(db.BigInt, primary_key=True)
+    amount = db.Column(db.Integer)
 
-    CREATE TABLE IF NOT EXISTS givelog (
-        id SERIAL PRIMARY KEY,
-        giver BIGINT NOT NULL,
-        recipient BIGINT NOT NULL,
-        amount INTEGER NOT NULL,
-        time TIMESTAMP NOT NULL DEFAULT (now() at time zone 'utc')
-    );
+class Givelog(db.Table):
+    id = db.Column(db.Serial, primary_key=True)
+    giver = db.Column(db.BigInt)
+    recipient = db.Column(db.BigInt)
+    amount = db.Column(db.Integer)
+    time = db.Column(db.Timestamp, default="now() at time zone 'utc'")
 
-    CREATE TABLE IF NOT EXISTS daily_cash_cooldowns (
-        user_id BIGINT PRIMARY KEY,
-        latest_time TIMESTAMP
-    );
+class DailyCashCooldowns(db.Table, table_name='daily_cash_cooldowns'):
+    user_id = db.Column(db.BigInt, primary_key=True)
+    latest_time = db.Column(db.Timestamp)
 
-    CREATE TABLE IF NOT EXISTS dailylog (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT,
-        time TIMESTAMP NOT NULL,
-        amount INTEGER NOT NULL
-    );
-
-"""
+class DailyLog(db.Table):
+    id = db.Column(db.Serial, primary_key=True)
+    user_id = db.Column(db.BigInt)
+    time = db.Column(db.Timestamp)
+    amount = db.Column(db.Integer)
 
 
 # Cooldown for ->daily$

@@ -11,7 +11,7 @@ from collections import Counter, namedtuple
 from discord.ext import commands
 from operator import attrgetter
 
-from ..utils import formats, time, varpos
+from ..utils import db, formats, time, varpos
 from ..utils.context_managers import temp_attr
 from ..utils.converter import union
 from ..utils.examples import get_example, static_example, wrap_example
@@ -21,33 +21,28 @@ from ..utils.paginator import Paginator, FieldPaginator
 
 from core import errors
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS warn_entries (
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        user_id BIGINT NOT NULL,
-        reason TEXT NOT NULL,
-        warned_at TIMESTAMP NOT NULL
-    );
 
-    CREATE TABLE IF NOT EXISTS warn_timeouts (
-        guild_id BIGINT PRIMARY KEY,
-        timeout INTERVAL
-    );
+class WarnEntries(db.Table, table_name='warn_entries'):
+    id = db.Column(db.Serial, primary_key=True)
+    guild_id = db.Column(db.BigInt)
+    user_id = db.Column(db.BigInt)
+    reason = db.Column(db.Text)
+    warned_at = db.Column(db.Timestamp)
 
-    CREATE TABLE IF NOT EXISTS warn_punishments (
-        guild_id BIGINT,
-        warns BIGINT,
-        type TEXT,
-        duration INTEGER DEFAULT 0,
-        PRIMARY KEY(guild_id, warns)
-    );
+class WarnTimeouts(db.Table, table_name='warn_timeouts'):
+    guild_id = db.Column(db.BigInt, primary_key=True)
+    timeout = db.Column(db.Interval)
 
-    CREATE TABLE IF NOT EXISTS muted_roles (
-        guild_id BIGINT PRIMARY KEY,
-        role_id BIGINT
-    );
-"""
+class WarnPunishments(db.Table, table_name='warn_punishments'):
+    guild_id = db.Column(db.BigInt)
+    warns = db.Column(db.BigInt)
+    text = db.Column(db.Text)
+    duration = db.Column(db.Integer, default=0)
+    __create_extra__ = ['PRIMARY KEY(guild_id, warns)']
+
+class MutedRoles(db.Table, table_name='muted_roles'):
+    guild_id = db.Column(db.BigInt, primary_key=True)
+    role_id = db.Column(db.BigInt)
 
 
 class AlreadyWarned(errors.ChiakiException):

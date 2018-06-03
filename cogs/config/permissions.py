@@ -7,32 +7,29 @@ from collections import defaultdict, namedtuple
 from discord.ext import commands
 from more_itertools import partition
 
-from ..utils import cache, formats, disambiguate
+from ..utils import cache, db, formats, disambiguate
 from ..utils.commands import command_category, walk_parents
 from ..utils.converter import BotCommand, Category
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import Paginator
 
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS permissions (
-        id SERIAL PRIMARY KEY,
-        guild_id BIGINT NOT NULL,
-        snowflake BIGINT NULL,
-        name TEXT NOT NULL,
-        whitelist BOOLEAN NOT NULL,
-        UNIQUE (snowflake, name)
+class CommandPermissions(db.Table, table_name='permissions'):
+    id = db.Column(db.Serial, primary_key=True)
+    guild_id = db.Column(db.BigInt)
+    snowflake = db.Column(db.BigInt, nullable=True)
+    name = db.Column(db.Text)
+    whitelist = db.Column(db.Boolean)
 
-    );
-    CREATE INDEX IF NOT EXISTS permissions_guild_id_idx ON permissions (guild_id);
+    permissions_guild_id_idx = db.Index(guild_id)
 
-    CREATE TABLE IF NOT EXISTS plonks (
-        guild_id BIGINT,
-        entity_id BIGINT,
-        PRIMARY KEY(guild_id, entity_id)
-    );
-    CREATE INDEX IF NOT EXISTS plonks_idx ON plonks (guild_id, entity_id);
-"""
+class Ignored(db.Table, table_name='plonks'):
+    guild_id = db.Column(db.BigInt)
+    entity_id = db.Column(db.BigInt)
+
+    plonks_idx = db.Index(guild_id, entity_id)
+    __create_extra__ = ['PRIMARY KEY(guild_id, entity_id)']
+
 
 ALL_COMMANDS_KEY = '*'
 

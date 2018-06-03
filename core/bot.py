@@ -20,6 +20,7 @@ from more_itertools import always_iterable
 
 from . import context, errors
 
+from cogs.utils import db
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
@@ -495,5 +496,4 @@ class Chiaki(commands.AutoShardedBot):
 
     @property
     def schema(self):
-        schema = ''.join(getattr(ext, '__schema__', '') for ext in self.extensions.values())
-        return textwrap.dedent(schema + self.db_scheduler.__schema__)
+        return '\n\n'.join(t.create_sql() for t in db.all_tables())
