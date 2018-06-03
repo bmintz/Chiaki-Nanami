@@ -51,7 +51,7 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
         return self._display
 
     async def _get_ending_text(self, *, default):
-        connection = await self._bot.pool.acquire()
+        connection = await self.context.acquire()
 
         # Check if it's a world record
         query = 'SELECT MAX(points) FROM hilo_games;'
@@ -95,7 +95,6 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
         return self._score
 
     async def cleanup(self, **kwargs):
-        await self.context.acquire()
         with contextlib.suppress(Exception):
             await self._message.clear_reactions()
 
