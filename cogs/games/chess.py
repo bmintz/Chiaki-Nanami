@@ -1,10 +1,12 @@
 import asyncio
+import collections
 import contextlib
 import random
 
 import async_timeout
 import Chessnut as chessnut  # muh pep8
 import discord
+from more_itertools import all_equal
 
 from .bases import Status, TwoPlayerGameCog
 from ..utils.context_managers import temp_message
@@ -132,7 +134,59 @@ def _board_file_from_fen(fen, last_move=None, check=None):
 
 # -------- End of image making stuff please continue. -------
 
+def _tile_type(tile):
+    return sum(divmod(tile, 8)) % 2
 
+def _fen_key(fen):
+    return fen.rsplit(' ', 2)[0]
+
+
+class Game(chessnut.Game):
+    _max = chessnut.Game.STALEMATE
+    FIFTY_MOVE_RULE = _max + 1
+    INSUFFICIENT_MATERIAL = _max + 2
+    THREEFOLD_REPETITION = _max + 3
+    del _max
+
+    def fifty_move_rule(self):
+        print(self.state)
+        return self.state.ply >= 100
+    
+    def insufficient_material(self):
+        piece_counter = collections.Counter(map(str.lower, self.board._position))
+
+        if piece_counter['p'] or piece_counter['r'] or piece_counter['q']:
+            return False
+
+        if sum(piece_counter.values()) <= 3:
+            return True
+
+        return all_equal(_tile_type(i) for i, c in enumerate(self.board._position) if c.lower() == 'b')
+
+    def threefold_repetition(self):
+        # TODO: Simplify and possibly use some itertools magic.
+        counter = collections.Counter()
+        for fen in map(_fen_key, reversed(self.fen_history)):
+            counter[fen] += 1
+            if counter[fen] >= 3:
+                return True
+
+        return False
+
+    @property
+    def status(self):
+        if self.fifty_move_rule():
+            return self.FIFTY_MOVE_RULE
+        
+        if self.insufficient_material():
+            return self.INSUFFICIENT_MATERIAL
+
+        if self.threefold_repetition():
+            return self.THREEFOLD_REPETITION
+
+        return super().status
+
+    
 _SYMBOLS = {'w': '\u26aa', 'b': '\u26ab'}
 _OTHER_TURNS = {'w': 'b', 'b': 'w'}
 
@@ -144,9 +198,24 @@ _STATUS_MESSAGES = {
     chessnut.Game.CHECK: ('Check!', 0xFFEB3B),
     chessnut.Game.CHECKMATE: ('Checkmate!', 0xF44336),
     chessnut.Game.STALEMATE: ('Stalemate...', 0x9E9E9E),
+    Game.FIFTY_MOVE_RULE: ('Draw - 50-Move Rule', 0x9E9E9E),
+    Game.INSUFFICIENT_MATERIAL: ('Draw - Insufficient Material', 0x9E9E9E),
+    Game.THREEFOLD_REPETITION: ('Draw - Threefold Repetition', 0x9E9E9E),
 }
 
 _COLOUR_RESULTS = {'w': '1-0', 'b': '0-1'}
+
+_WIN_CONDITIONS = [
+    chessnut.Game.CHECKMATE,
+    Status.QUIT,
+    Status.TIMEOUT
+]
+_DRAW_CONDITIONS = [
+    chessnut.Game.STALEMATE,
+    Game.FIFTY_MOVE_RULE,
+    Game.INSUFFICIENT_MATERIAL,
+    Game.THREEFOLD_REPETITION,
+]
 
 
 class Clock:
@@ -274,7 +343,7 @@ def _safe_sample(population, k):
 
 class ChessSession:
     def __init__(self, ctx, opponent):
-        self._game = chessnut.Game()
+        self._game = Game()
         self._players = {
             t: Player(user, Clock())
             for t, user in zip('wb', random.sample((ctx.author, opponent), 2))
@@ -387,6 +456,7 @@ class ChessSession:
                 break
 
             status = self._game.status
+            print(status)
             if status not in [self._game.NORMAL, self._game.CHECK]:
                 self._status = Status.END
                 break
@@ -402,10 +472,10 @@ class ChessSession:
     def result(self):
         status = self.status
 
-        if status in [self._game.CHECKMATE, Status.QUIT, Status.TIMEOUT]:
+        if status in _WIN_CONDITIONS:
             return _COLOUR_RESULTS[_OTHER_TURNS[self._game.state.player]]
 
-        if status in [self._game.STALEMATE, ]:
+        if status in _DRAW_CONDITIONS:
             return '\xbd - \xbd'
 
         return '?'
