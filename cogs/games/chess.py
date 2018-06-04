@@ -149,7 +149,6 @@ class Game(chessnut.Game):
     del _max
 
     def fifty_move_rule(self):
-        print(self.state)
         return self.state.ply >= 100
     
     def insufficient_material(self):
@@ -456,7 +455,6 @@ class ChessSession:
                 break
 
             status = self._game.status
-            print(status)
             if status not in [self._game.NORMAL, self._game.CHECK]:
                 self._status = Status.END
                 break
