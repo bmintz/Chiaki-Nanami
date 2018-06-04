@@ -41,15 +41,15 @@ async def downgrade_saved_sudoku_games(connection):
         (
             user_id,
             [list(map(int, slice)) for slice in _sliced(board, 9)],
-            [(int(x), int(y)) for x, y in _sliced(clues, 2)],
+            [(int(x) + int(y) * 9) for x, y in _sliced(clues, 2)],
         )
         for user_id, board, clues in games
     ]
 
     await connection.execute(
         'TRUNCATE TABLE saved_sudoku_games;\n'
-        'ALTER TABLE saved_sudoku_games ALTER COLUMN board TYPE SMALLINT[9][9],\n'
-        'ALTER COLUMN clues TYPE SMALLINT[];'
+        'ALTER TABLE saved_sudoku_games ALTER COLUMN board TYPE SMALLINT[9][9] USING board::smallint[],\n'
+        'ALTER COLUMN clues TYPE SMALLINT[] USING board::smallint[];'
     )
 
     columns = ('user_id', 'board', 'clues')
