@@ -4,6 +4,10 @@ __pycache__
 dependencies
 jsonfiles/
 
+# Migrations
+!data/migrations
+data/migrations/.revisions
+
 # Ignore the config files
 config.py
 emojis.py
