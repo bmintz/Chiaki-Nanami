@@ -17,21 +17,10 @@ from ..utils.misc import emoji_url
 
 
 class SavedSudokuGames(db.Table, table_name='saved_sudoku_games'):
-    @classmethod
-    def create_sql(cls):
-        # XXX: We have a bad schema here, we should not be using an array
-        #      for this. Instead, we should have the board be represented
-        #      by a string of digits, and the clues a character-delimited
-        #      string of numbers.
-        return __schema__
+    user_id = db.Column(db.BigInt, primary_key=True)
+    board = db.Column(db.Text)
+    clues = db.Column(db.Text)
 
-__schema__ = """
-    CREATE TABLE IF NOT EXISTS saved_sudoku_games (
-        user_id BIGINT PRIMARY KEY,
-        board SMALLINT[9][9] NOT NULL,  -- size is not enforced but w/e
-        clues SMALLINT[] NOT NULL
-    );
-"""
 
 SUDOKU_ICON = emoji_url('\N{INPUT SYMBOL FOR NUMBERS}')
 # Default Sudoku constants
@@ -187,8 +176,9 @@ class Board:
             self[p] = EMPTY
 
     def to_data(self):
-        size = len(self._board[0])
-        return self._board, [x * size + y for x, y in self._clues]
+        board = ''.join(map(str, flatten(self._board)))
+        clues = ''.join(map(str, flatten(self._clues)))
+        return board, clues
 
     @classmethod
     def from_data(cls, data):
@@ -196,8 +186,8 @@ class Board:
         size = BLOCK_SIZE * BLOCK_SIZE
         self = cls.__new__(cls)
 
-        self._board = data['board']
-        self._clues = {divmod(clue, size) for clue in data['clues']}
+        self._board = [list(map(int, row)) for row in sliced(data['board'], 9)]
+        self._clues = {(int(x), int(y)) for x, y in sliced(data['clues'], 2)}
         self.new = False
         self.dirty = False  # We don't need to save a game we just loaded.
         self._clue_markers = DEFAULT_CLUE_EMOJIS  # Needed to specially mark the clues.
