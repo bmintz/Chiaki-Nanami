@@ -64,24 +64,12 @@ def _get_migrations(directory=_DEFAULT_DIR, *, downgrade=False):
             if action_ == action and table in revisions and cmp(version, revisions[table]):
                 yield version, table, script.stem, value
 
-    if downgrade and namespace.get('__initial__', False):
-        for t in revisions:
-            # Last script when going in reverse will be the initial schema
-            # migration file. This will be ignored in takewhile so we don't
-            # have to worry about other files randomly defining __initial__.
-            yield version, t, script.stem, None
-
 
 async def _apply_migration(to_execute, *, connection):
     if callable(to_execute):
         await to_execute(connection)
     else:
         await connection.execute(to_execute)
-
-
-async def _table_exists(table, *, connection):
-    exists = await connection.fetchval('SELECT to_regclass($1);', table)
-    return exists is not None
 
 
 async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAULT_DIR, verbose=False):
@@ -107,36 +95,26 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
 
     async with connection.transaction():
         for table_name, migrations in itertools.groupby(table_migrations, table_key):
-            if not await _table_exists(table_name, connection=connection):
-                # If the table doesn't exist then we don't need to go through the
-                # lengthy migration process. We can safely assume that the last
-                # migration would be applied since we'd be using the current schema.
-                #
-                # Note that this ignores downgrades on purpose.
-                await connection.execute(tables[table_name].create_sql())
-                version = next(tail(1, migrations))[0]
-            else:
-                last_version = None
-                if downgrade:
-                    # The last script isn't supposed to be executed in a
-                    # downgrade.
-                    *migrations, last_version = migrations
-                    last_version = last_version[0]
-                for version, table, file, step in migrations:
-                    if verbose:
-                        print('applying', table, 'from', file)
+            last_version = None
+            if downgrade:
+                # The last script isn't supposed to be executed in a
+                # downgrade.
+                *migrations, last_version = migrations
+                last_version = last_version[0]
+            for version, table, file, step in migrations:
+                if verbose:
+                    print('applying', table, 'from', file)
 
-                    try:
-                        await _apply_migration(step, connection=connection)
-                    except:
-                        action = 'upgrade' if downgrade else 'downgrade'
-                        print('Error from', f'{action}_{table}', 'in', file)
-                        raise
-                
-                if last_version is not None:
-                    version = last_version
-        
+                try:
+                    await _apply_migration(step, connection=connection)
+                except:
+                    action = 'upgrade' if downgrade else 'downgrade'
+                    print('Error from', f'{action}_{table}', 'in', file)
+                    raise
+            
+            if last_version is not None:
+                version = last_version
+    
             revisions[table_name] = version
 
         _write_revisions(revisions, directory) 
-    
