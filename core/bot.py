@@ -307,16 +307,6 @@ class Chiaki(commands.AutoShardedBot):
         async with ctx.acquire():
             await self.invoke(ctx)
 
-    async def run_sql(self):
-        await self.pool.execute(self.schema)
-
-    def _dump_schema(self):
-        with open('schema.sql', 'w') as f:
-            f.write(self.schema)
-
-    async def dump_sql(self):
-        await self.loop.run_in_executor(None, self._dump_schema)
-
     # --------- Events ----------
 
     async def on_ready(self):
@@ -470,7 +460,3 @@ class Chiaki(commands.AutoShardedBot):
     @property
     def str_uptime(self):
         return duration_units(self.uptime.total_seconds())
-
-    @property
-    def schema(self):
-        return '\n\n'.join(t.create_sql() for t in db.all_tables())
