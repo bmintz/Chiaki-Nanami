@@ -10,6 +10,7 @@ used as reference and to make creation and migrations much easier.
 
 from .column import *
 from .table import *
+from .misc import *
 
 __author__ = 'Ikusaba-san'
 __license__ = 'MIT'

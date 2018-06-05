@@ -49,29 +49,6 @@ class _UnicodeEmoji(discord.PartialEmoji):
         return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
 
 
-async def _set_codec(conn):
-    await conn.set_type_codec(
-            'jsonb',
-            schema='pg_catalog',
-            encoder=json.dumps,
-            decoder=json.loads,
-            format='text'
-    )
-
-
-async def _create_pool(dsn, *, init=None, **kwargs):
-    # credits to danny
-    if init is None:
-        async def new_init(conn):
-            await _set_codec(conn)
-    else:
-        async def new_init(conn):
-            await _set_codec(conn)
-            await init(conn)
-
-    return await asyncpg.create_pool(dsn, init=new_init, **kwargs)
-
-
 _MINIMAL_PERMISSIONS = [
     'send_messages',
     'embed_links',
@@ -174,7 +151,7 @@ class Chiaki(commands.AutoShardedBot):
         self.reset_requested = False
 
         psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
-        self.pool = self.loop.run_until_complete(_create_pool(psql, command_timeout=60))
+        self.pool = self.loop.run_until_complete(db.create_pool(psql, command_timeout=60))
 
         self.db_scheduler = DatabaseScheduler(self.pool, timefunc=datetime.utcnow)
         self.db_scheduler.add_callback(self._dispatch_from_scheduler)
