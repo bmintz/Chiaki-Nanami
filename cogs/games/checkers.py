@@ -332,8 +332,7 @@ class CheckersSession:
         return self._players[self._board.turn]
 
 class Checkers(TwoPlayerGameCog, game_cls=CheckersSession):
-    async def _end_game(self, ctx, inst, result):
-        pass
+    pass
 
 def setup(bot):
     bot.add_cog(Checkers(bot))

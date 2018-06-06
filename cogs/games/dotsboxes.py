@@ -421,8 +421,7 @@ class DotsAndBoxesSession:
         return self._players[self._board.turn]
 
 class DotsAndBoxes(TwoPlayerGameCog, game_cls=DotsAndBoxesSession, cmd='dots-boxes'):
-    async def _end_game(self, ctx, inst, result):
-        pass
+    pass
 
 def setup(bot):
     bot.add_cog(DotsAndBoxes(bot))

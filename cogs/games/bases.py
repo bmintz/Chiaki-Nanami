@@ -178,18 +178,6 @@ class TwoPlayerGameCog:
         else:
             await ctx.send(f'{member.mention}, you have a challenger!', embed=invite_embed)
 
-    async def _end_game(self, ctx, inst, result):
-        if result.winner is None:
-            return await ctx.send('It looks like nobody won :(')
-
-        user = result.winner.user
-        winner_embed = (discord.Embed(colour=0x00FF00, description=f'Game took {result.turns} turns to complete.')
-                        .set_thumbnail(url=user.avatar_url)
-                        .set_author(name=f'{user} is the winner!')
-                        )
-
-        await ctx.send(embed=winner_embed)
-
     async def _game(self, ctx, *, member: _MemberConverter = None):
         """Starts a game of {name}
 
@@ -238,8 +226,6 @@ class TwoPlayerGameCog:
             with put_in_running(self.__game_class__(ctx, waiter._recipient)):
                 inst = self.running_games[ctx.channel.id]
                 result = await inst.run()
-
-            await self._end_game(ctx, inst, result)
 
     async def _game_join(self, ctx):
         """Joins a {name} game.
