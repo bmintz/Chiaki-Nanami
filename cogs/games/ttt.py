@@ -25,6 +25,7 @@ WIN_COMBINATIONS = [
 ]
 
 TILES = ['\N{CROSS MARK}', '\N{HEAVY LARGE CIRCLE}']
+TILE_TURNS = dict(zip(TILES, [False, True]))
 WINNING_TILES = ['\U0000274e', '\U0001f17e']
 WINNING_TILE_MAP = dict(zip(TILES, WINNING_TILES))
 DIVIDER = '\N{BOX DRAWINGS LIGHT HORIZONTAL}' * SIZE
@@ -32,6 +33,7 @@ DIVIDER = '\N{BOX DRAWINGS LIGHT HORIZONTAL}' * SIZE
 class Board:
     def __init__(self):
         self._board = [None] * SIZE
+        self._turn = False
 
     def __str__(self):
         return f'\n{DIVIDER}\n'.join(
@@ -39,10 +41,11 @@ class Board:
             for chunk in chunked(enumerate(self._board, 1), 3)
         )
 
-    def place(self, x, thing):
+    def place(self, x):
         if self._board[x] is not None:
             raise IndexError(f'{x} is already occupied')
-        self._board[x] = thing
+        self._board[x] = TILES[self._turn]
+        self._turn = not self._turn
 
     def is_full(self):
         return None not in self._board
@@ -70,7 +73,6 @@ class Board:
             self._board[r] = tile
 
 
-Player = namedtuple('Player', 'user symbol')
 Stats = namedtuple('Stats', 'winner turns')
 
 # icons
@@ -82,17 +84,14 @@ class TicTacToeSession:
         self.ctx = ctx
         self.opponent = opponent
 
-        xo = random.sample(TILES, 2)
-        self._players = list(map(Player, (self.ctx.author, self.opponent), xo))
-        self._turn = random.random() > 0.5
-
+        self._players = random.sample((self.ctx.author, self.opponent), 2)
         self._board = Board()
         self._status = Status.PLAYING
 
         self._game_screen = discord.Embed(colour=0x00FF00)
 
     def _check_message(self, m):
-        user, tile = self.current
+        user = self.current
         if not (m.channel == self.ctx.channel and m.author == user):
             return False
 
@@ -111,7 +110,7 @@ class TicTacToeSession:
             return
 
         try:
-            self._board.place(index - 1, tile)
+            self._board.place(index - 1)
         except IndexError:
             return
         return True
@@ -123,18 +122,17 @@ class TicTacToeSession:
 
     def _update_display(self):
         screen = self._game_screen
-        current = self.current
-        user = current.user
-        winner = self.winner
+        user = self.current
+        winner = self._board.winner()
 
         # How can I make this cleaner...
         formats = [
-            f'{p.symbol} = {escape_markdown(str(p.user))}'
-            for p in self._players
+            f'{symbol} = {escape_markdown(str(user))}'
+            for symbol, user in zip(TILES, self._players)
         ]
 
         if not winner:
-            formats[self._turn] = f'**{formats[self._turn]}**'
+            formats[self.turn] = f'**{formats[self.turn]}**'
         else:
             self._board.mark()
 
@@ -143,7 +141,7 @@ class TicTacToeSession:
         screen.description = f'{self._board}\n\u200b\n{joined}'
 
         if winner:
-            user = winner.user
+            user = self._players[TILE_TURNS[winner]]
             screen.set_author(name=f'{user} wins!', icon_url=user.avatar_url)
         elif self._status is Status.QUIT:
             screen.colour = 0
@@ -159,7 +157,7 @@ class TicTacToeSession:
 
     async def _loop(self):
         for counter in itertools.count(1):
-            user, tile = self.current
+            user = self.current
             self._update_display()
 
             async with temp_message(self.ctx, content=f'{user.mention} It is your turn.',
@@ -170,14 +168,12 @@ class TicTacToeSession:
                     self._status = Status.TIMEOUT
 
                 if self._status is not Status.PLAYING:
-                    return Stats(self._players[not self._turn], counter)
+                    return Stats(self._players[not self.turn], counter)
 
-                winner = self.winner
+                winner = self._board.winner()
                 if winner or self._board.is_full():
                     self._status = Status.END
                     return Stats(winner, counter)
-
-            self._turn = not self._turn
 
     async def run(self):
         try:
@@ -187,16 +183,17 @@ class TicTacToeSession:
             await self.ctx.send(embed=self._game_screen)
 
     @property
-    def winner(self):
-        return discord.utils.get(self._players, symbol=self._board.winner())
+    def turn(self):
+        return self._board._turn
 
     @property
     def current(self):
-        return self._players[self._turn]
+        return self._players[self.turn]
 
 
 class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession, aliases=['ttt']):
-    pass
+    async def _end_game(self, *args):
+        pass
 
 def setup(bot):
     bot.add_cog(TicTacToe(bot))
