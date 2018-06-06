@@ -417,6 +417,13 @@ class DiepioTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
 
         await self._ctx.send(embed=embed)
 
+    def _timeout_embed(self):
+        answer = next(iter(always_iterable(self._current_question.answer)))
+        return (discord.Embed(description=f'The answer was **{answer}**', colour=0xFF0000)
+                .set_author(name='Times up!', icon_url=TIMEOUT_ICON)
+                .set_footer(text='No one got any points :(')
+                )
+
     def _answer_embed(self, user):
         # Let us pray for the day that we can remove diep.io trivia...
         # always_iterable is a tuple <4.0, but for easy support we should use this.
