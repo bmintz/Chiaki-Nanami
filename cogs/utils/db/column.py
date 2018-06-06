@@ -91,6 +91,15 @@ def _check_type(type):
 
     return type
 
+class Array(Type):
+    def __init__(self, type, size=None):
+        self._sql_type = _check_type(type).sql
+
+    @property
+    def sql(self):
+        return f'{self._sql_type}[]'
+
+
 def _check_action(action, name):
     action = action.upper()
     valid_actions = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT']
