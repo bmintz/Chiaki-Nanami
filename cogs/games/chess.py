@@ -495,8 +495,7 @@ class ChessSession:
 
 
 class Chess(TwoPlayerGameCog, game_cls=ChessSession):
-    async def _end_game(self, ctx, inst, result):
-        return
+    pass
 
 
 def setup(bot):
