@@ -14,7 +14,7 @@ from string import ascii_lowercase, ascii_uppercase
 
 import discord
 from discord.ext import commands
-from more_itertools import chunked, tail
+from more_itertools import chunked
 
 from ..utils import db
 from ..utils.formats import pluralize
@@ -321,49 +321,10 @@ class CustomizableRowBoard(Board):
         )
 
 
-def _consecutive_groups(iterable, ordering=lambda x: x):
-    # Copied from more-itertools
-    #
-    # As this is in 4.0.0 which I have not supported *yet* due to always_iterable
-    # returning an iterator rather than a tuple.
-    for k, g in itertools.groupby(
-        enumerate(iterable), key=lambda x: x[0] - ordering(x[1])
-    ):
-        yield map(itemgetter(1), g)
-
-def _first_and_last(iterable, ordering=lambda x: x):
-    return (
-        (next(it), next(tail(1, it), ''))
-        for it in _consecutive_groups(iterable, ordering)
-    )
-
-
-_numbers_to_letters_marker = object()
-_possible_characters = [
-    *map(str, range(1, 18)),
-    _numbers_to_letters_marker,
-    *ascii_lowercase
-]
-
-def _range_row(strings):
-    return ' or '.join(
-        (f'{start}-{end}' if end else start).upper()
-        for start, end in _first_and_last(strings, _possible_characters.index)
-    )
+ControlScheme = collections.namedtuple('ControlScheme', 'x y x_row y_row pattern')
 
 
 _number_emojis = [f'{i}\u20e3' for i in range(1, 10)] + ['\N{KEYCAP TEN}']
-
-class ControlScheme(collections.namedtuple('ControlScheme', 'x y x_row y_row pattern')):
-    __slots__ = ()
-
-    def x_range(self, limit):
-        return _range_row(self.x[:limit])
-
-    def y_range(self, limit):
-        return _range_row(self.y[:limit])
-
-
 DEFAULT_CONTROL_SCHEME = ControlScheme(
     ascii_lowercase, [*map(str, range(1, 11)), *'abcdefgh'],
     REGIONAL_INDICATORS, [*_number_emojis, *REGIONAL_INDICATORS[:7]],
@@ -410,8 +371,6 @@ class _MinesweeperHelp(InteractiveSession, stop_fallback=None):
         scheme = self._game._control_scheme
         number = random.randint(1, 9)
         description = _HELP_DESCRIPTION.format(
-            x_range=scheme.x_range(board.width),
-            y_range=scheme.y_range(board.height),
             examples=board.examples(scheme.x, scheme.y),
             controls=self._game.reaction_help,
             number=number,

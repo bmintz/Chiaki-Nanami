@@ -10,7 +10,7 @@ from collections import OrderedDict
 
 import discord
 from discord.ext import commands
-from more_itertools import chunked, flatten, ilen, sliced, spy
+from more_itertools import chunked, flatten, ilen, run_length, sliced, spy
 
 from .commands import all_names, command_category, walk_parents
 from .converter import BotCommand
@@ -398,8 +398,7 @@ class GeneralHelpPaginator(Paginator):
         bot = self.context.bot
 
         def cog_pages(iterable, start):
-            for name, g in itertools.groupby(iterable, key=operator.itemgetter(0)):
-                count = ilen(g)
+            for name, count in run_length.encode(map(operator.itemgetter(0), iterable)):
                 if count == 1:
                     yield str(start), name
                 else:
