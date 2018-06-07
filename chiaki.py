@@ -104,7 +104,7 @@ async def _migrate(version='', downgrade=False, verbose=False):
     if not version:
         version = None
     
-    for e in itertools.chain.from_iterable(Chiaki.find_extensions(e) or e for e in config.extensions):
+    for e in itertools.chain.from_iterable(Chiaki.find_extensions(e) or [e] for e in config.extensions):
         try:
             importlib.import_module(e)
         except:
