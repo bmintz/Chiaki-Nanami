@@ -7,13 +7,13 @@ import click
 import discord
 import functools
 import importlib
+import itertools
 import logging
 import os
 import sys
 import traceback
 
 from cogs.utils import db
-from cogs.utils.init import _get_module_names
 from core import Chiaki, migration
 
 import config
@@ -95,24 +95,6 @@ def main(ctx, log_stream):
 
 # ------------- DB-related stuff ------------------
 
-def _recursive_import(extensions):
-    # Package-extensions have to be accounted for, as of right
-    # now we hackily do it via setup and cogs but we don't actually
-    # import them, which means that if we just import the packages
-    # nothing happens.
-    #
-    # XXX: Needs less hacks
-    for e in extensions:
-        try:
-            module = importlib.import_module(e)
-        except:
-            click.echo(f'Could not load {e}.\n{traceback.format_exc()}', err=True)
-            raise
-
-        # Hacky way to check if something is a package.
-        if hasattr(module, '__path__'):
-            _recursive_import(_get_module_names(e, module.__file__))
-
 async def _create_pool():
     psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
     return await db.create_pool(psql, command_timeout=60)
@@ -122,7 +104,12 @@ async def _migrate(version='', downgrade=False, verbose=False):
     if not version:
         version = None
     
-    _recursive_import(config.extensions)
+    for e in itertools.chain.from_iterable(Chiaki.find_extensions(e) or e for e in extensions):
+        try:
+            importlib.import_module(e)
+        except:
+            click.echo(f'Could not load {e}.\n{traceback.format_exc()}', err=True)
+            return
 
     pool = await _create_pool()
     async with pool.acquire() as conn:

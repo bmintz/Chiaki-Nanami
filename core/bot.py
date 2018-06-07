@@ -5,9 +5,11 @@ import collections
 import contextlib
 import discord
 import emoji
+import importlib
 import inspect
 import json
 import logging
+import pkgutil
 import random
 import re
 import sys
@@ -219,6 +221,50 @@ class Chiaki(commands.AutoShardedBot):
         if getattr(cog, '__hidden__', False):
             for _, command in inspect.getmembers(cog, lambda m: isinstance(m, commands.Command)):
                 command.hidden = True
+
+    @staticmethod
+    def find_extensions(name):
+        spec = importlib.util.find_spec(name)
+        if spec is None:
+            raise ModuleNotFoundError('No module called {name!r}')
+
+        path = spec.submodule_search_locations
+        if path is None:
+            # Not a package (packages have __path__)
+            return None
+
+        return (name for _, name, is_pkg in pkgutil.iter_modules(path, spec.name + '.') if not is_pkg)
+
+    def load_extension(self, name):
+        modules = self.find_extensions(name)
+        if modules is None:
+            super().load_extension(name)
+            return
+
+        for module_name in modules:
+            try:
+                super().load_extension(module_name)
+            except discord.ClientException as e:
+                # Only suppress errors about not having a setup function because
+                # we might've mixed util files along with the modules for
+                # convenience. However, errors like commands already being
+                # registered and later on passing classes to add_cog might
+                # just end up failing silently which could pose a huge
+                # inconvenience.
+                if 'extension does not have a setup function' not in str(e):
+                    raise
+
+        # Force the package name in there because discord.py needs the module
+        # for unloading
+        self.extensions[name] = importlib.import_module(name)
+
+    def unload_extension(self, name):
+        super().unload_extension(name)
+        # unload_extension removes the commands/cogs in submodules but not the
+        # submodule itself.
+        for module_name in list(self.extensions):
+            if _is_submodule(name, module_name):
+                del self.extensions[module_name]
 
     @contextlib.contextmanager
     def temp_listener(self, func, name=None):
