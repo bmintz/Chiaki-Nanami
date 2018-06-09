@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 CARBONITEX_BOTDATA_URL = 'https://www.carbonitex.net/discord/data/botdata.php'
 DISCORD_BOTS_API_URL = 'https://bots.discord.pw/api'
-DISCORD_BOT_LIST_URL = 'https://discordbots.org/api/'
+DISCORD_BOT_LIST_URL = 'https://discordbots.org/api'
 
 
 class Botlists(Cog, hidden=True):
