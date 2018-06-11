@@ -11,5 +11,3 @@ parsedatetime
 psutil
 python-dateutil
 webcolors
-websockets>=3.1,<4.0  # needed because 4.0 is really fucky
-yarl<1.2              # 1.2 has a breaking change that breaks aiohttp
