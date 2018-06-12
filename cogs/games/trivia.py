@@ -4,6 +4,7 @@ import contextlib
 import glob
 import io
 import itertools
+import inspect
 import json
 import logging
 import os
@@ -647,4 +648,6 @@ def setup(bot):
     bot.add_cog(Trivia(bot))
 
 def teardown(bot):
-    DefaultTriviaSession._session.close()
+    coro = DefaultTriviaSession._session.close()
+    if inspect.isawaitable(coro):
+        asyncio.ensure_future(coro)
