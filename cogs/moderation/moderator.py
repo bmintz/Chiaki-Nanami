@@ -449,8 +449,8 @@ class Moderator:
         spammers = Counter(str(m.author) for m in deleted)
 
         total_deleted = sum(spammers.values())
-        second_part = 's was' if total_deleted == 1 else ' were'
-        title = f'{total_deleted} messages{second_part} removed.'
+        second_part = ' was' if total_deleted == 1 else 's were'
+        title = f'{total_deleted} message{second_part} removed.'
 
         joined = '\n'.join(itertools.starmap('**{0}**: {1}'.format, spammers.most_common()))
 
