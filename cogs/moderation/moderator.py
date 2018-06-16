@@ -26,6 +26,7 @@ class WarnEntries(db.Table, table_name='warn_entries'):
     id = db.Column(db.Serial, primary_key=True)
     guild_id = db.Column(db.BigInt)
     user_id = db.Column(db.BigInt)
+    mod_id = db.Column(db.BigInt)
     reason = db.Column(db.Text)
     warned_at = db.Column(db.Timestamp)
 
