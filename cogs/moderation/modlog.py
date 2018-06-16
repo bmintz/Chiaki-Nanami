@@ -592,7 +592,6 @@ class ModLog:
         pages = FieldPaginator(
             ctx, entries,
             title=f'Cases for {member}',
-            description=f'{member} has {len(entries)} cases',
             colour=member.colour,
             inline=False
         )
