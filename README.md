@@ -9,10 +9,10 @@ Created by MIkusaba.
 Adding the bot is preferred over running your own instance, as the bot requires a bit of configuration in order to get working properly.
 
 To add the bot:
-https://discordapp.com/oauth2/authorize?client_id=276958548775403531&scope=bot&permissions=18496
+https://discordapp.com/oauth2/authorize?client_id=247863665598922762&scope=bot&permissions=18496
 
 If you want to be able to use all of the bot (moderation commands and all that), use this link:
-https://discordapp.com/oauth2/authorize?client_id=276958548775403531&scope=bot&permissions=281110647
+https://discordapp.com/oauth2/authorize?client_id=247863665598922762&scope=bot&permissions=281110647
 
 
 
