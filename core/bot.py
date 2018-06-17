@@ -226,7 +226,7 @@ class Chiaki(commands.AutoShardedBot):
     def find_extensions(name):
         spec = importlib.util.find_spec(name)
         if spec is None:
-            raise ModuleNotFoundError('No module called {name!r}')
+            raise ModuleNotFoundError(f'No module called {name!r}')
 
         path = spec.submodule_search_locations
         if path is None:
