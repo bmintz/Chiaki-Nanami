@@ -72,24 +72,24 @@ class _Callback(collections.namedtuple('_Callback', 'func blocking')):
 
 
 class InteractiveSession:
-    """Base class for all interactive sessions.
+    r"""Base class for all interactive sessions.
 
     Subclasses must implement 'default' method. If necessary, they can
     override 'start'.
 
     Example:
-    class Thing(InteractiveSession):
-        @reaction('\N{HEAVY BLACK HEART}')
-        def default(self):
-            return discord.Embed(description='hi myst \N{HEAVY BLACK HEART}')
+        class Thing(InteractiveSession):
+            @reaction('\N{HEAVY BLACK HEART}')
+            def default(self):
+                return discord.Embed(description='hi myst \N{HEAVY BLACK HEART}')
 
-        @reaction('\N{THINKING FACE}')
-        def think(self):
-            return discord.Embed(description='\N{THINKING FACE}')
+            @reaction('\N{THINKING FACE}')
+            def think(self):
+                return discord.Embed(description='\N{THINKING FACE}')
 
-    A page should either return a discord.Embed, or None if to indicate the
-    page was invalid somehow. e.g. The page number given was ofut of bounds,
-    or there were side effects associated with it.
+    A page should either return a discord.Embed, or None if to indicate
+    the page was invalid somehow. e.g. The page number given was out of
+    bounds, or there were side effects associated with it.
     """
 
     # TODO: Context-less __init__
