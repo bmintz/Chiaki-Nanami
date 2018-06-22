@@ -42,29 +42,14 @@ def _lerp_color(c1, c2, interp):
 
 _lerp_pink = functools.partial(_lerp_color, (0, 0, 0), (255, 105, 180))
 
-# Some large-ish Merseene prime cuz... idk.
-_OFFSET = 2 ** 3217 - 1
-
-# This seed is used to change the result of ->ship without having to do a
-# complicated cache
-_seed = 0
-
-
-async def _change_ship_seed():
-    global _seed
-    while True:
-        _seed = secrets.randbits(256)
-        next_delay = random.uniform(10, 60) * 60
-        await asyncio.sleep(next_delay)
-
 
 def _user_score(user):
-    return (user.id
-            + int(user.avatar or str(user.default_avatar.value), 16)
-            # 0x10FFFF is the highest Unicode can go.
-            + sum(ord(c) * 0x10FFFF * i for i, c in enumerate(user.name))
-            + int(user.discriminator)
-            )
+    return hash((
+        user.id,
+        user.avatar or user.default_avatar,
+        str(user),
+        user.display_name
+    ))
 
 
 _default_rating_comments = (
@@ -167,10 +152,10 @@ _self_ratings = [
 
 def _calculate_rating(user1, user2):
     if user1 == user2:
-        index = _seed % 2
+        index = (_user_score(user1) + int(time.time()) // random.randint(3000, 3600)) % 2
         return _ShipRating(index * 100, _self_ratings[index].format(user=user1))
 
-    score = ((_user_score(user1) + _user_score(user2)) * _OFFSET + _seed) % 100
+    score = (_user_score(user1) + _user_score(user2)) % 100
     return _ShipRating(score)
 
 
@@ -184,11 +169,9 @@ class OtherStuffs:
         self.bot = bot
 
         self._mask = open('data/images/heart.png', 'rb')
-        self._future = asyncio.ensure_future(_change_ship_seed())
 
     def __unload(self):
         self._mask.close()
-        self._future.cancel()
 
     # -------------------- SHIP -------------------
     async def _load_user_avatar(self, user):
