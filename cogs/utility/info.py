@@ -628,7 +628,7 @@ class Information:
 
     @info.command(name='channel')
     @embedded()
-    async def info_channel(self, ctx, channel: _Channel = None):
+    async def info_channel(self, ctx, *, channel: _Channel = None):
         """Shows info about a voice or text channel."""
         if channel is None:
             channel = ctx.channel
