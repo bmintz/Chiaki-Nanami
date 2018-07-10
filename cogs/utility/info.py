@@ -545,35 +545,53 @@ class Information:
 
     @staticmethod
     def text_channel_embed(channel):
-        topic = (
-            '\n'.join(group_strings(channel.topic, 70)) if channel.topic else
-            discord.Embed.Empty
+        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
+        overwrites = str(len(channel.overwrites))
+        if empty_overwrites:
+            overwrites = f'{overwrites} ({empty_overwrites} empty)'
+
+        info = (
+            f'**ID:** {channel.id}\n'
+            f'**Members:**: {len(channel.members)}\n'
+            f'**Overwrites:** {overwrites}\n'
         )
 
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
+        if channel.category:
+            info = f'**Category:** {channel.category}\n{info}'
 
-        return (discord.Embed(description=topic, timestamp=channel.created_at)
-                .set_author(name=f'#{channel.name}')
-                .add_field(name='ID', value=channel.id)
-                .add_field(name='Position', value=channel.position)
-                .add_field(name='Members', value=len(channel.members))
-                .add_field(name='Permission Overwrites', value=overwrite_message)
-                .set_footer(text='Created')
-                )
+        embed = (discord.Embed(timestamp=channel.created_at)
+                 .set_author(name=f'#{channel.name}')
+                 .set_footer(text='Created')
+                 )
+
+        if channel.topic:
+            embed.description = channel.topic
+            embed.add_field(name='\u200b', value=info)
+        else:
+            embed.description = info
+
+        return embed
 
     @staticmethod
     def voice_channel_embed(channel):
         empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
+        overwrites = str(len(channel.overwrites))
+        if empty_overwrites:
+            overwrites = f'{overwrites} ({empty_overwrites} empty)'
 
-        return (discord.Embed(timestamp=channel.created_at)
+        limit = channel.user_limit or '\N{INFINITY}'
+        info = (
+            f'**ID:** {channel.id}\n'
+            f'**Bitrate:** {channel.bitrate // 1000}kbps\n'
+            f'**User Limit:** {limit}\n'
+            f'**Overwrites:** {overwrites}\n'
+        )
+
+        if channel.category:
+            info = f'**Category:** {channel.category}\n{info}'
+
+        return (discord.Embed(description=info, timestamp=channel.created_at)
                 .set_author(name=channel.name)
-                .add_field(name='ID', value=channel.id)
-                .add_field(name='Position', value=channel.position)
-                .add_field(name='Bitrate', value=channel.bitrate)
-                .add_field(name='Max Members', value=channel.user_limit or '\N{INFINITY}')
-                .add_field(name='Permission Overwrites', value=overwrite_message)
                 .set_footer(text='Created')
                 )
 
