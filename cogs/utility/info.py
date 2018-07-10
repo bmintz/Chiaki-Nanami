@@ -357,6 +357,15 @@ def _format_activity(activity):
     return playing
 
 
+def _overwrites_message(channel):
+    empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
+    overwrites = str(len(channel.overwrites))
+    if empty_overwrites:
+        overwrites = f'{overwrites} ({empty_overwrites} empty)'
+    
+    return overwrites
+
+
 class Information:
     """Info related commands"""
 
@@ -552,15 +561,10 @@ class Information:
 
     @staticmethod
     def text_channel_embed(channel):
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrites = str(len(channel.overwrites))
-        if empty_overwrites:
-            overwrites = f'{overwrites} ({empty_overwrites} empty)'
-
         info = (
             f'**ID:** {channel.id}\n'
             f'**Members:**: {len(channel.members)}\n'
-            f'**Overwrites:** {overwrites}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
         )
 
         if channel.category:
@@ -581,17 +585,12 @@ class Information:
 
     @staticmethod
     def voice_channel_embed(channel):
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrites = str(len(channel.overwrites))
-        if empty_overwrites:
-            overwrites = f'{overwrites} ({empty_overwrites} empty)'
-
         limit = channel.user_limit or '\N{INFINITY}'
         info = (
             f'**ID:** {channel.id}\n'
             f'**Bitrate:** {channel.bitrate // 1000}kbps\n'
             f'**User Limit:** {limit}\n'
-            f'**Overwrites:** {overwrites}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
         )
 
         if channel.category:
@@ -604,14 +603,9 @@ class Information:
 
     @staticmethod
     def category_channel_embed(channel):
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrites = str(len(channel.overwrites))
-        if empty_overwrites:
-            overwrites = f'{overwrites} ({empty_overwrites} empty)'
-
         info = (
             f'**ID:** {channel.id}\n'
-            f'**Overwrites:** {overwrites}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
         )
 
         channels = channel.channels
