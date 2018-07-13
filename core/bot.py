@@ -152,8 +152,13 @@ class Chiaki(commands.AutoShardedBot):
 
         self.reset_requested = False
 
-        psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
-        self.pool = self.loop.run_until_complete(db.create_pool(psql, command_timeout=60))
+        psql = dict(
+            user=config.psql_user,
+            password=config.psql_pass,
+            host=config.psql_host,
+            database=config.psql_db
+        )
+        self.pool = self.loop.run_until_complete(db.create_pool(**psql, command_timeout=60))
 
         self.db_scheduler = DatabaseScheduler(self.pool, timefunc=datetime.utcnow)
         self.db_scheduler.add_callback(self._dispatch_from_scheduler)

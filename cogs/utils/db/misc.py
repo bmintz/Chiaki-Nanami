@@ -14,7 +14,7 @@ async def _set_codec(conn):
     )
 
 
-async def create_pool(dsn, *, init=None, **kwargs):
+async def create_pool(*, init=None, **kwargs):
     if init is None:
         async def new_init(conn):
             await _set_codec(conn)
@@ -23,4 +23,4 @@ async def create_pool(dsn, *, init=None, **kwargs):
             await _set_codec(conn)
             await init(conn)
 
-    return await asyncpg.create_pool(dsn, init=new_init, **kwargs)
+    return await asyncpg.create_pool(init=new_init, **kwargs)
