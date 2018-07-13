@@ -3,6 +3,8 @@ __pycache__
 *.log
 dependencies
 jsonfiles/
+venv/
+.venv/
 
 # Migrations
 !data/migrations
