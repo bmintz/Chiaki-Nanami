@@ -20,20 +20,6 @@ from ..utils.time import human_timedelta
 from core import errors
 
 
-class Commands(db.Table):
-    id = db.Column(db.BigSerial, primary_key=True)
-    guild_id = db.Column(db.BigInt, nullable=True)
-    channel_id = db.Column(db.BigInt)
-    author_id = db.Column(db.BigInt)
-    used = db.Column(db.Timestamp)
-    prefix = db.Column(db.Text)
-    command = db.Column(db.Text)
-
-    commands_author_id_idx = db.Index(author_id)
-    commands_command_idx = db.Index(command)
-    commands_guild_id_idx = db.Index(guild_id)
-
-
 _ignored_exceptions = (
     commands.NoPrivateMessage,
     commands.DisabledCommand,
@@ -53,67 +39,6 @@ class Stats:
         self.bot = bot
         self.process = psutil.Process()
 
-    async def on_command(self, ctx):
-        command = ctx.command.qualified_name
-        self.bot.command_leaderboard[command] += 1
-
-        guild_id = None if ctx.guild is None else ctx.guild.id
-
-        query = """INSERT INTO commands (guild_id, channel_id, author_id, used, prefix, command)
-                   VALUES ($1, $2, $3, $4, $5, $6)
-                """
-
-        await ctx.pool.execute(
-            query,
-            guild_id,
-            ctx.channel.id,
-            ctx.author.id,
-            ctx.message.created_at,
-            ctx.prefix,
-            command,
-        )
-
-    async def _show_top_commands(self, ctx, n, entries):
-        padding = int(math.log10(n)) + 1
-        lines = (f'`\u200b{i:>{padding}}.`  {c} ({pluralize(use=u)})'
-                 for i, (c, u) in enumerate(entries, 1))
-
-        title = pluralize(command=n)
-        await Paginator(ctx, lines, title=f'Top {title}').interact()
-
-    @commands.group(name='topcommands', aliases=['topcmds'], invoke_without_command=True)
-    async def top_commands(self, ctx, n=10):
-        """Shows the n most used commands since I've woken up."""
-        entries = self.bot.command_leaderboard.most_common(n)
-        await self._show_top_commands(ctx, n, entries)
-
-    @top_commands.group(name='alltime', aliases=['all'])
-    async def top_commands_alltime(self, ctx, n=10):
-        """Shows the top n commands of all time, globally."""
-        query = """SELECT command,
-                          COUNT(*) as "uses"
-                   FROM commands
-                   GROUP BY command
-                   ORDER BY "uses" DESC
-                   LIMIT $1;
-                """
-        results = await ctx.db.fetch(query, n)
-        await self._show_top_commands(ctx, n, results)
-
-    @top_commands.group(name='alltimeserver', aliases=['allserver'])
-    async def top_commands_alltimeserver(self, ctx, n=10):
-        """Shows the top n commands of all time, in the server."""
-        query = """SELECT command,
-                          COUNT(*) as "uses"
-                   FROM commands
-                   WHERE guild_id = $1
-                   GROUP BY command
-                   ORDER BY "uses" DESC
-                   LIMIT $2;
-                """
-        results = await ctx.db.fetch(query, ctx.guild.id, n)
-        await self._show_top_commands(ctx, n, results)
-
     @commands.command(name='stats')
     @commands.bot_has_permissions(embed_links=True)
     async def stats(self, ctx):
@@ -125,7 +50,6 @@ class Stats:
 
         bot = self.bot
         command_map = itertools.starmap('{1} {0}'.format, bot.command_counter.most_common())
-        command_stats = '\n'.join(command_map) or 'No stats yet.'
         commands = f'{len(bot.commands)}\n({len(set(bot.walk_commands()))} total)'
 
         with self.process.oneshot():
@@ -148,7 +72,6 @@ class Stats:
                         .add_field(name='CPU Usage', value=f'{cpu_usage}%\n{memory_usage_in_mb :.2f}MB')
                         .add_field(name='Messages', value=message_field)
                         .add_field(name='Presence', value=presence)
-                        .add_field(name='Commands Run', value=command_stats)
                         .add_field(name='Uptime', value=self.bot.str_uptime.replace(', ', '\n'))
                         )
         await ctx.send(embed=chiaki_embed)
