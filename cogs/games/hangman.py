@@ -208,8 +208,6 @@ class Hangman:
             if not v:
                 del categories[k]
 
-        print('everything is ok now')
-
     @commands.group(invoke_without_command=True)
     @commands.bot_has_permissions(embed_links=True)
     async def hangman(self, ctx, category: Category):
