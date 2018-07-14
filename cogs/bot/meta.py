@@ -22,7 +22,7 @@ class Meta:
         else:
             branch = 'v' + bot.__version__
 
-        self._source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/tree/{branch}'
+        self._source_url = f'https://github.com/bmintz/Chiaki-Nanami/tree/{branch}'
 
     @property
     def source_url(self):

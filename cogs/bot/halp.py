@@ -79,7 +79,7 @@ class Help:
 
     async def _invite_embed(self, ctx):        
         # TODO: Move this somewhere else as this is also duplicated in meta.py
-        source_url = f'https://github.com/Ikusaba-san/Chiaki-Nanami'
+        source_url = f'https://github.com/bmintz/Chiaki-Nanami'
         if ctx.bot.version_info.releaselevel != 'alpha':
             source_url = f'{source_url}/tree/v{ctx.bot.__version__}'
 
