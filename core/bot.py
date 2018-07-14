@@ -483,7 +483,7 @@ class Chiaki(commands.AutoShardedBot):
         # You are allowed to change this to be another server of your choice.
         # However, doing so will instantly void your warranty.
         # Change this azt your own peril.
-        return 'https://discord.gg/WtkPTmE'
+        return config.support_server_invite
 
     @property
     def uptime(self):

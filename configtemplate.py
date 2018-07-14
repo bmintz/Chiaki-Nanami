@@ -33,6 +33,10 @@ webhook_url = ''
 # 3. Nothing (blank string or None), representing no channel.
 feedback_destination = ''
 
+# Where to redirect users when they need help using the bot.
+# This should be an invite link.
+support_server_invite = 'https://discord.gg/WtkPTmE'
+
 # -------------------- BOT STUFF ---------------------
 
 # The bot's default command prefix. This can either be a string, 
