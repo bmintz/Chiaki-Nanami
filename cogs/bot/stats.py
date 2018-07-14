@@ -49,16 +49,12 @@ class Stats:
         """
 
         bot = self.bot
-        command_map = itertools.starmap('{1} {0}'.format, bot.command_counter.most_common())
-        commands = f'{len(bot.commands)}\n({len(set(bot.walk_commands()))} total)'
 
         with self.process.oneshot():
             memory_usage_in_mb = self.process.memory_full_info().uss / 1024**2
             cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
 
         uptime_seconds = bot.uptime.total_seconds()
-        average_messages = bot.message_counter / uptime_seconds
-        message_field = f'{bot.message_counter}\n({average_messages :.2f}/sec)'
 
         presence = (
             f'{bot.guild_count} Servers\n'
@@ -68,34 +64,11 @@ class Stats:
 
         chiaki_embed = (discord.Embed(description=bot.appinfo.description, colour=self.bot.colour)
                         .set_author(name=str(ctx.bot.user), icon_url=bot.user.avatar_url)
-                        .add_field(name='Commands', value=commands)
                         .add_field(name='CPU Usage', value=f'{cpu_usage}%\n{memory_usage_in_mb :.2f}MB')
-                        .add_field(name='Messages', value=message_field)
                         .add_field(name='Presence', value=presence)
                         .add_field(name='Uptime', value=self.bot.str_uptime.replace(', ', '\n'))
                         )
         await ctx.send(embed=chiaki_embed)
-
-    @commands.command()
-    async def history(self, ctx, n=5):
-        """Shows the last n commands you've used."""
-        n = min(n, 50)
-
-        query = """SELECT prefix, command, used FROM commands
-                   WHERE author_id = $1
-                   ORDER BY id DESC
-                   OFFSET 1 -- skip this command
-                   LIMIT $2;
-                """
-        lines = [
-            (f'`{prefix}{command}`', f'Executed {human_timedelta(used)}')
-            for prefix, command, used in await ctx.db.fetch(query, ctx.author.id, n)
-        ]
-
-        title = pluralize(command=n)
-        pages = FieldPaginator(ctx, lines, title=f"{ctx.author}'s last {title}",
-                                inline=False, per_page=5)
-        await pages.interact()
 
     async def command_stats(self):
         pass
@@ -107,10 +80,6 @@ class Stats:
         # TODO
 
     async def on_command_error(self, ctx, error):
-        # command_counter['failed'] += 0 sets the 'failed' key. We don't want that.
-        if not isinstance(error, commands.CommandNotFound):
-            self.bot.command_counter['failed'] += 1
-
         error = getattr(error, 'original', error)
 
         if isinstance(error, _ignored_exceptions):
@@ -204,6 +173,4 @@ class Stats:
 
 
 def setup(bot):
-    if not hasattr(bot, 'command_leaderboard'):
-        bot.command_leaderboard = collections.Counter()
     bot.add_cog(Stats(bot))
