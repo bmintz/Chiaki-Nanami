@@ -146,8 +146,6 @@ class Chiaki(commands.AutoShardedBot):
         except FileNotFoundError:
             self.command_image_urls = {}
 
-        self.message_counter = 0
-        self.command_counter = collections.Counter()
         self.custom_prefixes = JSONFile('customprefixes.json')
 
         self.reset_requested = False
@@ -420,19 +418,7 @@ class Chiaki(commands.AutoShardedBot):
             await ctx.bot_missing_perms(error.missing_perms)
 
     async def on_message(self, message):
-        self.message_counter += 1
         await self.process_commands(message)
-
-    async def on_command(self, ctx):
-        self.command_counter['total'] += 1
-        if isinstance(ctx.channel, discord.abc.PrivateChannel):
-            self.command_counter['in DMs'] += 1
-        fmt = ('Command executed in {0.channel} ({0.channel.id}) from {0.guild} ({0.guild.id}) '
-               'by {0.author} ({0.author.id}) Message: "{0.message.content}"')
-        command_log.info(fmt.format(ctx))
-
-    async def on_command_completion(self, ctx):
-        self.command_counter['succeeded'] += 1
 
     # ------ Viewlikes ------
 
