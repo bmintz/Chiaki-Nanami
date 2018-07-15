@@ -10,11 +10,3 @@ Adding the bot is preferred over running your own instance, as the bot requires 
 
 To add the bot:
 https://discordapp.com/oauth2/authorize?client_id=467631031114006539&scope=bot&permissions=18496
-
-
-## Need Help?
-Join the Chiaki support server
-
-[![Discord](https://discordapp.com/api/guilds/258863756983926794/widget.png?style=banner3)](https://discord.gg/WtkPTmE)
-
-*`/* README will be edited more as I go... */`*
