@@ -11,8 +11,7 @@ import string
 from collections import namedtuple
 from discord.ext import commands
 
-from .manager import SessionManager
-
+from ..utils.context_managers import temp_item
 from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import Paginator
@@ -187,12 +186,9 @@ class Hangman:
 
     def __init__(self, bot):
         self.bot = bot
-        self.manager = SessionManager()
+        self.sessions = {}
         self.bot.loop.create_task(self._load_categories())
         self.categories = {}
-
-    def __unload(self):
-        self.manager.cancel_all()
 
     async def _load_categories(self):
         load_async = functools.partial(self.bot.loop.run_in_executor, None, _load_hangman)
@@ -218,13 +214,13 @@ class Hangman:
         To see all the categories you can choose, 
         type `{prefix}hangman categories`
         """
-        if self.manager.session_exists(ctx.channel):
+        if ctx.channel.id in self.sessions:
             return await ctx.send("A hangman game is already running in this channel...")
 
         word = random.choice(category)
 
         await ctx.release()
-        with self.manager.temp_session(ctx.channel, HangmanSession(ctx, word)) as inst:
+        with temp_item(self.sessions, ctx.channel.id, HangmanSession(ctx, word)) as inst:
             success, message = await inst.run()
             if success is None:
                 return
@@ -235,7 +231,7 @@ class Hangman:
     @hangman.command(name='stop')
     async def hangman_stop(self, ctx):
         """Stops a running hangman game."""
-        instance = self.manager.get_session(ctx.channel)
+        instance = self.sessions.get(ctx.channel.id)
         if instance is None:
             return await ctx.send('There is no hangman running right now...')
 

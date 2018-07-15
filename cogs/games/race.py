@@ -10,9 +10,8 @@ from discord.ext import commands
 from more_itertools import first, one, partition
 from operator import attrgetter
 
-from .manager import SessionManager
-
 from ..utils import converter, db, formats
+from ..utils.context_managers import temp_item
 
 
 class Racehorses(db.Table):
@@ -280,7 +279,7 @@ class Racing:
     """Be the animal you wish to beat. Wait."""
     def __init__(self, bot):
         self.bot = bot
-        self.manager = SessionManager()
+        self.sessions = {}
 
     @commands.group(invoke_without_command=True)
     @commands.bot_has_permissions(embed_links=True)
@@ -290,7 +289,7 @@ class Racing:
         You can also bet some money. If you win, you will receive all the money.
         """
 
-        session = self.manager.get_session(ctx.channel)
+        session = self.sessions.get(ctx.channel.id)
         if session is not None:
             try:
                 await session.add_member(ctx.author, amount, connection=ctx.db)
@@ -308,7 +307,7 @@ class Racing:
                 await ctx.release()
                 return await ctx.send(f'Ok, {ctx.author.mention}, good luck!')
 
-        with self.manager.temp_session(ctx.channel, _RaceWaiter(ctx.bot, ctx.author)) as waiter:
+        with temp_item(self.sessions, ctx.channel.id, _RaceWaiter(ctx.bot, ctx.author)) as waiter:
             try:
                 await waiter.add_member(ctx.author, amount, connection=ctx.db)
             except Exception as e:
@@ -333,14 +332,14 @@ class Racing:
 
                 return await ctx.send("Can't start the race. There weren't enough people. ;-;")
 
-        with self.manager.temp_session(ctx.channel, RacingSession(ctx, waiter.members, waiter.pot)) as inst:
+        with temp_item(self.sessions, ctx.channel.id, RacingSession(ctx, waiter.members, waiter.pot)) as inst:
             await asyncio.sleep(random.uniform(0.25, 0.75))
             await inst.run()
 
     @race.command(name='close')
     async def race_close(self, ctx):
         """Stops registration of a race early."""
-        session = self.manager.get_session(ctx.channel)
+        session = self.sessions.get(ctx.channel.id)
         if session is None:
             return await ctx.send('There is no session to close, silly...')
 

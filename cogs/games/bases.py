@@ -8,6 +8,8 @@ import random
 
 from discord.ext import commands
 
+from ..utils.context_managers import temp_item
+
 
 class Status(enum.Enum):
     PLAYING = enum.auto()
@@ -86,17 +88,6 @@ class _MemberConverter(commands.MemberConverter):
         ]
         member = random.choice(members) if members else 'SomeGuy'
         return f'@{member}'
-
-
-@contextlib.contextmanager
-def _swap_item(obj, item, new_val):
-    obj[item] = new_val
-    try:
-        yield 
-    finally:
-        if item in obj:
-            del obj[item]
-
 
 @contextlib.contextmanager
 def _dummy_cm(*args, **kwargs):
@@ -198,11 +189,11 @@ class TwoPlayerGameCog:
                     f"<#{channel_id}>, please don't spam them.."
                 )
 
-            cm = _swap_item(self._invited_games, pair, ctx.channel.id)
+            cm = temp_item(self._invited_games, pair, ctx.channel.id)
         else:
             cm = _dummy_cm()
 
-        put_in_running = functools.partial(_swap_item, self.running_games, ctx.channel.id)
+        put_in_running = functools.partial(temp_item, self.running_games, ctx.channel.id)
 
         await ctx.release()
         with cm:

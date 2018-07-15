@@ -6,7 +6,7 @@ from collections import deque
 from discord.ext import commands
 from more_itertools import one
 
-from .manager import SessionManager
+from ..utils.context_managers import temp_item
 
 
 class InvalidGameState(Exception):
@@ -131,7 +131,7 @@ class RussianRoulette:
     """The ultimate test of luck."""
     def __init__(self, bot):
         self.bot = bot
-        self.manager = SessionManager()
+        self.sessions = {}
 
     @commands.command(name='russianroulette', aliases=['rusr'])
     async def russian_roulette(self, ctx, amount: int = None):
@@ -141,9 +141,9 @@ class RussianRoulette:
         you win all the money that was bet in that game.
         """
 
-        session = self.manager.get_session(ctx.channel)
+        session = self.sessions.get(ctx.channel.id)
         if session is None:
-            with self.manager.temp_session(ctx.channel, RussianRouletteSession(ctx)) as inst:
+            with temp_item(self.sessions, ctx.channel.id, RussianRouletteSession(ctx)) as inst:
                 try:
                     await inst.add_member(ctx.author, amount, connection=ctx.db)
                 except InvalidGameState as e:

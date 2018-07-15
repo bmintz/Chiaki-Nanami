@@ -8,9 +8,9 @@ from functools import partialmethod
 from random import choice
 
 from .cards import Suit, Deck, images as card_images
-from .manager import SessionManager
 
 from ..utils import db
+from ..utils.context_managers import temp_item
 from ..utils.misc import emoji_url
 from ..utils.paginator import InteractiveSession, trigger
 
@@ -112,21 +112,21 @@ class HigherOrLower:
     """
     def __init__(self, bot):
         self.bot = bot
-        self.channel_sessions = SessionManager()  # because only one game per channel
-        self.user_sessions = SessionManager()     # because only one game per user
+        self.channel_sessions = {} # because only one game per channel
+        self.user_sessions = {}    # because only one game per user
 
     @commands.group(invoke_without_command=True)
     @commands.bot_has_permissions(embed_links=True)
     async def hilo(self, ctx):
         """Starts a game of Higher or Lower"""
-        if self.channel_sessions.session_exists(ctx.channel.id):
+        if ctx.channel.id in self.channel_sessions:
             return await ctx.send('A game is in progress in this channel. Please wait...')
-        if self.user_sessions.session_exists(ctx.author.id):
+        if ctx.author.id in self.user_sessions:
             return await ctx.send('You already have a game in progress...')
 
         inst = HiloSession(ctx)
-        with self.channel_sessions.temp_session(ctx.channel.id, inst), \
-             self.user_sessions.temp_session(ctx.author.id, inst):
+        with temp_item(self.channel_sessions, ctx.channel.id, inst), \
+             temp_item(self.user_sessions, ctx.author.id, inst):
             score = await inst.run()
 
         query = """INSERT INTO hilo_games (guild_id, player_id, played_at, points)

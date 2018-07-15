@@ -32,3 +32,13 @@ class temp_message:
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.message.delete()
+
+
+@contextlib.contextmanager
+def temp_item(obj, item, new_val):
+    obj[item] = new_val
+    try:
+        yield new_val
+    finally:
+        if item in obj:
+            del obj[item]
