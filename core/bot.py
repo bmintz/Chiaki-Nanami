@@ -51,37 +51,21 @@ class _UnicodeEmoji(discord.PartialEmoji):
         return f'https://twemoji.maxcdn.com/2/72x72/{hexes}.png'
 
 
-_MINIMAL_PERMISSIONS = [
-    'send_messages',
-    'embed_links',
-    'add_reactions',
-    'attach_files'
-    "use_external_emojis",
-]
-
-_FULL_PERMISSIONS = [
-    *_MINIMAL_PERMISSIONS,
-    "manage_guild",
-    "manage_roles",
-    "manage_channels",
-    "kick_members",
-    "ban_members",
-    "create_instant_invite",
-
-    "manage_messages",
-    "read_message_history",
-
-    "mute_members",
-    "deafen_members",
-]
-
-def _make_permissions(*permissions):
+def _make_permissions(permissions):
     perms = discord.Permissions.none()
     perms.update(**dict.fromkeys(permissions, True))
     return perms
 
-_MINIMAL_PERMISSIONS = _make_permissions(*_MINIMAL_PERMISSIONS)
-_FULL_PERMISSIONS = _make_permissions(*_FULL_PERMISSIONS)
+
+_MINIMAL_PERMISSIONS = _make_permissions((
+    'read_messages',
+    'send_messages',
+    'embed_links',
+    'add_reactions',
+    'attach_files'
+    'use_external_emojis',
+))
+
 del _make_permissions
 
 
@@ -444,12 +428,8 @@ class Chiaki(commands.AutoShardedBot):
     # ------ Config-related properties ------
 
     @discord.utils.cached_property
-    def minimal_invite_url(self):
-        return discord.utils.oauth_url(self.user.id, _MINIMAL_PERMISSIONS)
-
-    @discord.utils.cached_property
     def invite_url(self):
-        return discord.utils.oauth_url(self.user.id, _FULL_PERMISSIONS)
+        return discord.utils.oauth_url(self.user.id, _MINIMAL_PERMISSIONS)
 
     @property
     def default_prefix(self):
@@ -482,7 +462,7 @@ class Chiaki(commands.AutoShardedBot):
         # The following is the link to the bot's support server.
         # You are allowed to change this to be another server of your choice.
         # However, doing so will instantly void your warranty.
-        # Change this azt your own peril.
+        # Change this at your own peril.
         return config.support_server_invite
 
     @property

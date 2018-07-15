@@ -77,7 +77,7 @@ class Help:
     pleh = help_command((lambda s: multi_replace(s[::-1].upper(), _bracket_repls)),
                         name='plah', hidden=True)
 
-    async def _invite_embed(self, ctx):        
+    async def _invite_embed(self, ctx):
         # TODO: Move this somewhere else as this is also duplicated in meta.py
         source_url = f'https://github.com/bmintz/Chiaki-Nanami'
         if ctx.bot.version_info.releaselevel != 'alpha':
@@ -85,15 +85,18 @@ class Help:
 
         invite = (discord.Embed(description=self.bot.description, title=str(self.bot.user), colour=self.bot.colour)
                   .set_thumbnail(url=self.bot.user.avatar_url_as(format=None))
-                  .add_field(name="Want me in your server?",
-                             value=f'[Invite me here!]({self.bot.invite_url})', inline=False)
-                  .add_field(name="If you just to be simple...",
-                             value=f'[Invite me with minimal permissions!]({self.bot.minimal_invite_url})', inline=False)
-                  .add_field(name="Need help with using me?",
-                             value=f"[Here's the official server!]({self.bot.support_invite})", inline=False)
-                  .add_field(name="If you're curious about how I work...",
-                             value=f"[Check out the source code!]({source_url})", inline=False)
-                  )
+                 )
+        if self.bot.invite_url:
+            invite.add_field(name="Want me in your server?",
+                             value=f"[Invite me here!]({self.bot.invite_url})", inline=False)
+
+        if self.bot.support_invite:
+            invite.add_field(name="Need help with using me?",
+                       value=f"[Here's the official server!]({self.bot.support_invite})", inline=False)
+
+        invite.add_field(name="If you're curious about how I work...",
+                         value=f"[Check out the source code!]({source_url})", inline=False)
+
         await ctx.send(embed=invite)
 
     @commands.command()
@@ -102,12 +105,10 @@ class Help:
         if ctx.bot_has_embed_links():
             await self._invite_embed(ctx)
         else:
-            content = (
-                'Okay~ Here you go... I think. ^.^'
-                f'Full Permissions: <{self.bot.invite_url}>'
-                f'Minimal Permissions: <{self.bot.minimal_invite_url}>'
+            await ctx.send(
+                 'Okay~ Here you go... I think. ^.^\n'
+                f'<{self.bot.invite_url}>'
             )
-            await ctx.send(content)
 
     @commands.command(name='commands', aliases=['cmds'])
     async def commands_(self, ctx, category: Category = None):
