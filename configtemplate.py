@@ -82,6 +82,10 @@ games = []
 # (e.g. https://twitch.tv/Chiaki)
 twitch_url = ''
 
+# whether to ignore messages from all bots
+# if False, only messages from Chiaki herself will be ignored
+ignore_bots = True
+
 # ----------------------- COLOURS ---------------------
 
 # The default colour the bot will use for embeds

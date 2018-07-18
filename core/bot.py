@@ -323,9 +323,10 @@ class Chiaki(commands.AutoShardedBot):
         await self.custom_prefixes.put(guild.id, sorted(set(prefixes), reverse=True))
 
     async def process_commands(self, message):
-        # prevent responding to other bots
-        if message.author.bot:
-            return
+		if config.ignore_bots and message.author.bot:
+			return
+		elif message.author == self.user:
+			return
 
         ctx = await self.get_context(message, cls=context.Context)
 
