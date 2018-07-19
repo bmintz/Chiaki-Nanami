@@ -284,7 +284,7 @@ class Tags:
 
         entries = (
             itertools.starmap('{0}. {1}'.format, enumerate(tags, 1)) if tags else
-            ('There are no tags. Use `{ctx.prefix}tag create` to fix that.', )
+            (f'There are no tags. Use `{ctx.prefix}tag create` to fix that.', )
         )
 
         paginator = ServerTagPaginator(ctx, entries)
