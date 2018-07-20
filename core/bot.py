@@ -467,7 +467,7 @@ class Chiaki(commands.AutoShardedBot):
 
     @property
     def default_prefix(self):
-        return always_iterable(config.command_prefix)
+        return list(always_iterable(config.command_prefix))
 
     @property
     def colour(self):
