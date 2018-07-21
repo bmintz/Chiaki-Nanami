@@ -160,7 +160,7 @@ class Role(IDConverter):
     MENTION_REGEX = r'<@&([0-9]+)>$'
 
     def _get_from_id(self, ctx, id):
-        return discord.utils.get(self._get_possible_entries(), id=id)
+        return discord.utils.get(self._get_possible_entries(ctx), id=id)
 
     def _get_possible_entries(self, ctx):
         return ctx.guild.roles
