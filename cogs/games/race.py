@@ -5,12 +5,13 @@ import emoji
 import itertools
 import random
 import time
+import typing
 
 from discord.ext import commands
 from more_itertools import first, one, partition
 from operator import attrgetter
 
-from ..utils import converter, db, formats
+from ..utils import db, formats
 from ..utils.context_managers import temp_item
 
 
@@ -44,7 +45,7 @@ _default_emoji_examples = [
 ]
 
 class RacehorseEmoji(commands.Converter):
-    _converter = converter.union(discord.Emoji, str)
+    _converter = typing.Union[discord.Emoji, str]
 
     async def convert(self, ctx, arg):
         emoji_ = await self._converter.convert(ctx, arg)

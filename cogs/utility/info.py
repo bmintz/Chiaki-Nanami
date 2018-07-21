@@ -7,6 +7,7 @@ import json
 import psutil
 import random
 import time
+import typing
 
 from discord.ext import commands
 from itertools import accumulate, chain, count, dropwhile, starmap
@@ -17,14 +18,13 @@ from operator import attrgetter
 from ..utils import cache, disambiguate, varpos
 from ..utils.colours import url_color, user_color
 from ..utils.context_managers import temp_message
-from ..utils.converter import union
 from ..utils.examples import wrap_example
 from ..utils.formats import *
 from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
 from ..utils.paginator import InteractiveSession, Paginator, trigger
 
 
-_Channel = union(discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel)
+_Channel = typing.Union[discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel]
 
 async def _mee6_stats(session, member):
     async with session.get(f"https://mee6.xyz/levels/{member.guild.id}?json=1&limit=-1") as r:

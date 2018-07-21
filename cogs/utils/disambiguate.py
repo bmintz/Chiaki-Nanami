@@ -16,6 +16,13 @@ class _DisambiguateExampleGenerator:
         cls_name = cls.__name__.replace('Disambiguate', '')
         return functools.partial(get_example, getattr(discord, cls_name))
 
+async def _disambiguate(ctx, matches, **kwargs):
+    try:
+        return await ctx.disambiguate(matches, **kwargs)
+    except ValueError as e:
+        # It doesn't matter if it's a Union or not, because there might be more
+        # than one valid result anyways.
+        raise commands.BadArgument(str(e)) from e
 
 class Converter(commands.Converter):
     """Base class for all disambiguating converters.
@@ -83,7 +90,7 @@ class Converter(commands.Converter):
             return exact_match
 
         matches = self._get_possible_results(ctx, argument)
-        return await ctx.disambiguate(matches, transform=self._transform)
+        return await _disambiguate(ctx, matches, transform=self._transform)
 
 
 _ID_REGEX = re.compile(r'([0-9]{15,21})$')
@@ -195,7 +202,22 @@ def _disambiguated(type_):
 
     return Converter.__converters__.get(type_.__name__, type_)
 
+# https://github.com/Rapptz/discord.py/commit/2321ae8d9766779cef9baa7cc299e72a2ac88141
+# adds a new "param" argument to Command.do_conversion which ends up breaking
+# most Union converters. This is why typing.Union became supported in the next
+# commit as it became impossible to properly do a Union without knowing what the
+# current parameter is.
+#
+# Despite that we still need to maintain the disambiguate.Union so we need to do
+# this.
+def _get_current_parameter(ctx):
+    parameters = list(ctx.command.params.values())
 
+    # Need to account for varargs and consume-rest kwarg only
+    index = min(len(ctx.args) + len(ctx.kwargs), len(parameters) - 1)
+    return parameters[index]
+
+    
 class union(commands.Converter):
     _transform = '{0} ({0.__class__.__name__})'.format
 
@@ -208,6 +230,7 @@ class union(commands.Converter):
         ]
 
     async def convert(self, ctx, argument):
+        param = _get_current_parameter(ctx)
         results = []
         for converter in self.types:
             # If we have a disambiguate converter then we must handle that
@@ -221,12 +244,12 @@ class union(commands.Converter):
             else:
                 # It's just a standard type, just apply the standard conversion
                 try:
-                    result = await ctx.command.do_conversion(ctx, converter, argument)
+                    result = await ctx.command.do_conversion(ctx, converter, argument, param)
                 except commands.BadArgument:
                     continue
                 else:
                     results.append(result)
-        return await ctx.disambiguate(results, transform=self._transform)
+        return await _disambiguate(ctx, results, transform=self._transform)
 
     def random_example(self, ctx):
         return get_example(random.choice(self.types), ctx)

@@ -146,6 +146,9 @@ def get_example(converter, ctx):
     if hasattr(converter, 'random_example'):
         return converter.random_example(ctx)
 
+    if getattr(converter, '__origin__', None) is typing.Union:
+        return get_example(random.choice(converter.__args__), ctx)
+
     # The default ext converters are special... maybe a bit too special.
     if _is_discord_ext_converter(converter):
         # commands.clean_content is really just str with some fancy formatting.
