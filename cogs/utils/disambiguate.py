@@ -96,6 +96,8 @@ class Converter(commands.Converter):
 _ID_REGEX = re.compile(r'([0-9]{15,21})$')
 
 class IDConverter(Converter):
+    MENTION_REGEX = None
+
     def _get_from_id(self, ctx, id):
         """Given an ID, return an object via that ID"""
         raise NotImplementedError
@@ -177,8 +179,6 @@ class TextChannel(IDConverter):
 
 
 class Guild(IDConverter):
-    MENTION_REGEX = None
-
     def _get_from_id(self, ctx, id):
         return ctx.bot.get_guild(id)
 
