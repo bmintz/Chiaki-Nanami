@@ -11,8 +11,6 @@ DISCORD_BOT_LIST_URL = 'https://discordbots.org/api'
 
 
 class Botlists:
-    __hidden__ = True
-
     def __init__(self, bot):
         # Of course...
         self.bot = bot

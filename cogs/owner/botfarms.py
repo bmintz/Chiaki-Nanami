@@ -50,8 +50,6 @@ class AntiBotCollections:
     """Commands related to "bot-collection" servers -- servers that have a
     high ratio of bots to humans.
     """
-    __hidden__ = True
-
     # Determining if a server is a "bot collection server" is no easy task,
     # because there are a lot of edge cases in servers where it might not be
     # a bot farm but merely a testing server with only a few bots.
