@@ -45,17 +45,19 @@ _default_emoji_examples = [
 ]
 
 class RacehorseEmoji(commands.Converter):
-    _converter = typing.Union[discord.Emoji, str]
-
     async def convert(self, ctx, arg):
-        emoji_ = await self._converter.convert(ctx, arg)
+        try:
+            maybe_emoji = await commands.EmojiConverter().convert(ctx, arg)
+        except commands.BadArgument:
+            maybe_emoji = arg
+
         # XXX: The emoji library doesn't have certain emojis.
         #      So those emojis will fail. (eg :gay_pride_flag:)
         #      These special cases will have to be added as I go.
-        if isinstance(emoji_, str) and emoji_ not in emoji.UNICODE_EMOJI:
+        if isinstance(maybe_emoji, str) and maybe_emoji not in emoji.UNICODE_EMOJI:
             raise commands.BadArgument(f'{arg} is not a valid emoji ;-;')
 
-        return str(emoji_)
+        return str(maybe_emoji)
 
     @staticmethod
     def random_example(ctx):
