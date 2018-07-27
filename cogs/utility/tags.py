@@ -16,8 +16,8 @@ class Tag(db.Table, table_name='tags'):
     is_alias = db.Column(db.Boolean)
 
     # metadata
-    guild_id = db.Column(db.BigInt)
-    uses = db.Column(db.Integer)
+    owner_id = db.Column(db.BigInt)
+    uses = db.Column(db.Integer, default=0)
     location_id = db.Column(db.BigInt)
     created_at = db.Column(db.Timestamp)
 

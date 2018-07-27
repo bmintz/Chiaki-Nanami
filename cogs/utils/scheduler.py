@@ -258,7 +258,7 @@ class Schedule(db.Table):
     expires = db.Column(db.Timestamp)
 
     event = db.Column(db.Text)
-    time = db.Column(db.Timestamp, default="now() at time zone 'utc'")
+    created = db.Column(db.Timestamp, default="now() at time zone 'utc'")
     args_kwargs = db.Column(db.JSON, default="'{}'::jsonb")
 
     schedule_expires_idx = db.Index(expires)
