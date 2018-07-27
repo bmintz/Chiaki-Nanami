@@ -15,14 +15,6 @@ from ..utils.misc import emoji_url
 from ..utils.paginator import InteractiveSession, trigger
 
 
-class HiloGames(db.Table, table_name='hilo_games'):
-    id = db.Column(db.Serial, primary_key=True)
-    guild_id = db.Column(db.BigInt)
-    player_id = db.Column(db.BigInt)
-    played_at = db.Column(db.Timestamp)
-    points = db.Column(db.Integer)
-
-
 def _cmp(a, b):
     return (a > b) - (a < b)
 
@@ -128,31 +120,6 @@ class HigherOrLower:
         with self.channel_sessions.temp_session(ctx.channel.id, inst), \
              self.user_sessions.temp_session(ctx.author.id, inst):
             score = await inst.run()
-
-        query = """INSERT INTO hilo_games (guild_id, player_id, played_at, points)
-                   VALUES ($1, $2, $3, $4);
-                """
-        await ctx.db.execute(query, ctx.guild.id, ctx.author.id, ctx.message.created_at, score)
-
-    @hilo.command(name='leaderboard', aliases=['lb'])
-    async def hilo_leaderboard(self, ctx):
-        """Shows the 10 highest scores in Higher or Lower"""
-        query = """SELECT player_id, points
-                   FROM hilo_games
-                   ORDER BY points DESC
-                   LIMIT 10;
-                """
-        records = await ctx.db.fetch(query)
-
-        lb = '\n'.join(
-            '\\' + f'\u2b50 <@{player_id}>: {points} points '
-            for player_id, points in records
-        )
-
-        embed = (discord.Embed(colour=ctx.bot.colour, description=lb)
-                 .set_author(name='Higher or Lower Leaderboard', icon_url=choice(SUIT_EMOJI_URLS))
-                 )
-        await ctx.send(embed=embed)
 
 
 def setup(bot):

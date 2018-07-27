@@ -23,18 +23,6 @@ from ..utils.paginator import InteractiveSession, trigger
 from ..utils.time import duration_units
 
 
-class MinesweeperGames(db.Table, table_name='minesweeper_games'):
-    id = db.Column(db.Serial, primary_key=True)
-    level = db.Column(db.SmallInt)
-    won = db.Column(db.Boolean)
-    guild_id = db.Column(db.BigInt)
-    user_id = db.Column(db.BigInt)
-    played_at = db.Column(db.Timestamp)
-    time = db.Column(db.Double)
-
-    minesweeper_games_time_idx = db.Index(time)
-
-
 class HitMine(Exception):
     def __init__(self, x, y):
         self.point = x, y
@@ -577,34 +565,6 @@ class MinesweeperSession(InteractiveSession):
                 return True, end - start
 
 
-class _Leaderboard(InteractiveSession):
-    # TDDO: Should I cache this?
-    async def get_fastest_times(self, difficulty):
-        embed = (discord.Embed(colour=self._bot.colour, title=f'Minesweeper - {difficulty}')
-                 .set_author(name='Fastest times', icon_url=MINESWEEPER_ICON)
-                 )
-
-        query = """SELECT user_id, time FROM minesweeper_games
-                   WHERE won AND level = $1
-                   ORDER BY time
-                   LIMIT 10;
-                """
-        records = await self.context.pool.fetch(query, difficulty.value)
-        if not records:
-            embed.description = 'No records, yet. \N{WINKING FACE}'
-        else:
-            embed.description = '\n'.join(
-                '\\' + f'\N{COLLISION SYMBOL} <@{user_id}>: {duration_units(time)}'
-                for user_id, time in records
-            )
-
-        return embed
-
-    default = trigger('1\u20e3')(partialmethod(get_fastest_times, Level.easy))
-    medium = trigger('2\u20e3')(partialmethod(get_fastest_times, Level.medium))
-    hard = trigger('3\u20e3')(partialmethod(get_fastest_times, Level.hard))
-
-
 _CUSTOM_DESCRIPTION_TEMPLATE = (
     'Please type a board.\n'
     '```\n'
@@ -827,13 +787,7 @@ class Minesweeper:
         rounded = round(time, 2)
         text = f'You beat Minesweeper on {level} in {duration_units(rounded)}.'
 
-        extra_text = ''
-        # Check if the player broke the world record.
-        if level is not Level.custom:
-            await ctx.acquire()
-            extra_text = await self._get_record_text(ctx.author.id, level, time, connection=ctx.db)
-
-        description = f'{text}\n{extra_text}'
+        description = text
         embed = (discord.Embed(colour=0x00FF00, timestamp=datetime.utcnow(), description=description)
                  .set_author(name='A winner is you!')
                  .set_thumbnail(url=ctx.author.avatar_url)
@@ -841,36 +795,18 @@ class Minesweeper:
 
         await ctx.send(embed=embed)
 
-    async def _record_game(self, ctx, level, time, won):
-        await ctx.acquire()
-        query = """INSERT INTO minesweeper_games (level, won, guild_id, user_id, played_at, time)
-                   VALUES ($1, $2, $3, $4, $5, $6);
-                """
-        await ctx.db.execute(
-            query,
-            level.value,
-            won,
-            ctx.guild.id,
-            ctx.author.id,
-            ctx.message.created_at,
-            time,
-        )
-
     async def _get_board(self, ctx):
         menu = _MinesweeperMenu(ctx)
         await menu.run()
         return menu.level, menu.board
 
-    async def _do_minesweeper(self, ctx, level, board, *, record=True):
+    async def _do_minesweeper(self, ctx, level, board):
         await ctx.release()
         won, time = await MinesweeperSession(ctx, level, board).run()
         if won is None:
             return
         elif won:
             await self._say_ending_embed(ctx, level, time)
-
-        if record:
-            await self._record_game(ctx, level, time=time, won=won)
 
     @commands.group(aliases=['msw'], invoke_without_command=True)
     @not_playing_minesweeper()
@@ -908,7 +844,7 @@ class Minesweeper:
             except ValueError as e:
                 await ctx.send(e)
             else:
-                await self._do_minesweeper(ctx, Level.custom, board, record=False)
+                await self._do_minesweeper(ctx, Level.custom, board)
 
     @minesweeper.command(name='leaderboard', aliases=['lb'])
     async def minesweeper_leaderboard(self, ctx):
