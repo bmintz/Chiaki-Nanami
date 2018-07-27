@@ -40,25 +40,6 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
 
         return self._display
 
-    async def _get_ending_text(self, *, default):
-        connection = await self.context.acquire()
-
-        # Check if it's a world record
-        query = 'SELECT MAX(points) FROM hilo_games;'
-        wr = await connection.fetchval(query)
-
-        if wr is None or self._score > wr:
-            return "World Record!"
-
-        # Check if it's a personal best
-        query = 'SELECT MAX(points) FROM hilo_games WHERE player_id = $1;'
-        pb = await connection.fetchval(query, self.context.author.id)
-
-        if pb is None or self._score > pb:
-            return "New Personal Best!"
-
-        return default
-
     async def _compare(self, cmp):
         old, self._card = self._card, self._deck.draw_one(fill=True)
         result = _cmp(self._card.rank.value, old.rank.value)
@@ -68,7 +49,7 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
         if cmp == result:
             self._score += 1
         else:
-            embed.title = await self._get_ending_text(default="Game Over!")
+            embed.title = "Game Over!"
             embed.colour = 0xF44336
             self._timed_out = False
             await self.stop()
@@ -92,7 +73,7 @@ class HiloSession(InteractiveSession, stop_emoji=None, stop_fallback=None):
             return
 
         embed = self.default()
-        embed.title = await self._get_ending_text(default="Time's up!")
+        embed.title = "Time's up!"
         embed.colour = 0x9E9E9E
         await self._message.edit(embed=embed)
 
