@@ -126,3 +126,33 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
             revisions[table_name] = version
 
         _write_revisions(revisions, directory) 
+
+def _last_migration(directory):
+    return max(_file_version(path.stem) for path in directory.glob('*.py'))
+
+async def init(*, connection, directory=_DEFAULT_DIR, verbose=False):
+    # We can safely use the latest migration because when we initially create
+    # all the tables we use the current schema which has the migrations already
+    # applied.
+    revision = _last_migration(directory)
+    if verbose:
+        print('writing newest revision', revision, 'to each table')
+
+    directory = pathlib.Path(directory)
+    file = directory / _REVISIONS_FILE_NAME
+    if file.exists():
+        raise RuntimeError('cannot initialize the database more than once')
+
+    revisions = {}
+    async with connection.transaction():
+        for table in all_tables():
+            print('creating table', table.__tablename__)
+            sql = table.create_sql()
+            if verbose:
+                print('schema:')
+                print(sql)
+
+            await connection.execute(sql)
+            revisions[table.__tablename__] = revision
+
+        _write_revisions(revisions, directory)
