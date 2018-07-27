@@ -49,7 +49,6 @@ def _tabulate(rows, headers=()):
 
 class Owner:
     """Owner-only commands"""
-    __hidden__ = True
 
     def __init__(self, bot):
         self.bot = bot

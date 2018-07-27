@@ -58,23 +58,3 @@ def number(s):
 @wrap_example(number)
 def _number_example(ctx):
     return get_example(random.choice([int, float]), ctx)
-
-
-class union(commands.Converter):
-    def __init__(self, *types):
-        self.types = types
-
-    async def convert(self, ctx, arg):
-        for type_ in self.types:
-            try:
-                # small hack here because commands.Command.do_conversion expects a Command instance
-                # even though it's not used at all
-                return await ctx.command.do_conversion(ctx, type_, arg)
-            except Exception as e:
-                continue
-        type_names = ', '.join([t.__name__ for t in self.types])
-        raise commands.BadArgument(f"I couldn't parse {arg} successfully, "
-                                   f"given these types: {type_names}")
-
-    def random_example(self, ctx):
-        return get_example(random.choice(self.types), ctx)

@@ -4,12 +4,12 @@ import enum
 import io
 import math
 import random
+import typing
 
 from discord.ext import commands
 from PIL import Image
 
 from ..utils import db
-from ..utils.converter import union
 from ..utils.examples import get_example, wrap_example
 from ..utils.formats import pluralize
 from ..utils.time import duration_units
@@ -109,7 +109,7 @@ class NotNegative(commands.BadArgument):
     pass
 
 class SideOrAmount(commands.Converter):
-    __converter = union(Side, int)
+    __converter = typing.Union[Side, int]
 
     async def convert(self, ctx, arg):
         return await self.__converter.convert(ctx, arg)

@@ -38,7 +38,8 @@ class Meta:
         links = (
             f'**[Add me]({bot.invite_url})** | '
             f'**[Support]({bot.support_invite})** | '
-            f'**[Github]({self.source_url})**'
+            f'**[Github]({self.source_url})** | '
+            f'**[Upvote](https://discordbots.org/bot/247863665598922762/vote)**'
         )
 
         field_value = (

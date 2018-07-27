@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import contextlib
 import enum
 import itertools
 import random
@@ -17,6 +16,7 @@ from discord.ext import commands
 from more_itertools import chunked
 
 from ..utils import db
+from ..utils.context_managers import temp_item
 from ..utils.formats import pluralize
 from ..utils.misc import emoji_url, REGIONAL_INDICATORS
 from ..utils.paginator import InteractiveSession, trigger
@@ -754,13 +754,8 @@ class Minesweeper:
         if isinstance(error, AlreadyPlaying):
             await ctx.send(error)
 
-    @contextlib.contextmanager
     def _create_session(self, ctx):
-        self.sessions[ctx.author.id] = ctx.channel.id
-        try:
-            yield
-        finally:
-            self.sessions.pop(ctx.author.id, None)
+        return temp_item(self.sessions, ctx.author.id, ctx.channel.id)
 
     async def _get_record_text(self, user_id, level, time, *, connection):
         # Check if it's the world record

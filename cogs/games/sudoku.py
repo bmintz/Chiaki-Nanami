@@ -10,8 +10,8 @@ import discord
 from discord.ext import commands
 from more_itertools import flatten, grouper, sliced
 
-from .manager import SessionManager
 from ..utils import db
+from ..utils.context_managers import temp_item
 from ..utils.paginator import InteractiveSession, trigger
 from ..utils.misc import emoji_url
 
@@ -617,7 +617,7 @@ class SudokuMenu(InteractiveSession, stop_emoji=None, stop_fallback=None):
 class Sudoku:
     def __init__(self, bot):
         self.bot = bot
-        self.sudoku_sessions = SessionManager()
+        self.sessions = {}
 
     async def _get_difficulty(self, ctx):
         menu = SudokuMenu(ctx)
@@ -631,7 +631,7 @@ class Sudoku:
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
     async def sudoku(self, ctx, difficulty: Difficulty=None):
-        if self.sudoku_sessions.session_exists(ctx.author.id):
+        if ctx.author.id in self.sessions:
             return await ctx.send('Please finish your other Sudoku game first.')
 
         if difficulty is None:
@@ -642,7 +642,7 @@ class Sudoku:
         if board is None:
             return
 
-        with self.sudoku_sessions.temp_session(ctx.author.id, SudokuSession(ctx, board)) as inst:
+        with temp_item(self.sessions, ctx.author.id, SudokuSession(ctx, board)) as inst:
             await inst.run()
 
 

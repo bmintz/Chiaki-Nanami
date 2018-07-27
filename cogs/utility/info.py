@@ -7,6 +7,7 @@ import json
 import psutil
 import random
 import time
+import typing
 
 from discord.ext import commands
 from itertools import accumulate, chain, count, dropwhile, starmap
@@ -17,12 +18,13 @@ from operator import attrgetter
 from ..utils import cache, disambiguate, varpos
 from ..utils.colours import url_color, user_color
 from ..utils.context_managers import temp_message
-from ..utils.converter import union
 from ..utils.examples import wrap_example
 from ..utils.formats import *
 from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
 from ..utils.paginator import InteractiveSession, Paginator, trigger
 
+
+_Channel = typing.Union[discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel]
 
 async def _mee6_stats(session, member):
     async with session.get(f"https://mee6.xyz/levels/{member.guild.id}?json=1&limit=-1") as r:
@@ -355,12 +357,26 @@ def _format_activity(activity):
     return playing
 
 
+def _overwrites_message(channel):
+    empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
+    overwrites = str(len(channel.overwrites))
+    if empty_overwrites:
+        overwrites = f'{overwrites} ({empty_overwrites} empty)'
+    
+    return overwrites
+
+
 class Information:
     """Info related commands"""
 
     def __init__(self, bot):
         self.bot = bot
         self.process = psutil.Process()
+        self._category_info_methods = {
+            discord.TextChannel: self.text_channel_embed,
+            discord.VoiceChannel: self.voice_channel_embed,
+            discord.CategoryChannel: self.category_channel_embed,
+        }
 
     @commands.command()
     @commands.guild_only()
@@ -545,50 +561,79 @@ class Information:
 
     @staticmethod
     def text_channel_embed(channel):
-        topic = (
-            '\n'.join(group_strings(channel.topic, 70)) if channel.topic else
-            discord.Embed.Empty
+        info = (
+            f'**ID:** {channel.id}\n'
+            f'**Members:**: {len(channel.members)}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
         )
 
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
+        if channel.category:
+            info = f'**Category:** {channel.category}\n{info}'
 
-        return (discord.Embed(description=topic, timestamp=channel.created_at)
-                .set_author(name=f'#{channel.name}')
-                .add_field(name='ID', value=channel.id)
-                .add_field(name='Position', value=channel.position)
-                .add_field(name='Members', value=len(channel.members))
-                .add_field(name='Permission Overwrites', value=overwrite_message)
+        embed = (discord.Embed(timestamp=channel.created_at)
+                 .set_author(name=f'#{channel.name}')
+                 .set_footer(text='Created')
+                 )
+
+        if channel.topic:
+            embed.description = channel.topic
+            embed.add_field(name='\u200b', value=info)
+        else:
+            embed.description = info
+
+        return embed
+
+    @staticmethod
+    def voice_channel_embed(channel):
+        limit = channel.user_limit or '\N{INFINITY}'
+        info = (
+            f'**ID:** {channel.id}\n'
+            f'**Bitrate:** {channel.bitrate // 1000}kbps\n'
+            f'**User Limit:** {limit}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
+        )
+
+        if channel.category:
+            info = f'**Category:** {channel.category}\n{info}'
+
+        return (discord.Embed(description=info, timestamp=channel.created_at)
+                .set_author(name=channel.name)
                 .set_footer(text='Created')
                 )
 
     @staticmethod
-    def voice_channel_embed(channel):
-        empty_overwrites = sum(ow.is_empty() for _, ow in channel.overwrites)
-        overwrite_message = f'{len(channel.overwrites)} ({empty_overwrites} empty)'
+    def category_channel_embed(channel):
+        info = (
+            f'**ID:** {channel.id}\n'
+            f'**Overwrites:** {_overwrites_message(channel)}\n'
+        )
 
-        return (discord.Embed(timestamp=channel.created_at)
+        channels = channel.channels
+        if channels:
+            # Only text channels have a meaningful mention representation
+            channels_field = ', '.join(
+                c.mention if isinstance(c, discord.TextChannel) else c.name
+                for c in channels[:10]
+            )
+
+            if len(channels) > 10:
+                channels_field += ', ...'
+
+            info = f'{info}\n**Channels ({len(channels)}):**\n{channels_field}'
+
+        return (discord.Embed(description=info, timestamp=channel.created_at)
                 .set_author(name=channel.name)
-                .add_field(name='ID', value=channel.id)
-                .add_field(name='Position', value=channel.position)
-                .add_field(name='Bitrate', value=channel.bitrate)
-                .add_field(name='Max Members', value=channel.user_limit or '\N{INFINITY}')
-                .add_field(name='Permission Overwrites', value=overwrite_message)
                 .set_footer(text='Created')
                 )
 
     @info.command(name='channel')
     @embedded()
-    async def info_channel(self, ctx, channel: union(discord.TextChannel, discord.VoiceChannel)=None):
+    async def info_channel(self, ctx, *, channel: _Channel = None):
         """Shows info about a voice or text channel."""
         if channel is None:
             channel = ctx.channel
 
-        embed_type = (
-            self.text_channel_embed if isinstance(channel, discord.TextChannel) else
-            self.voice_channel_embed
-        )
-
+        embed_type = self._category_info_methods[type(channel)]
         channel_embed = embed_type(channel)
         channel_embed.colour = self.bot.colour
 

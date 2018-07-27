@@ -6,6 +6,7 @@ import functools
 import heapq
 import itertools
 import random
+import typing
 
 from collections import Counter, namedtuple
 from discord.ext import commands
@@ -13,7 +14,6 @@ from operator import attrgetter
 
 from ..utils import db, formats, time, varpos
 from ..utils.context_managers import temp_attr
-from ..utils.converter import union
 from ..utils.examples import get_example, static_example, wrap_example
 from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
@@ -69,19 +69,27 @@ def _get_lower_member(ctx):
     return f'@{member}'
 
 
-class MemberID(union):
-    def __init__(self):
-        super().__init__(discord.Member, int)
+class _ProxyMember:
+    def __init__(self, id):
+        self.id = id
 
+    def __str__(self):
+        return str(self.id)
+
+class MemberID(commands.Converter):
     async def convert(self, ctx, arg):
-        member = await super().convert(ctx, arg)
-        if isinstance(member, int):
-            obj = discord.Object(id=member)
-            obj.__str__ = attrgetter('id')
-            obj.guild = ctx.guild
-            return obj
-        return member
-
+        try:
+            return await commands.MemberConverter().convert(ctx, arg)
+        except commands.BadArgument:
+            pass
+    
+        try:
+            id = int(arg)
+        except ValueError:
+            raise commands.BadArgument(f"{arg} is not a member or ID.") from None
+        else:
+            return _ProxyMember(id)
+            
     @staticmethod
     def random_example(ctx):
         if random.random() > 0.5:
@@ -392,7 +400,7 @@ class Moderator:
     @commands.command(aliases=['clr'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
-    async def clear(self, ctx, num_or_user: union(int, discord.Member)=None):
+    async def clear(self, ctx, num_or_user: typing.Union[int, discord.Member]=None):
         """Clears some messages in a channels
 
         The argument can either be a user or a number.

@@ -79,6 +79,27 @@ def _callable_prefix(bot, message):
 
     return commands.when_mentioned_or(*prefixes)(bot, message)
 
+_sentinel = object()
+def _is_cog_hidden(cog):
+    hidden = getattr(cog, '__hidden__', _sentinel)
+    if hidden is not _sentinel:
+        return hidden
+    
+    try:
+        module_name = cog.__module__
+    except AttributeError:
+        return False
+
+    while module_name:
+        module = sys.modules[module_name]
+        hidden = getattr(module, '__hidden__', _sentinel)
+        if hidden is not _sentinel:
+            return hidden
+        
+        module_name = module_name.rpartition('.')[0]
+    
+    return False
+
 
 # Activity-related stuffs...
 def _parse_type(type_):
@@ -200,7 +221,7 @@ class Chiaki(commands.AutoShardedBot):
     def add_cog(self, cog):
         super().add_cog(cog)
 
-        if getattr(cog, '__hidden__', False):
+        if _is_cog_hidden(cog):
             for _, command in inspect.getmembers(cog, lambda m: isinstance(m, commands.Command)):
                 command.hidden = True
 
@@ -434,7 +455,7 @@ class Chiaki(commands.AutoShardedBot):
 
     @property
     def default_prefix(self):
-        return always_iterable(config.command_prefix)
+        return list(always_iterable(config.command_prefix))
 
     @property
     def colour(self):

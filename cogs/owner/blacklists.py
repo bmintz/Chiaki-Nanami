@@ -39,8 +39,6 @@ _GuildOrUser = disambiguate.union(discord.Guild, discord.User)
 
 
 class Blacklists:
-    __hidden__ = True
-
     @staticmethod
     async def get_blacklist(thing, *, connection):
         query = "SELECT reason FROM blacklist WHERE snowflake = $1;"
