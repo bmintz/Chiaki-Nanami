@@ -19,7 +19,7 @@ class Tag(db.Table, table_name='tags'):
     owner_id = db.Column(db.BigInt)
     uses = db.Column(db.Integer, default=0)
     location_id = db.Column(db.BigInt)
-    created_at = db.Column(db.Timestamp)
+    created_at = db.Column(db.Timestamp, default="now() at time zone 'utc'")
 
     tags_uniq_idx = db.Index('LOWER(name)', location_id)
     __create_extra__ = ['PRIMARY KEY(name, location_id)']
