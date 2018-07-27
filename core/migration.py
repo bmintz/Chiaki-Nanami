@@ -71,6 +71,13 @@ async def _apply_migration(to_execute, *, connection):
     else:
         await connection.execute(to_execute)
 
+def _get_source(obj):
+    try:
+        return inspect.getsource(obj)
+    except:
+        # whatevs
+        return obj
+
 
 async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAULT_DIR, verbose=False):
     if version is None:
@@ -103,7 +110,8 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
                 last_version = last_version[0]
             for version, table, file, step in migrations:
                 if verbose:
-                    print('applying', table, 'from', file)
+                    print('applying', table, 'from', file, ':')
+                    print(_get_source(step))
 
                 try:
                     await _apply_migration(step, connection=connection)
