@@ -236,33 +236,11 @@ def _command_lines(command_can_run_pairs):
         if not command:
             return ''
 
-        # Simply doing f'`{command:>width + 1}`' is not enough because
-        # we want to cross out only the command text, not the entire
-        # block. Doing that requires making two code blocks, one for
-        # the command, and one padded with spaces.
-        #
-        # However Discord loves to be really fucky with codeblocks. If
-        # there are two backticks close together, it will make one huge
-        # code block with the middle two unescaped. e.g `abc``test` will
-        # make one long code block with the string of "abc``test" rather
-        # than what we really want.
-        #
-        # Discord also loves to mess around with spaces, because our code
-        # block is technically empty, Discord will just strip out the
-        # whitespace, leaving us with an empty code block. Thus we need
-        # three zwses -- one between the two code blocks to prevent them
-        # from merging, and two at each end of the 2nd code block to prevent
-        # the padding spaces from getting stripped.
-        #
-        # ~~*phew*~~
-        formatted = f'`{command}`'
-        if not can_run:
-            formatted = f'~~{formatted}~~'
-
-        to_pad = width - len(command) + 1
-        padding = f'\u200b`\u200b{" " * to_pad}\u200b`' if to_pad > 0 else ''
-
-        return formatted + padding
+        # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
+        # chopped off which makes padding on monospace nigh-on impossible.
+        padding = " \u200b" * (width - len(command) + 1)
+        formatted = f'`{command}{padding}`'
+        return formatted if can_run else f'~~{formatted}~~'
 
     return (' '.join(map(format_pair, pair, widths)) for pair in pairs)
 
