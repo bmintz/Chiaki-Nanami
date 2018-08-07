@@ -399,8 +399,8 @@ class Chiaki(commands.AutoShardedBot):
         if not hasattr(self, 'start_time'):
             self.start_time = datetime.utcnow()
 
-    async def on_command_error(self, ctx, error, *, bypass=False):
-        if not bypass and hasattr(ctx.command, 'on_error'):
+    async def on_command_error(self, ctx, error):
+        if not ctx.__bypass_local_error__ and hasattr(ctx.command, 'on_error'):
             return
 
         if (

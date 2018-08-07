@@ -454,7 +454,6 @@ class Moderator:
             # other users' messages without Manage Messages will raise an error.
             # Also we can't use bulk-deleting for the same reason.
             deleted = await purge(check=lambda m: m.author.id == bot_id, bulk=False)
-
         spammers = Counter(str(m.author) for m in deleted)
 
         total_deleted = sum(spammers.values())
@@ -487,7 +486,8 @@ class Moderator:
         # wrapped in CommandInvokeError
         cause = error.__cause__
         if not isinstance(cause, discord.HTTPException):
-            return await ctx.bot.on_command_error(ctx, error, bypass=True)
+            ctx.__bypass_local_error__ = True
+            return
 
         await ctx.send(
             "Couldn't delete the messages for some reason... Here's the error:\n"

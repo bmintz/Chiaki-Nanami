@@ -41,6 +41,10 @@ def _random_slice(seq):
     return seq[:random.randint(0, len(seq))]
 
 class Context(commands.Context):
+    # Default for whether or not the global error handlers should ignore errors
+    # in commands with local error handlers.
+    __bypass_local_error__ = False
+
     # Used for getting the current parameter when generating an example
     _current_parameter = None
 
