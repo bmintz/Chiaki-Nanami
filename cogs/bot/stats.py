@@ -1,11 +1,9 @@
 import collections
 import discord
-import datetime
 import itertools
 import math
 import psutil
 import random
-import traceback
 
 from discord.ext import commands
 from functools import partial
@@ -13,7 +11,6 @@ from more_itertools import all_equal, ilen
 
 from ..utils import db
 from ..utils.formats import pluralize
-from ..utils.misc import emoji_url
 from ..utils.paginator import Paginator, FieldPaginator
 from ..utils.time import human_timedelta
 
@@ -31,17 +28,6 @@ class Commands(db.Table):
     commands_command_idx = db.Index(command)
     commands_guild_id_idx = db.Index(guild_id)
 
-
-_ignored_exceptions = (
-    commands.NoPrivateMessage,
-    commands.DisabledCommand,
-    commands.CheckFailure,
-    commands.CommandNotFound,
-    commands.UserInputError,
-    discord.Forbidden,
-)
-
-ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
 
 _celebration = partial(random.choices, '\U0001f38a\U0001f389', k=8)
 
@@ -179,30 +165,6 @@ class Stats:
         if not hasattr(ctx.bot, 'shards'):
             return await ctx.send("I don't support shards... yet.")
         # TODO
-
-    async def on_command_error(self, ctx, error):
-        # command_counter['failed'] += 0 sets the 'failed' key. We don't want that.
-        if not isinstance(error, commands.CommandNotFound):
-            self.bot.command_counter['failed'] += 1
-
-        error = getattr(error, 'original', error)
-
-        if isinstance(error, _ignored_exceptions) or getattr(error, '__ignore__', False):
-            return
-
-        e = (discord.Embed(colour=0xcc3366)
-             .set_author(name=f'Error in command {ctx.command}', icon_url=ERROR_ICON_URL)
-             .add_field(name='Author', value=f'{ctx.author}\n(ID: {ctx.author.id})', inline=False)
-             .add_field(name='Channel', value=f'{ctx.channel}\n(ID: {ctx.channel.id})')
-             )
-
-        if ctx.guild:
-            e.add_field(name='Guild', value=f'{ctx.guild}\n(ID: {ctx.guild.id})')
-
-        exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-        e.description = f'```py\n{exc}\n```'
-        e.timestamp = datetime.datetime.utcnow()
-        await self.bot.webhook.send(embed=e)
 
     def _is_bot_farm(self, guild):
         checker = self.bot.get_cog('AntiBotCollections')

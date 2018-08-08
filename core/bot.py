@@ -186,6 +186,8 @@ class Chiaki(commands.AutoShardedBot):
             # 1000 IDENTIFYs a day limit.
             self.load_extension(ext)
 
+        self.load_extension('core.errors')
+
         self._game_task = self.loop.create_task(self.change_game())
 
     def _import_emojis(self):
@@ -383,7 +385,7 @@ class Chiaki(commands.AutoShardedBot):
         print('------')
         self._import_emojis()
         self.db_scheduler.run()
-
+    
         if not hasattr(self, 'appinfo'):
             self.appinfo = (await self.application_info())
 
@@ -400,43 +402,26 @@ class Chiaki(commands.AutoShardedBot):
             self.start_time = datetime.utcnow()
 
     async def on_command_error(self, ctx, error):
-        if not ctx.__bypass_local_error__ and hasattr(ctx.command, 'on_error'):
-            return
-
-        if (
+        if not (
             isinstance(error, commands.CheckFailure)
             and not isinstance(error, commands.BotMissingPermissions)
             and await self.is_owner(ctx.author)
         ):
-            try:
-                # Try to release the connection regardless of whether or not
-                # it has been released already. According to the asyncpg source,
-                # attempting to release an already released connection does
-                # nothing.
-                #
-                # This is important because we can't rely on the connection
-                # being released as this can be called from a command-local
-                # error handler where the connection wasn't released yet.
-                await ctx.release()
-                async with ctx.acquire():
-                    await ctx.reinvoke()
-            except Exception as exc:
-                await ctx.command.dispatch_error(ctx, exc)
             return
-
-        cause = error.__cause__
-        if type(error) is commands.BadArgument:
-            await ctx.send(str(cause or error))
-        elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send('This command cannot be used in private messages.')
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.missing_required_arg(error.param)
-        elif isinstance(error, commands.CommandInvokeError):
-            print(f'In {ctx.command.qualified_name}:', file=sys.stderr)
-            traceback.print_tb(error.original.__traceback__)
-            print(f'{error.__class__.__name__}: {error}'.format(error), file=sys.stderr)
-        elif isinstance(error, commands.BotMissingPermissions):
-            await ctx.bot_missing_perms(error.missing_perms)
+        try:
+            # Try to release the connection regardless of whether or not
+            # it has been released already. According to the asyncpg source,
+            # attempting to release an already released connection does
+            # nothing.
+            #
+            # This is important because we can't rely on the connection
+            # being released as this can be called from a command-local
+            # error handler where the connection wasn't released yet.
+            await ctx.release()
+            async with ctx.acquire():
+                await ctx.reinvoke()
+        except Exception as exc:
+            await ctx.command.dispatch_error(ctx, exc)
 
     async def on_message(self, message):
         self.message_counter += 1

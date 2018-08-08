@@ -478,32 +478,6 @@ class _HelpCommand(BotCommand):
             raise commands.BadArgument(random.choice(self._choices))
 
 
-async def _dm_send_fail(ctx, error):
-    old_send = ctx.send
-
-    async def new_send(content, **kwargs):
-        content += ' You can also turn on DMs if you wish.'
-        await old_send(content, **kwargs)
-
-    ctx.send = new_send
-    await ctx.bot_missing_perms(error.missing_perms)
-
-
-async def _maybe_dm_help(ctx, paginator, error):
-    # We need to create a copy of the context object so that we can
-    # keep an old copy if a logger or something wants to use it.
-    new_ctx = copy.copy(ctx)
-    new_ctx.channel = await ctx.author.create_dm()
-    paginator.context = new_ctx
-
-    try:
-        await paginator.interact()
-    except discord.HTTPException:
-        # Avoid making another copy of the context if we don't need to.
-        new_ctx.channel = ctx.channel
-        await _dm_send_fail(new_ctx, error)
-
-
 async def _help(ctx, command=None, func=lambda s: s):
     if command is None:
         paginator = await GeneralHelpPaginator.create(ctx)
@@ -516,10 +490,41 @@ async def _help(ctx, command=None, func=lambda s: s):
         # Don't DM the user if the bot can't send messages. We should
         # err on the side of caution and assume the bot was muted for a
         # good reason, and a DM wouldn't be a good idea in this case.
-        if ctx.me.permissions_in(ctx.channel).send_messages:
+        if not ctx.me.permissions_in(ctx.channel).send_messages:
             # We shouldn't let this error propagate, since the bot wouldn't
             # be able to notify the user of missing perms anyways.
-            await _maybe_dm_help(ctx, paginator, e)
+            return
+        
+        # Try sending it as DM, if it fails, raise the original 
+        # BotMissingPermissions exception
+        #
+        # Because we're raising the original exception we can't split this up
+        # into functions without passing the actual error around.
+        #
+        # TODO: Make InteractiveSession.interact take an alternate destination
+        #       argument so we don't have to copy ctx.
+        new_ctx = copy.copy(ctx)
+        # This is used for sending
+        new_ctx.channel = paginator._channel = await ctx.author.create_dm()
+        # paginator.interact checks if bot has permissions before running.
+        paginator.context = new_ctx
+
+        try:
+            await paginator.interact()
+        except discord.HTTPException:
+            pass
+        else:
+            return
+        
+        # We can't DM the user. It's time to tell them that she can't send help.
+        old_send = ctx.send
+
+        async def new_send(content, **kwargs):
+            content += ' You can also turn on DMs if you wish.'
+            await old_send(content, **kwargs)
+        
+        ctx.send = new_send
+        raise
 
 
 def help_command(func=lambda s: s, **kwargs):

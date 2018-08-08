@@ -560,11 +560,8 @@ class SudokuSession(InteractiveSession):
 
     async def run(self):
         with self._bot.temp_listener(self.on_message):
-            try:
-                timeout = 300 * (self._board.difficulty + 1) / 2
-                await super().run(timeout=timeout)
-            except commands.BotMissingPermissions as e:
-                await self.context.bot_missing_perms(e.missing_perms)
+            timeout = 300 * (self._board.difficulty + 1) / 2
+            await super().run(timeout=timeout)
 
 
 def _board_setter(emoji, name, method):
