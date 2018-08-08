@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import discord
 import inspect
 import io
 import itertools
@@ -8,15 +7,15 @@ import random
 import re
 import textwrap
 import traceback
-
-from discord.ext import commands
 from functools import partial
+
+import discord
+from discord.ext import commands
 
 from ..utils import disambiguate
 from ..utils.context_managers import temp_attr
 from ..utils.examples import wrap_example
 from ..utils.subprocesses import run_subprocess
-
 
 _extension = partial(str)
 @wrap_example(_extension)
@@ -86,7 +85,7 @@ class Owner:
             result = eval(code, env)
             if inspect.isawaitable(result):
                 result = await result
-        except Exception as e:
+        except Exception:
             await ctx.send(f'```py\n{traceback.format_exc()}```')
         else:
             await ctx.send(f'```py\n{result}```')
@@ -304,7 +303,7 @@ class Owner:
     async def do(self, ctx, num: int, *, command):
         """Repeats a command a given amount of times"""
         with temp_attr(ctx.message, 'content', command):
-            for i in range(num):
+            for _ in range(num):
                 await self.bot.process_commands(ctx.message)
 
     @commands.command(aliases=['chaincmd'])

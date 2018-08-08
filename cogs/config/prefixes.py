@@ -1,12 +1,11 @@
-import discord
 import random
 import string
-
-from discord.ext import commands
 from itertools import starmap
 
-from ..utils.formats import escape_markdown
+import discord
+from discord.ext import commands
 
+from ..utils.formats import escape_markdown
 
 _prefixes = list(set(string.punctuation) - {'@', '#'})
 

@@ -1,11 +1,11 @@
 import collections
-import discord
 import enum
 import io
 import math
 import random
 import typing
 
+import discord
 from discord.ext import commands
 from PIL import Image
 
@@ -241,9 +241,9 @@ class Money:
             for user_id, amount in await ctx.db.fetch(query)
         )
 
-        # TODO: Paginate this, this might be a bad idea when the bot gets 
-        #       extremely big due to memory issues as all the entries would 
-        #       be stored in memory, but it should make things a little 
+        # TODO: Paginate this, this might be a bad idea when the bot gets
+        #       extremely big due to memory issues as all the entries would
+        #       be stored in memory, but it should make things a little
         #       smoother. Maybe I could chunk it?
         embed = discord.Embed(colour=ctx.bot.colour, description='\n'.join(fields))
         await ctx.send(embed=embed)
@@ -357,7 +357,7 @@ class Money:
     # XXX: Solve the edge case of {prefix}flip number number
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
-    async def flip(self, ctx, side_or_number: SideOrAmount=None, amount: positive_int_only_on_side = None):
+    async def flip(self, ctx, side_or_number: SideOrAmount = None, amount: positive_int_only_on_side = None):
         """Flips a coin.
 
         The first argument can either be the side (heads or tails)

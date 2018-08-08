@@ -1,28 +1,26 @@
 import collections
 import contextlib
 import datetime
-import discord
 import functools
 import json
-import psutil
 import random
 import time
 import typing
-
-from discord.ext import commands
-from itertools import accumulate, chain, count, dropwhile, starmap
+from itertools import accumulate, chain, count, dropwhile
 from math import log10
-from more_itertools import chunked, sliced
 from operator import attrgetter
 
-from ..utils import cache, disambiguate, varpos
+import discord
+import psutil
+from discord.ext import commands
+from more_itertools import sliced
+
+from ..utils import cache, disambiguate, formats, varpos
 from ..utils.colours import url_color, user_color
 from ..utils.context_managers import temp_message
 from ..utils.examples import wrap_example
-from ..utils.formats import *
-from ..utils.misc import emoji_url, group_strings, str_join, nice_time, ordinal
+from ..utils.misc import emoji_url, group_strings, nice_time, ordinal, str_join
 from ..utils.paginator import InteractiveSession, Paginator, trigger
-
 
 _Channel = typing.Union[discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel]
 
@@ -208,11 +206,11 @@ class ServerPages(InteractiveSession):
             f'**Region:** {region}\n'
             f'**Verification:** {_VERIF_FIELDS.get(server.verification_level)}\n'
             f'**Content Filter:** {server.explicit_content_filter.name.title().replace("_", " ")}\n'
-            f'{pluralize(Role=len(server.roles))} | {pluralize(Emoji=len(server.emojis))}\n'
+            f'{formats.pluralize(Role=len(server.roles))} | {formats.pluralize(Emoji=len(server.emojis))}\n'
             # FIXME: Discord markdown edit bug strikes here.
-            f'\n**{pluralize(Channel=len(server.channels))}**\n'
+            f'\n**{formats.pluralize(Channel=len(server.channels))}**\n'
             f'{channel_field}\n'
-            f'\n**{pluralize(Member=server.member_count)}**\n'
+            f'\n**{formats.pluralize(Member=server.member_count)}**\n'
             f'{status_field}\n'
         )
 
@@ -259,7 +257,7 @@ class ServerPages(InteractiveSession):
 
 
 def _parse_channel(channel, prefix, predicate):
-    formatted = f'{prefix}{escape_markdown(str(channel))}'
+    formatted = f'{prefix}{formats.escape_markdown(str(channel))}'
     return f'**{formatted}**' if predicate(channel) else formatted
 
 
@@ -362,7 +360,7 @@ def _overwrites_message(channel):
     overwrites = str(len(channel.overwrites))
     if empty_overwrites:
         overwrites = f'{overwrites} ({empty_overwrites} empty)'
-    
+
     return overwrites
 
 
@@ -380,7 +378,7 @@ class Information:
 
     @commands.command()
     @commands.guild_only()
-    async def uinfo(self, ctx, *, user: discord.Member=None):
+    async def uinfo(self, ctx, *, user: discord.Member = None):
         """Gets some basic userful info because why not"""
         if user is None:
             user = ctx.author
@@ -446,7 +444,7 @@ class Information:
     @info.command(name='user')
     @commands.guild_only()
     @embedded()
-    async def info_user(self, ctx, *, member: disambiguate.Member=None):
+    async def info_user(self, ctx, *, member: disambiguate.Member = None):
         """Gets some userful info because why not"""
         if member is None:
             member = ctx.author
@@ -455,21 +453,21 @@ class Information:
     @info.command(name='mee6')
     @commands.guild_only()
     @embedded()
-    async def info_mee6(self, ctx, *, member: disambiguate.Member=None):
+    async def info_mee6(self, ctx, *, member: disambiguate.Member = None):
         """Equivalent to `{prefix}rank`"""
         await ctx.invoke(self.rank, member=member)
 
     @commands.command()
     @commands.guild_only()
     @embedded()
-    async def userinfo(self, ctx, *, member: disambiguate.Member=None):
+    async def userinfo(self, ctx, *, member: disambiguate.Member = None):
         """Gets some userful info because why not"""
         await ctx.invoke(self.info_user, member=member)
 
     @commands.command()
     @commands.guild_only()
     @embedded()
-    async def rank(self, ctx, *, member: disambiguate.Member=None):
+    async def rank(self, ctx, *, member: disambiguate.Member = None):
         """Gets mee6 info... if it exists"""
         if member is None:
             member = ctx.author
@@ -669,7 +667,7 @@ class Information:
         await pages.interact()
 
     @commands.command()
-    async def roles(self, ctx, member: disambiguate.Member=None):
+    async def roles(self, ctx, member: disambiguate.Member = None):
         """Shows all the roles that a member has. Roles in bold are the ones you have.
 
         If a member isn't provided, it defaults to all the roles in the server.
@@ -683,7 +681,7 @@ class Information:
         padding = int(log10(max(map(len, (role.members for role in roles))))) + 1
 
         author_roles = ctx.author.roles
-        get_name = functools.partial(bold_name, predicate=lambda r: r in author_roles)
+        get_name = functools.partial(formats.bold_name, predicate=lambda r: r in author_roles)
         hierarchy = [f"`{len(role.members) :<{padding}}\u200b` {get_name(role)}" for role in roles]
         pages = Paginator(ctx, hierarchy, title=f'Roles in {ctx.guild} ({len(hierarchy)})')
         await pages.interact()
@@ -702,9 +700,9 @@ class Information:
 
     @staticmethod
     async def _inrole(ctx, *roles, members, final='and'):
-        joined_roles = human_join(map(str, roles), final=final)
+        joined_roles = formats.human_join(map(str, roles), final=final)
         header = f'Members in role{"s" * (len(roles) != 1)} {joined_roles}'
-        truncated_title = truncate(header, 256, '...')
+        truncated_title = formats.truncate(header, 256, '...')
 
         total_color = map(sum, zip(*(role.colour.to_rgb() for role in roles)))
         average_color = discord.Colour.from_rgb(*map(round, (c / len(roles) for c in total_color)))
@@ -771,7 +769,7 @@ class Information:
         title = f"Roles in {ctx.guild} that have {perm.replace('_', ' ').title()}"
 
         author_roles = ctx.author.roles
-        get_name = functools.partial(bold_name, predicate=lambda r: r in author_roles)
+        get_name = functools.partial(formats.bold_name, predicate=lambda r: r in author_roles)
         entries = map(get_name, roles)
 
         pages = Paginator(ctx, entries, title=title)
@@ -817,7 +815,7 @@ class Information:
     @commands.command(aliases=['permsin'])
     @commands.guild_only()
     @embedded()
-    async def permissionsin(self, ctx, *, member: disambiguate.Member=None):
+    async def permissionsin(self, ctx, *, member: disambiguate.Member = None):
         """Shows a member's Permissions *in the channel*.
 
         ```diff
@@ -833,7 +831,7 @@ class Information:
 
     @commands.command(aliases=['av'])
     @embedded()
-    async def avatar(self, ctx, *, user: disambiguate.Member=None):
+    async def avatar(self, ctx, *, user: disambiguate.Member = None):
         """Shows a member's avatar.
 
         If no user is specified I show your avatar.

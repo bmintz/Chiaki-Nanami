@@ -5,8 +5,6 @@ import operator
 import pathlib
 from datetime import datetime
 
-from more_itertools import tail
-
 from cogs.utils.db import all_tables
 
 _DEFAULT_DIR = pathlib.Path('data', 'migrations')
@@ -48,7 +46,7 @@ def _get_migrations(directory=_DEFAULT_DIR, *, downgrade=False):
         action, cmp = 'downgrade', operator.le
     else:
         action, cmp = 'upgrade', operator.gt
-        
+
     revisions = _get_revisions(directory)
     revisions = {t.__tablename__: revisions.get(t.__tablename__, _MIN_TIMESTAMP) for t in all_tables()}
 
@@ -91,8 +89,7 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
         cmp = operator.le
 
     revisions = _get_revisions(directory)
-    tables = {t.__tablename__: t for t in all_tables()}
-    
+
     table_key = operator.itemgetter(1)
     migrations = _get_migrations(directory, downgrade=downgrade)
     table_migrations = sorted(
@@ -119,13 +116,13 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
                     action = 'upgrade' if downgrade else 'downgrade'
                     print('Error from', f'{action}_{table}', 'in', file)
                     raise
-            
+
             if last_version is not None:
                 version = last_version
-    
+
             revisions[table_name] = version
 
-        _write_revisions(revisions, directory) 
+        _write_revisions(revisions, directory)
 
 def _last_migration(directory):
     return max(_file_version(path.stem) for path in directory.glob('*.py'))

@@ -10,7 +10,7 @@ from collections import OrderedDict
 
 import discord
 from discord.ext import commands
-from more_itertools import chunked, flatten, ilen, run_length, sliced, spy
+from more_itertools import chunked, flatten, run_length, sliced, spy
 
 from .commands import all_names, command_category, walk_parents
 from .converter import BotCommand
@@ -43,7 +43,7 @@ def _make_command_requirements(command):
     requirements = []
     # All commands in this cog are owner-only anyway.
     if command.cog_name == 'Owner':
-      requirements.append('**Bot Owner only**')
+        requirements.append('**Bot Owner only**')
 
     def make_pretty(p):
         return p.replace('_', ' ').title().replace('Guild', 'Server')
@@ -153,10 +153,10 @@ class HelpCommandPage(InteractiveSession):
             enumerate(embed.fields)
         )
 
-        if field_index is not None:
-            return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
-        else:
+        if field_index is None:
             return embed.add_field(name=see_also, value=value, inline=False)
+
+        return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
 
     def default(self):
         command, ctx, func = self.command, self.context, self.func
@@ -486,7 +486,7 @@ async def _help(ctx, command=None, func=lambda s: s):
 
     try:
         await paginator.interact()
-    except commands.BotMissingPermissions as e:
+    except commands.BotMissingPermissions:
         # Don't DM the user if the bot can't send messages. We should
         # err on the side of caution and assume the bot was muted for a
         # good reason, and a DM wouldn't be a good idea in this case.
@@ -494,8 +494,8 @@ async def _help(ctx, command=None, func=lambda s: s):
             # We shouldn't let this error propagate, since the bot wouldn't
             # be able to notify the user of missing perms anyways.
             return
-        
-        # Try sending it as DM, if it fails, raise the original 
+
+        # Try sending it as DM, if it fails, raise the original
         # BotMissingPermissions exception
         #
         # Because we're raising the original exception we can't split this up
@@ -515,14 +515,14 @@ async def _help(ctx, command=None, func=lambda s: s):
             pass
         else:
             return
-        
+
         # We can't DM the user. It's time to tell them that she can't send help.
         old_send = ctx.send
 
         async def new_send(content, **kwargs):
             content += ' You can also turn on DMs if you wish.'
             await old_send(content, **kwargs)
-        
+
         ctx.send = new_send
         raise
 
@@ -530,7 +530,7 @@ async def _help(ctx, command=None, func=lambda s: s):
 def help_command(func=lambda s: s, **kwargs):
     """Create a help command with a given transformation function."""
 
-    async def command(_, ctx, *, command: _HelpCommand=None):
+    async def command(_, ctx, *, command: _HelpCommand = None):
         await _help(ctx, command, func=func)
 
     # command.module would be set to *here*. This is bad because the category

@@ -1,10 +1,6 @@
-import aiohttp
 import asyncio
-import asyncpg
 import collections
 import contextlib
-import discord
-import emoji
 import importlib
 import inspect
 import json
@@ -13,20 +9,21 @@ import pkgutil
 import random
 import re
 import sys
-import textwrap
-import traceback
-
 from datetime import datetime
+
+import aiohttp
+import discord
+import emoji
 from discord.ext import commands
 from more_itertools import always_iterable
-
-from . import context
 
 from cogs.utils import db
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
 from cogs.utils.transformdict import CIDict
+
+from . import context
 
 # The bot's config file
 import config
@@ -100,7 +97,7 @@ def _is_cog_hidden(cog):
     hidden = getattr(cog, '__hidden__', _sentinel)
     if hidden is not _sentinel:
         return hidden
-    
+
     try:
         module_name = cog.__module__
     except AttributeError:
@@ -111,9 +108,9 @@ def _is_cog_hidden(cog):
         hidden = getattr(module, '__hidden__', _sentinel)
         if hidden is not _sentinel:
             return hidden
-        
+
         module_name = module_name.rpartition('.')[0]
-    
+
     return False
 
 
@@ -212,7 +209,7 @@ class Chiaki(commands.AutoShardedBot):
                     return self.get_emoji(int(match[1]))
                 if em in emoji.UNICODE_EMOJI or is_edge_case_emoji(em):
                     return _UnicodeEmoji(name=em)
-                log.warn('Unknown Emoji: %r', em)
+                log.warning('Unknown Emoji: %r', em)
 
             return em
 
@@ -385,7 +382,7 @@ class Chiaki(commands.AutoShardedBot):
         print('------')
         self._import_emojis()
         self.db_scheduler.run()
-    
+
         if not hasattr(self, 'appinfo'):
             self.appinfo = (await self.application_info())
 
@@ -440,7 +437,7 @@ class Chiaki(commands.AutoShardedBot):
 
     # ------ Viewlikes ------
 
-    # Note these views and properties look deceptive. They look like a thin 
+    # Note these views and properties look deceptive. They look like a thin
     # wrapper len(self.guilds). However, the reason why these are here is
     # to avoid a temporary list to get the len of. Bot.guilds and Bot.users
     # creates a list which can cause a massive hit in performance later on.

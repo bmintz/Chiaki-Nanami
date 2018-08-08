@@ -1,9 +1,9 @@
 import contextlib
-import discord
 import enum
-
 from collections import defaultdict, deque
 from datetime import datetime
+
+import discord
 from discord.ext import commands
 
 from .utils import time
@@ -62,7 +62,7 @@ class AFK:
         return self.afk_configs[server.id]['send_afk_message']
 
     @commands.command()
-    async def afk(self, ctx, *, message: str=None):
+    async def afk(self, ctx, *, message: str = None):
         """Sets your AFK message"""
         member = ctx.author
         if message is None:

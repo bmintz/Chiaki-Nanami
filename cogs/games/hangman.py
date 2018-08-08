@@ -1,21 +1,20 @@
 import asyncio
 import contextlib
-import discord
 import functools
 import glob
 import operator
 import os
 import random
 import string
-
 from collections import namedtuple
+
+import discord
 from discord.ext import commands
 
 from ..utils.context_managers import temp_item
 from ..utils.formats import escape_markdown, truncate
 from ..utils.misc import base_filename, group_strings
 from ..utils.paginator import Paginator
-
 
 # I hate string concatentation
 # And I hate constantly building the same string
@@ -211,7 +210,7 @@ class Hangman:
     async def hangman(self, ctx, category: Category):
         """Starts a game of hangman.
 
-        To see all the categories you can choose, 
+        To see all the categories you can choose,
         type `{prefix}hangman categories`
         """
         if ctx.channel.id in self.sessions:

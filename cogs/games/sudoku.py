@@ -4,7 +4,6 @@ import functools
 import itertools
 import random
 import re
-import textwrap
 
 import discord
 from discord.ext import commands
@@ -183,7 +182,6 @@ class Board:
     @classmethod
     def from_data(cls, data):
         # We are bypassing __init__ here since it doesn't apply here.
-        size = BLOCK_SIZE * BLOCK_SIZE
         self = cls.__new__(cls)
 
         self._board = [list(map(int, row)) for row in sliced(data['board'], 9)]
@@ -457,9 +455,6 @@ class SudokuSession(InteractiveSession):
         if not self._help_future.done():
             self._help_future.cancel()
 
-        # Description will be edited when we do the two prompts.
-        old_description = self._current.description
-
         if self._board.dirty:
             save_changes = await self._confirm("There are unsaved changes. Save game?", timeout=25)
             if save_changes and await self._confirm_save():
@@ -627,7 +622,7 @@ class Sudoku:
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
-    async def sudoku(self, ctx, difficulty: Difficulty=None):
+    async def sudoku(self, ctx, difficulty: Difficulty = None):
         if ctx.author.id in self.sessions:
             return await ctx.send('Please finish your other Sudoku game first.')
 

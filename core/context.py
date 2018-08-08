@@ -1,13 +1,13 @@
 import asyncio
 import collections
 import contextlib
-import discord
 import functools
 import random
 import sys
-
-from discord.ext import commands
 from itertools import starmap
+
+import discord
+from discord.ext import commands
 
 
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
@@ -193,4 +193,3 @@ class Context(commands.Context):
         return all(getattr(perms, perm) == value for perm, value in permissions.items())
 
     bot_has_embed_links = functools.partialmethod(bot_has_permissions, embed_links=True)
-

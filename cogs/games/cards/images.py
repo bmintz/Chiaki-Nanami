@@ -1,9 +1,9 @@
 """Module used for creating the "urls.json" file"""
 
-import discord
-import pathlib
 import json
+import pathlib
 
+import discord
 from more_itertools import chunked
 
 __all__ = ['upload_images', 'save_image_urls', 'get_card_image_file', 'get_card_image_url']

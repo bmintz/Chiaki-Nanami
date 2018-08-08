@@ -1,13 +1,13 @@
-import asyncpg
-import discord
 import itertools
 import logging
 
+import asyncpg
+import discord
 from discord.ext import commands
 
+from ..utils import db, formats
 from ..utils.examples import _get_static_example
 from ..utils.paginator import Paginator
-from ..utils import db, formats
 
 
 class Tag(db.Table, table_name='tags'):
@@ -76,6 +76,7 @@ class TagName(commands.clean_content):
 
 
 class TagContent(commands.clean_content):
+    @staticmethod
     def random_example(ctx):
         return ctx.__tag_example__[1]
 
@@ -149,7 +150,7 @@ class Tags:
 
         try:
             await ctx.db.execute(query, name, content, ctx.author.id, ctx.guild.id)
-        except asyncpg.UniqueViolationError as e:
+        except asyncpg.UniqueViolationError:
             await ctx.send(f'Tag {name} already exists...')
         else:
             await ctx.send(f'Successfully created tag {name}! ^.^')
@@ -189,7 +190,7 @@ class Tags:
 
         try:
             await ctx.db.execute(query, alias, tag['name'], ctx.author.id, ctx.guild.id)
-        except asyncpg.UniqueViolationError as e:
+        except asyncpg.UniqueViolationError:
             return await ctx.send(f'Alias {alias} already exists...')
         else:
             await ctx.send(f'Successfully created alias {alias} that points to {original}! ^.^')

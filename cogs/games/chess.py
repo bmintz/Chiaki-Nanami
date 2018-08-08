@@ -36,7 +36,7 @@ def _fen_tokens(fen):
             continue
 
         if c.isdigit():
-            for i in range(int(c)):
+            for _ in range(int(c)):
                 yield ''
         else:
             yield c
@@ -150,7 +150,7 @@ class Game(chessnut.Game):
 
     def fifty_move_rule(self):
         return self.state.ply >= 100
-    
+
     def insufficient_material(self):
         piece_counter = collections.Counter(map(str.lower, self.board._position))
 
@@ -176,7 +176,7 @@ class Game(chessnut.Game):
     def status(self):
         if self.fifty_move_rule():
             return self.FIFTY_MOVE_RULE
-        
+
         if self.insufficient_material():
             return self.INSUFFICIENT_MATERIAL
 
@@ -185,7 +185,7 @@ class Game(chessnut.Game):
 
         return super().status
 
-    
+
 _SYMBOLS = {'w': '\u26aa', 'b': '\u26ab'}
 _OTHER_TURNS = {'w': 'b', 'b': 'w'}
 
@@ -280,7 +280,7 @@ def _translate_san(game, move):
     if piece_at_end.isspace() and takes:
         # Nonsensical san, there is no piece to take.
         return ''
-    elif takes and not (piece or from_hint):
+    if takes and not (piece or from_hint):
         # Pawn capture requires a file.
         return ''
 
@@ -314,8 +314,8 @@ def _translate_san(game, move):
                 if final_result and not from_hint:
                     # Ambiguous san, this is not allowed.
                     return ''
-                else:
-                    final_result = result
+
+                final_result = result
 
     return final_result
 

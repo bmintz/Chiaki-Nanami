@@ -1,13 +1,12 @@
-import discord
 import json
 import pathlib
 import random
 import re
-
 from collections import defaultdict, namedtuple
-from discord.ext import commands
 from itertools import zip_longest
 
+import discord
+from discord.ext import commands
 
 Result = namedtuple('Result', 'cmp name image')
 

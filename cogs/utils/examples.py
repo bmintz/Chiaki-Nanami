@@ -2,14 +2,12 @@
 
 import functools
 import itertools
-import operator
 import random
 import re
 import typing
 
 import discord
 from discord.ext import commands
-from more_itertools import iterate
 
 from . import varpos
 from .commands import all_qualified_names

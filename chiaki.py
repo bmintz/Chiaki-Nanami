@@ -3,8 +3,6 @@
 import asyncio
 import contextlib
 import datetime
-import click
-import discord
 import functools
 import importlib
 import itertools
@@ -13,10 +11,12 @@ import os
 import sys
 import traceback
 
-from cogs.utils import db
-from core import Chiaki, migration
+import click
+import discord
 
 import config
+from cogs.utils import db
+from core import Chiaki, migration
 
 # use faster event loop, but fall back to default if on Windows or not installed
 try:
@@ -25,7 +25,7 @@ except ImportError:
     pass
 else:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    
+
 
 @contextlib.contextmanager
 def log(stream=False):

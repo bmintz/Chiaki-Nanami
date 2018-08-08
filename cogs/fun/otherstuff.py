@@ -1,20 +1,19 @@
 import asyncio
-import asyncpg
-import discord
 import functools
 import io
 import random
-import secrets
 import time
-
 from collections import namedtuple
+
+import asyncpg
+import discord
 from discord.ext import commands
 from PIL import Image
 
 from ..utils import db
 from ..utils.examples import wrap_example
-from ..utils.paginator import Paginator
 from ..utils.misc import emoji_url
+from ..utils.paginator import Paginator
 
 
 class RiggedShips(db.Table, table_name='rigged_ships'):
@@ -232,7 +231,7 @@ class OtherStuffs:
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
-    async def ship(self, ctx, user1: discord.Member, user2: discord.Member=None):
+    async def ship(self, ctx, user1: discord.Member, user2: discord.Member = None):
         """Ships two users together, and scores accordingly."""
         if user2 is None:
             user1, user2 = ctx.author, user1
@@ -255,7 +254,7 @@ class OtherStuffs:
 
     @commands.command()
     @commands.bot_has_permissions(embed_links=True)
-    async def slap(self, ctx, target: discord.Member=None):
+    async def slap(self, ctx, target: discord.Member = None):
         """Slaps a user"""
         # This can be refactored somehow...
         slapper = ctx.author
@@ -337,7 +336,7 @@ class OtherStuffs:
         row = await ctx.db.fetchrow(query, ctx.guild.id, user.id, partner.id)
         if row is None:
             return await ctx.send('These two were never a thing...')
-        elif (
+        if (
             ctx.author.id not in row[1:]  # (user, partner, rigger)
             and not ctx.author.guild_permissions.administrator
         ):

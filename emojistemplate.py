@@ -2,7 +2,7 @@
 
 RENAME THIS FILE TO emojis.py OTHERWISE IT WON'T WORK.
 
-By default it uses the unicode emojis. However, you can specify 
+By default it uses the unicode emojis. However, you can specify
 server emojis in one of the two possible ways:
 
 1. The raw string of the emoji. This is the format <:name:id>. You can find this

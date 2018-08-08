@@ -1,15 +1,15 @@
-import discord
 import inspect
 import os
 import platform
 import re
 
+import discord
 from discord.ext import commands
 
 from ..utils.converter import BotCommand
 from ..utils.formats import truncate
-from ..utils.subprocesses import run_subprocess
 from ..utils.paginator import Paginator, paginated
+from ..utils.subprocesses import run_subprocess
 
 
 class Meta:

@@ -1,17 +1,17 @@
 import collections
-import discord
 import itertools
 import math
-import psutil
 import random
-
-from discord.ext import commands
 from functools import partial
+
+import discord
+import psutil
+from discord.ext import commands
 from more_itertools import all_equal, ilen
 
 from ..utils import db
 from ..utils.formats import pluralize
-from ..utils.paginator import Paginator, FieldPaginator
+from ..utils.paginator import FieldPaginator, Paginator
 from ..utils.time import human_timedelta
 
 

@@ -1,19 +1,17 @@
 import asyncio
 import contextlib
-import discord
 import enum
 import itertools
 import random
-
 from collections import namedtuple
-from more_itertools import first_true, locate, one, windowed
 
-from . import errors
-from .bases import Status, TwoPlayerGameCog
+import discord
+from more_itertools import first_true, locate, windowed
+
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
-
+from .bases import Status, TwoPlayerGameCog
 
 NUM_ROWS = 6
 NUM_COLS = 7
@@ -193,7 +191,6 @@ class ConnectFourSession:
 
     async def _loop(self):
         for turn in itertools.count(1):
-            user, tile = self.current
             self._update_display()
 
             async with temp_message(self.ctx, embed=self._game_screen):

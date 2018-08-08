@@ -1,18 +1,16 @@
-import asyncio
 import contextlib
-import discord
-import itertools
-
-from discord.ext import commands
 from functools import partialmethod
 from random import choice
 
-from .cards import Suit, Deck, images as card_images
+import discord
+from discord.ext import commands
 
 from ..utils import db
 from ..utils.context_managers import temp_item
 from ..utils.misc import emoji_url
 from ..utils.paginator import InteractiveSession, trigger
+from .cards import Deck, Suit
+from .cards import images as card_images
 
 
 class HiloGames(db.Table, table_name='hilo_games'):
