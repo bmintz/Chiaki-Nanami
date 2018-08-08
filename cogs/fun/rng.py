@@ -16,8 +16,6 @@ from ..utils.examples import get_example, wrap_example
 from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
 
-from core.errors import InvalidUserArgument
-
 
 try:
     import webcolors
@@ -200,6 +198,21 @@ class Choice(commands.clean_content):
         return next(choices)
 
 
+def diep_skill_points(arg):
+    try:
+        value = int(arg)
+    except ValueError:
+        raise commands.BadArgument(f'{arg} is not a number.')
+
+    if not 0 < value <= 33:
+        raise commands.BadArgument('Must be between 1 and 33 points')
+    return value
+
+@wrap_example(diep_skill_points)
+def _diep_random_example(arg):
+    return random.choice([14, 28, 33])
+
+
 class RNG:
     @commands.command(name="8ball", aliases=['8'])
     @commands.bot_has_permissions(embed_links=True, attach_files=True)
@@ -280,19 +293,17 @@ class RNG:
 
     def _build_str(self, points: int=33, smasher: bool=False):
         stats = (4, 10) if smasher else (8, 7)
-        if points <= 33:
-            return '/'.join(map(str, self._build(points, *stats)))
-        raise InvalidUserArgument(f"You have too many points ({points})")
+        return '/'.join(map(str, self._build(points, *stats)))
 
     @random.command()
-    async def build(self, ctx, points: int=33):
+    async def build(self, ctx, points: diep_skill_points=33):
         """Gives you a random build to try out
 
         If points is not provided, it defaults to a max-level build (33)"""
         await ctx.send(self._build_str(points))
 
     @random.command()
-    async def smasher(self, ctx, points: int=33):
+    async def smasher(self, ctx, points: diep_skill_points=33):
         """Gives you a random build for the Smasher branch to try out
 
         If points is not provided, it defaults to a max-level build (33)"""
@@ -307,7 +318,7 @@ class RNG:
         await ctx.send(self._class())
 
     @random.command()
-    async def tank(self, ctx, points: int=33):
+    async def tank(self, ctx, points: diep_skill_points=33):
         """Gives you a random build AND class to play
 
         If points is not provided, it defaults to a max-level build (33)"""
@@ -352,7 +363,7 @@ class RNG:
         However, you can only execute this in private messages
         """
         if n < 8:
-            raise InvalidUserArgument(f"How can you expect a secure password in just {n} characters?")
+            return await ctx.send(f"How can you expect a secure password in just {n} characters?")
 
         await ctx.send(escape_markdown(_password(n)))
 

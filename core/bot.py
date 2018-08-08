@@ -20,7 +20,7 @@ from datetime import datetime
 from discord.ext import commands
 from more_itertools import always_iterable
 
-from . import context, errors
+from . import context
 
 from cogs.utils import db
 from cogs.utils.jsonf import JSONFile
@@ -425,9 +425,7 @@ class Chiaki(commands.AutoShardedBot):
             return
 
         cause = error.__cause__
-        if isinstance(error, errors.ChiakiException):
-            await ctx.send(str(error))
-        elif type(error) is commands.BadArgument:
+        if type(error) is commands.BadArgument:
             await ctx.send(str(cause or error))
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send('This command cannot be used in private messages.')

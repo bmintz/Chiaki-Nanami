@@ -18,8 +18,6 @@ from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import FieldPaginator
 from ..utils.time import duration_units, parse_delta
 
-from core import errors
-
 log = logging.getLogger(__name__)
 
 
@@ -61,7 +59,7 @@ for k, v in list(_mod_actions.items()):
 
 # ----------------- Schema ---------------------
 
-class ModLogError(errors.ChiakiException):
+class ModLogError(Exception):
     pass
 
 

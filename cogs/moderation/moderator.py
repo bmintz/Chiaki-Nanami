@@ -19,8 +19,6 @@ from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
 from ..utils.paginator import Paginator, FieldPaginator
 
-from core import errors
-
 
 class WarnEntries(db.Table, table_name='warn_entries'):
     id = db.Column(db.Serial, primary_key=True)
@@ -46,10 +44,15 @@ class MutedRoles(db.Table, table_name='muted_roles'):
     role_id = db.Column(db.BigInt)
 
 
-class AlreadyWarned(errors.ChiakiException):
+class AlreadyWarned(commands.CommandError):
     """Exception raised to avoid the case where a failed-warn due 
     to the cooldown would be considered to be a success"""
-    pass
+    __ignore__ = True
+
+class AlreadyMuted(commands.CommandError):
+    """Exception raised to avoid muting a member that's already muted being
+    considered "successful" """
+    __ignore__ = True
 
 
 # Dummy punishment class for default warn punishment
@@ -575,6 +578,13 @@ class Moderator:
         ctx.args[2:] = args
         ctx.kwargs['reason'] = punishment_reason
 
+    @warn.error
+    async def warn_error(self, ctx, error):
+        if isinstance(error, AlreadyWarned):
+            await ctx.send(error)
+        else:
+            ctx.__bypass_local_error__ = True
+
     # XXX: Should this be a group?
 
     @commands.command(name='clearwarns')
@@ -700,7 +710,7 @@ class Moderator:
 
     async def _do_mute(self, member, when, role, *, connection=None, reason=None):
         if role in member.roles:
-            raise errors.InvalidUserArgument(f'{member.mention} is already been muted... ;-;')
+            raise AlreadyMuted(f'{member.mention} is already been muted... ;-;')
 
         await member.add_roles(role, reason=reason)
         args = (member.guild.id, member.id, role.id)
@@ -774,6 +784,13 @@ class Moderator:
         await self._do_mute(member, when, role, connection=ctx.db, reason=reason)
         await try_edit(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
+
+    @mute.error
+    async def mute_error(self, ctx, error):
+        if isinstance(error, AlreadyMuted):
+            await ctx.send(error)
+        else:
+            ctx.__bypass_local_error__ = True
 
     @commands.command()
     async def mutetime(self, ctx, member: discord.Member=None):

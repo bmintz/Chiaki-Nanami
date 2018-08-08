@@ -17,8 +17,6 @@ from ..utils.misc import emoji_url
 from ..utils.paginator import Paginator, FieldPaginator
 from ..utils.time import human_timedelta
 
-from core import errors
-
 
 class Commands(db.Table):
     id = db.Column(db.BigSerial, primary_key=True)
@@ -41,7 +39,6 @@ _ignored_exceptions = (
     commands.CommandNotFound,
     commands.UserInputError,
     discord.Forbidden,
-    errors.ChiakiException,
 )
 
 ERROR_ICON_URL = emoji_url('\N{NO ENTRY SIGN}')
@@ -190,7 +187,7 @@ class Stats:
 
         error = getattr(error, 'original', error)
 
-        if isinstance(error, _ignored_exceptions):
+        if isinstance(error, _ignored_exceptions) or getattr(error, '__ignore__', False):
             return
 
         e = (discord.Embed(colour=0xcc3366)
