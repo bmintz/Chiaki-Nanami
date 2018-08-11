@@ -33,9 +33,6 @@ class _TwoPlayerWaiter:
         return future
 
     def confirm(self, member):
-        if self._author == member:
-            raise RuntimeError("You can't join a game that you've created. Are you really that lonely?")
-
         if self._recipient is None:
             self._recipient = member
 
