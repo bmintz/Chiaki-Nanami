@@ -109,15 +109,25 @@ class NotNegative(commands.BadArgument):
     pass
 
 class SideOrAmount(commands.Converter):
-    __converter = typing.Union[Side, int]
+    __types = (Side, int)
 
     async def convert(self, ctx, arg):
+        try:
+            return await Side.convert(ctx, arg)
+        except commands.BadArgument:
+            pass
+        
+        try:
+            return int(arg)
+        except ValueError:
+            raise commands.BadArgument(f'"{arg}" is not an amount or side.')
+
         return await self.__converter.convert(ctx, arg)
 
     @classmethod
     def random_example(cls, ctx):
         ctx.__sideoramount_flag__ = type_index = not getattr(ctx, '__sideoramount_flag__', False)
-        return get_example(cls.__converter.types[type_index], ctx)
+        return get_example(cls.__types[type_index], ctx)
 
 def positive_int(arg):
     value = int(arg)
