@@ -126,7 +126,7 @@ def _get_bad_argument(ctx, param):
     last_match = last(re.finditer(quote_pattern, content))
     # I swear if last_match is None...
     assert last_match, f'last_match is None with content {content}'
-    return last_match[1], last_match.start()
+    return last_match[0], last_match.start()
 
 async def _format_bad_argument(ctx, param, error):
     _, end_content_at = _get_bad_argument(ctx, param)
