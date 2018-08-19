@@ -7,13 +7,13 @@ import discord
 from discord.ext import commands
 
 from ..utils.converter import BotCommand
-from ..utils.formats import truncate
-from ..utils.paginator import Paginator, paginated
-from ..utils.subprocesses import run_subprocess
 
 # --------- Changelog functions -----------
 
 # Some useful regexes
+# NOTE: As cool as it would be to link the commits to the corresponding commits
+#       on GitHub, in practice it would quickly bloat the changelog and would
+#       increase the risk of causing 400s on long changelogs.
 VERSION_HEADER_PATTERN = re.compile(r'^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}|Unreleased)$')
 CHANGE_TYPE_PATTERN = re.compile(r'^### (Added|Changed|Deprecated|Removed|Fixed|Security)$')
 
@@ -133,22 +133,6 @@ class Meta:
                  )
         await ctx.send(embed=embed)
 
-    # ----------------- Github Related Commands -------------------
-
-    # Credits to Reina
-    @staticmethod
-    async def _get_github_url():
-        url, _ = await run_subprocess('git remote get-url origin')
-        return url.strip()[:-4]  # remove .git\n
-
-    async def _get_recent_commits(self, *, limit=None):
-        url = await self._get_github_url()
-        cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
-        if limit is not None:
-            cmd += f' -{limit}'
-
-        return (await run_subprocess(cmd))[0]
-
     async def _display_raw(self, ctx, lines):
         paginator = commands.Paginator(prefix='```py')
         for line in lines:
@@ -189,50 +173,6 @@ class Meta:
 
         url = f'<{source_url}/{location}#L{firstlineno}-L{lastline}>'
         await ctx.send(url)
-
-    @commands.command()
-    @paginated()
-    async def commits(self, ctx, limit=10):
-        """Shows the latest changes made to the bot.
-
-        The default is the latest 10 changes.
-        """
-        changes = await self._get_recent_commits(limit=limit)
-
-        def truncate_sub(m):
-            return truncate(m[1], 47, "...")
-
-        # By default git show doesn't truncate the commit messages.
-        # %<(N,trunc) truncates them but it also pads messages that are
-        # shorter than N columns, which is NOT what we want.
-        #
-        # One attempt was to use sed as shown here:
-        # https://stackoverflow.com/a/24604658
-        #
-        # However since we're attempting to make this a cross-platform bot,
-        # we can't use sed as it's not available in Windows and there's no
-        # equivalent of it, causing it to fail. As a result, we're forced to
-        # use regex.
-        #
-        # We know two things for sure about the commit line:
-        # 1. The hash hyper link goes by the format of [`{hash}`]({commit_url})
-        # 2. The relative committer time is wrapped in parentheses, i.e. ({delta})
-        #
-        # We use a regex solution to fish out the commit message, which
-        # is wrapped in <> from the function above since we know for sure
-        # neither the hash or commiter date will have <> in them.
-        #
-        # Not sure what the performance backlash is since it's regex,
-        # but from naive timings it doesn't look like it takes too long.
-        # (only 3 ms, which isn't that much compared to HTTP requests.)
-
-        lines = (
-            re.sub(r'<(.*)>', truncate_sub, change)
-            for change in changes.splitlines()
-        )
-
-        pages = Paginator(ctx, lines, title='Latest Changes', per_page=10)
-        await pages.interact()
 
     @commands.command()
     async def changelog(self, ctx):

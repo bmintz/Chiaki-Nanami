@@ -11,6 +11,9 @@
 - Quotes are no longer necessary for `->info channel` on channels with more than
   one word.
 
+### Removed
+- Removed `->commits` as it wasn't really useful for the end user.
+
 
 ## 1.3.1 - 2018-07-18
 ### Fixed
