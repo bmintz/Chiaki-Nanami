@@ -11,6 +11,82 @@ from ..utils.formats import truncate
 from ..utils.paginator import Paginator, paginated
 from ..utils.subprocesses import run_subprocess
 
+# --------- Changelog functions -----------
+
+# Some useful regexes
+VERSION_HEADER_PATTERN = re.compile(r'^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}|Unreleased)$')
+CHANGE_TYPE_PATTERN = re.compile(r'^### (Added|Changed|Deprecated|Removed|Fixed|Security)$')
+
+def _is_bulleted(line):
+    return line.startswith(('* ', '- '))
+
+def _changelog_versions(lines):
+    version = change_type = release_date = None
+    changes = {}
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        match = VERSION_HEADER_PATTERN.match(line)
+        if match:
+            if version:
+                yield version, {'release_date': release_date, 'changes': changes.copy()}
+            version = match[1]
+            release_date = match[2]
+            changes.clear()
+            continue
+
+        match = CHANGE_TYPE_PATTERN.match(line)
+        if match:
+            change_type = match[1]
+            continue
+
+        if _is_bulleted(line):
+            changes.setdefault(change_type, []).append(line)
+        else:
+            changes[change_type][-1] += ' ' + line.lstrip()
+    yield version, {'release_date': release_date, 'changes': changes.copy()}
+
+def _load_changelog():
+    with open('CHANGELOG.md') as f:
+        return dict(_changelog_versions(f))
+
+_CHANGELOG = _load_changelog()
+
+def _format_line(line):
+    if _is_bulleted(line):
+        return '\u2022 ' + line[2:]
+    return line
+
+def _format_changelog_without_embed(version):
+    changes = _CHANGELOG[version]
+    nl_join = '\n'.join
+    change_lines = '\n\n'.join(
+        f'**{type_}**\n{nl_join(map(_format_line, lines))}'
+        for type_, lines in changes['changes'].items()
+    )
+    return f'**__Version {version} \u2014 {changes["release_date"]}__**\n\n{change_lines}'
+
+def _format_changelog_with_embed(version):
+    changes = _CHANGELOG[version]
+    nl_join = '\n'.join
+    change_lines = '\n\n'.join(
+        f'**__{type_}__**\n{nl_join(map(_format_line, lines))}'
+        for type_, lines in changes['changes'].items()
+    )
+    embed = discord.Embed(description=change_lines)
+
+    if changes['release_date'] == 'Unreleased':
+        url = discord.Embed.Empty
+    else:
+        url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/releases/tag/v{version}'
+
+    name = f'Version {version} \u2014 {changes["release_date"]}'
+    embed.set_author(name=name, url=url)
+    return embed
+
+# ----------------------------------------
 
 class Meta:
     """Need some info about the bot? Here you go!"""
@@ -157,6 +233,21 @@ class Meta:
 
         pages = Paginator(ctx, lines, title='Latest Changes', per_page=10)
         await pages.interact()
+
+    @commands.command()
+    async def changelog(self, ctx):
+        """Shows the latest important changes"""
+        version = '.'.join(map(str, ctx.bot.version_info[:3]))
+        if not ctx.bot_has_embed_links():
+            return await ctx.send(_format_changelog_without_embed(version))
+
+        embed = _format_changelog_with_embed(version)
+        embed.colour = ctx.bot.colour
+        author = embed.author
+        bot_icon = ctx.bot.user.avatar_url_as(static_format='png')
+        embed.set_author(name=author.name, url=author.url, icon_url=bot_icon)
+
+        await ctx.send(embed=embed)
 
 
 def setup(bot):
