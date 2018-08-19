@@ -1,21 +1,21 @@
 import asyncio
 import contextlib
-import discord
 import inspect
 import io
 import itertools
 import random
+import re
 import textwrap
 import traceback
-
-from discord.ext import commands
 from functools import partial
+
+import discord
+from discord.ext import commands
 
 from ..utils import disambiguate
 from ..utils.context_managers import temp_attr
 from ..utils.examples import wrap_example
 from ..utils.subprocesses import run_subprocess
-
 
 _extension = partial(str)
 @wrap_example(_extension)
@@ -45,6 +45,12 @@ def _tabulate(rows, headers=()):
     to_draw.extend(get_entry(row) for row in display_rows)
     to_draw.append(sep)
     return '\n'.join(to_draw)
+
+def _format_exception_without_file(exc):
+    return ''.join(
+        re.sub(r'File ".*[\\/]([^\\/]+.py)"', r'File "\1"', line)
+        for line in traceback.format_exception(type(exc), exc, exc.__traceback__)
+    )
 
 
 class Owner:
@@ -79,7 +85,7 @@ class Owner:
             result = eval(code, env)
             if inspect.isawaitable(result):
                 result = await result
-        except Exception as e:
+        except Exception:
             await ctx.send(f'```py\n{traceback.format_exc()}```')
         else:
             await ctx.send(f'```py\n{result}```')
@@ -129,7 +135,7 @@ class Owner:
                     ret = await func()
             except Exception as e:
                 value = stdout.getvalue()
-                await safe_send(f'{value}{traceback.format_exc()}')
+                await safe_send(f'{value}{_format_exception_without_file(e)}')
             else:
                 value = stdout.getvalue()
                 with contextlib.suppress(discord.HTTPException):
@@ -297,7 +303,7 @@ class Owner:
     async def do(self, ctx, num: int, *, command):
         """Repeats a command a given amount of times"""
         with temp_attr(ctx.message, 'content', command):
-            for i in range(num):
+            for _ in range(num):
                 await self.bot.process_commands(ctx.message)
 
     @commands.command(aliases=['chaincmd'])

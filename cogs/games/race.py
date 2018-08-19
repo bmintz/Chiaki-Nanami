@@ -1,15 +1,14 @@
 import asyncio
 import contextlib
-import discord
-import emoji
 import itertools
 import random
 import time
-import typing
+from operator import attrgetter
 
+import discord
+import emoji
 from discord.ext import commands
 from more_itertools import first, one, partition
-from operator import attrgetter
 
 from ..utils import db, formats
 from ..utils.context_managers import temp_item
@@ -262,7 +261,7 @@ class RacingSession:
         amount = self.pot // num_winners
         ids = [winner.user.id for winner in self._winners]
 
-        query = """UPDATE currency SET amount = currency.amount + $1 
+        query = """UPDATE currency SET amount = currency.amount + $1
                    WHERE user_id = ANY($2::BIGINT[])
                 """
         await self.ctx.db.execute(query, amount, ids)
@@ -356,7 +355,7 @@ class Racing:
                 await ctx.send("Ok onii-chan... I've closed it now. I'll get on to starting the race...")
 
     @race.command(name='horse', aliases=['ride'])
-    async def race_horse(self, ctx, emoji: RacehorseEmoji=None):
+    async def race_horse(self, ctx, emoji: RacehorseEmoji = None):
         """Sets your horse for the race.
 
         Custom emojis are allowed. But they have to be in a server that I'm in.

@@ -217,7 +217,7 @@ def _get_current_parameter(ctx):
     index = min(len(ctx.args) + len(ctx.kwargs), len(parameters) - 1)
     return parameters[index]
 
-    
+
 class union(commands.Converter):
     _transform = '{0} ({0.__class__.__name__})'.format
 

@@ -1,10 +1,10 @@
-import aiohttp
 import asyncio
-import discord
 import functools
-
-from colorthief import ColorThief
 from io import BytesIO
+
+import aiohttp
+import discord
+from colorthief import ColorThief
 
 from . import cache
 

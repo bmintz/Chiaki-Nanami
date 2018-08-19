@@ -1,9 +1,9 @@
-import discord
 import json
 import random
-
-from discord.ext import commands
 from datetime import datetime
+
+import discord
+from discord.ext import commands
 
 from ..utils.converter import Category
 from ..utils.examples import wrap_example
@@ -11,7 +11,6 @@ from ..utils.formats import multi_replace
 from ..utils.help import CogPages, help_command
 from ..utils.misc import emoji_url
 from ..utils.paginator import Paginator
-
 
 CHIAKI_TIP_EPOCH = datetime(2017, 8, 24)
 TIP_EMOJI = emoji_url('\N{ELECTRIC LIGHT BULB}')

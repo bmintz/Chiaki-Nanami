@@ -5,8 +5,6 @@ import operator
 import pathlib
 from datetime import datetime
 
-from more_itertools import tail
-
 from cogs.utils.db import all_tables
 
 _DEFAULT_DIR = pathlib.Path('data', 'migrations')
@@ -48,7 +46,7 @@ def _get_migrations(directory=_DEFAULT_DIR, *, downgrade=False):
         action, cmp = 'downgrade', operator.le
     else:
         action, cmp = 'upgrade', operator.gt
-        
+
     revisions = _get_revisions(directory)
     revisions = {t.__tablename__: revisions.get(t.__tablename__, _MIN_TIMESTAMP) for t in all_tables()}
 
@@ -71,6 +69,13 @@ async def _apply_migration(to_execute, *, connection):
     else:
         await connection.execute(to_execute)
 
+def _get_source(obj):
+    try:
+        return inspect.getsource(obj)
+    except:
+        # whatevs
+        return obj
+
 
 async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAULT_DIR, verbose=False):
     if version is None:
@@ -84,8 +89,7 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
         cmp = operator.le
 
     revisions = _get_revisions(directory)
-    tables = {t.__tablename__: t for t in all_tables()}
-    
+
     table_key = operator.itemgetter(1)
     migrations = _get_migrations(directory, downgrade=downgrade)
     table_migrations = sorted(
@@ -103,7 +107,8 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
                 last_version = last_version[0]
             for version, table, file, step in migrations:
                 if verbose:
-                    print('applying', table, 'from', file)
+                    print('applying', table, 'from', file, ':')
+                    print(_get_source(step))
 
                 try:
                     await _apply_migration(step, connection=connection)
@@ -111,10 +116,40 @@ async def migrate(version=None, *, connection, downgrade=False, directory=_DEFAU
                     action = 'upgrade' if downgrade else 'downgrade'
                     print('Error from', f'{action}_{table}', 'in', file)
                     raise
-            
+
             if last_version is not None:
                 version = last_version
-    
+
             revisions[table_name] = version
 
-        _write_revisions(revisions, directory) 
+        _write_revisions(revisions, directory)
+
+def _last_migration(directory):
+    return max(_file_version(path.stem) for path in directory.glob('*.py'))
+
+async def init(*, connection, directory=_DEFAULT_DIR, verbose=False):
+    # We can safely use the latest migration because when we initially create
+    # all the tables we use the current schema which has the migrations already
+    # applied.
+    revision = _last_migration(directory)
+    if verbose:
+        print('writing newest revision', revision, 'to each table')
+
+    directory = pathlib.Path(directory)
+    file = directory / _REVISIONS_FILE_NAME
+    if file.exists():
+        raise RuntimeError('cannot initialize the database more than once')
+
+    revisions = {}
+    async with connection.transaction():
+        for table in all_tables():
+            print('creating table', table.__tablename__)
+            sql = table.create_sql()
+            if verbose:
+                print('schema:')
+                print(sql)
+
+            await connection.execute(sql)
+            revisions[table.__tablename__] = revision
+
+        _write_revisions(revisions, directory)

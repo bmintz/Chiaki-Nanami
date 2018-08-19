@@ -1,27 +1,13 @@
 import asyncio
 import collections
 import contextlib
-import discord
 import functools
-import itertools
-import json
 import random
 import sys
-
-from discord.ext import commands
 from itertools import starmap
 
-from cogs.utils.examples import _parameter_examples, _split_params
-from cogs.utils.formats import human_join
-
-
-_DEFAULT_MISSING_PERMS_ACTIONS = {
-    'embed_links': 'embeds',
-    'attach_files': 'upload stuffs',
-}
-
-with open('data/bot_missing_perms.json', encoding='utf-8') as f:
-    _missing_perm_actions = json.load(f)
+import discord
+from discord.ext import commands
 
 
 class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
@@ -37,10 +23,11 @@ class _ContextSession(collections.namedtuple('_ContextSession', 'ctx')):
         return await self.ctx._release(exc_type, exc, tb)
 
 
-def _random_slice(seq):
-    return seq[:random.randint(0, len(seq))]
-
 class Context(commands.Context):
+    # Default for whether or not the global error handlers should ignore errors
+    # in commands with local error handlers.
+    __bypass_local_error__ = False
+
     # Used for getting the current parameter when generating an example
     _current_parameter = None
 
@@ -201,48 +188,8 @@ class Context(commands.Context):
 
     ask_confirmation = confirm
 
-    def bot_missing_perms(self, missing_perms):
-        """Send a message that the bot is missing permssions.
-
-        If action is not specified the actions for each permissions are used.
-        """
-        action = _missing_perm_actions.get(str(self.command))
-        if not action:
-            actions = (
-                _DEFAULT_MISSING_PERMS_ACTIONS.get(p, p.replace('_', ' '))
-                for p in missing_perms
-            )
-            action = human_join(actions, final='or')
-
-        nice_perms = (
-            perm.replace('_', ' ').replace('guild', 'server').title()
-            for perm in missing_perms
-        )
-
-        message = (
-            f"Hey hey, I don't have permissions to {action}. "
-            f'Please check if I have {human_join(nice_perms)}.'
-        )
-
-        return self.send(message)
-
     def bot_has_permissions(self, **permissions):
         perms = self.channel.permissions_for(self.me)
         return all(getattr(perms, perm) == value for perm, value in permissions.items())
 
     bot_has_embed_links = functools.partialmethod(bot_has_permissions, embed_links=True)
-
-    def missing_required_arg(self, param):
-        required, optional = _split_params(self.command)
-        missing = list(itertools.dropwhile(lambda p: p != param, required))
-        names = human_join(f'`{p.name}`' for p in missing)
-        example = ' '.join(_parameter_examples(missing + _random_slice(optional), self))
-
-        # TODO: Specify the args more descriptively.
-        message = (
-            f"Hey hey, you're missing {names}.\n\n"
-            f'Usage: `{self.clean_prefix}{self.command.signature}`\n'
-            f'Example: {self.message.clean_content} **{example}** \n'
-        )
-
-        return self.send(message)

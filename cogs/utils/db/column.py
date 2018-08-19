@@ -106,7 +106,7 @@ def _check_action(action, name):
     if action not in valid_actions:
         raise SchemaError(f'{name!r} must be one of {valid_actions}')
     return action
- 
+
 class ForeignKey(Type, real_type=False):
     def __init__(self, column, *, type=None, on_delete='CASCADE', on_update='NO ACTION'):
         if type is None:

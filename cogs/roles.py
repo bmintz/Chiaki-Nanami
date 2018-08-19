@@ -1,11 +1,11 @@
 import asyncio
-import asyncpg
 import copy
-import discord
 import random
-
-from discord.ext import commands
 from functools import partial
+
+import asyncpg
+import discord
+from discord.ext import commands
 
 from .utils import db, disambiguate
 from .utils.context_managers import temp_attr

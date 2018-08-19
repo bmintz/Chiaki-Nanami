@@ -2,7 +2,6 @@ import asyncio
 import collections
 import datetime
 import heapq
-import json
 import logging
 import time
 
@@ -211,7 +210,7 @@ class BaseScheduler:
     def close(self):
         """Closes the running task, and does any cleanup, if necessary."""
         self.stop()
-        self.loop.create_task(self._cleanup())
+        self._loop.create_task(self._cleanup())
         del self._callbacks[:]
         self._current = None
 
@@ -224,7 +223,7 @@ class QueueScheduler(BaseScheduler):
     """
 
     def __init__(self, **kwargs):
-        super().__init(**kwargs)
+        super().__init__(**kwargs)
         self._pending = asyncio.PriorityQueue()
 
     # We have to override _restart as well because _get removes the entry.
@@ -245,8 +244,8 @@ class QueueScheduler(BaseScheduler):
         if entry == self._current:
             self._current = None  # Needed to tell _restart to not put the entry back in.
         else:
-            self.pending._queue.remove(entry)
-            heapq.heapify(self.pending._queue)
+            self._pending._queue.remove(entry)
+            heapq.heapify(self._pending._queue)
 
 
 # Below here is the database form of the scheduler. If you want to just use the
@@ -258,7 +257,7 @@ class Schedule(db.Table):
     expires = db.Column(db.Timestamp)
 
     event = db.Column(db.Text)
-    time = db.Column(db.Timestamp, default="now() at time zone 'utc'")
+    created = db.Column(db.Timestamp, default="now() at time zone 'utc'")
     args_kwargs = db.Column(db.JSON, default="'{}'::jsonb")
 
     schedule_expires_idx = db.Index(expires)

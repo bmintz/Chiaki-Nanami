@@ -1,25 +1,23 @@
 import asyncio
 import contextlib
 import datetime
-import discord
 import functools
 import heapq
 import itertools
 import random
 import typing
-
 from collections import Counter, namedtuple
-from discord.ext import commands
 from operator import attrgetter
+
+import discord
+from discord.ext import commands
 
 from ..utils import db, formats, time, varpos
 from ..utils.context_managers import temp_attr
 from ..utils.examples import get_example, static_example, wrap_example
 from ..utils.jsonf import JSONFile
 from ..utils.misc import ordinal
-from ..utils.paginator import Paginator, FieldPaginator
-
-from core import errors
+from ..utils.paginator import FieldPaginator, Paginator
 
 
 class WarnEntries(db.Table, table_name='warn_entries'):
@@ -46,10 +44,15 @@ class MutedRoles(db.Table, table_name='muted_roles'):
     role_id = db.Column(db.BigInt)
 
 
-class AlreadyWarned(errors.ChiakiException):
-    """Exception raised to avoid the case where a failed-warn due 
+class AlreadyWarned(commands.CommandError):
+    """Exception raised to avoid the case where a failed-warn due
     to the cooldown would be considered to be a success"""
-    pass
+    __ignore__ = True
+
+class AlreadyMuted(commands.CommandError):
+    """Exception raised to avoid muting a member that's already muted being
+    considered "successful" """
+    __ignore__ = True
 
 
 # Dummy punishment class for default warn punishment
@@ -82,14 +85,14 @@ class MemberID(commands.Converter):
             return await commands.MemberConverter().convert(ctx, arg)
         except commands.BadArgument:
             pass
-    
+
         try:
             id = int(arg)
         except ValueError:
             raise commands.BadArgument(f"{arg} is not a member or ID.") from None
         else:
             return _ProxyMember(id)
-            
+
     @staticmethod
     def random_example(ctx):
         if random.random() > 0.5:
@@ -284,7 +287,7 @@ class Moderator:
     @commands.group(invoke_without_command=True)
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
-    async def slowmode(self, ctx, duration: time.Delta, *, member: discord.Member=None):
+    async def slowmode(self, ctx, duration: time.Delta, *, member: discord.Member = None):
         """Puts a thing in slowmode.
 
         An optional member argument can be provided. If it's
@@ -328,7 +331,7 @@ class Moderator:
     @slowmode.command(name='noimmune', aliases=['n-i'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
-    async def slowmode_no_immune(self, ctx, duration: time.Delta, *, member: discord.Member=None):
+    async def slowmode_no_immune(self, ctx, duration: time.Delta, *, member: discord.Member = None):
         """Puts the channel or member in "no-immune" slowmode.
 
         Unlike `{prefix}slowmode`, no one is immune to this slowmode,
@@ -350,7 +353,7 @@ class Moderator:
                        'after each message they send.')
 
     @slowmode.command(name='off')
-    async def slowmode_off(self, ctx, *, member: discord.Member=None):
+    async def slowmode_off(self, ctx, *, member: discord.Member = None):
         """Turns off slowmode for either a member or channel."""
         member = member or ctx.channel
         config = self.slowmodes.get(ctx.guild.id, {})
@@ -366,7 +369,7 @@ class Moderator:
 
     @commands.command()
     @commands.has_permissions(manage_messages=True)
-    async def slowoff(self, ctx, *, member: discord.Member=None):
+    async def slowoff(self, ctx, *, member: discord.Member = None):
         """Alias for `{prefix}slowmode off`"""
         await ctx.invoke(self.slowmode_off, member=member)
 
@@ -400,7 +403,7 @@ class Moderator:
     @commands.command(aliases=['clr'])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
-    async def clear(self, ctx, num_or_user: typing.Union[int, discord.Member]=None):
+    async def clear(self, ctx, num_or_user: typing.Union[int, discord.Member] = None):
         """Clears some messages in a channels
 
         The argument can either be a user or a number.
@@ -411,7 +414,7 @@ class Moderator:
 
         if isinstance(num_or_user, int):
             if num_or_user < 1:
-                return await ctx.send(f"How can I delete {number} messages...?")
+                return await ctx.send(f"How can I delete {num_or_user} messages...?")
             deleted = await ctx.channel.purge(limit=min(num_or_user, 1000) + 1)
         elif isinstance(num_or_user, discord.Member):
             deleted = await ctx.channel.purge(check=lambda m: m.author.id == num_or_user.id)
@@ -454,7 +457,6 @@ class Moderator:
             # other users' messages without Manage Messages will raise an error.
             # Also we can't use bulk-deleting for the same reason.
             deleted = await purge(check=lambda m: m.author.id == bot_id, bulk=False)
-
         spammers = Counter(str(m.author) for m in deleted)
 
         total_deleted = sum(spammers.values())
@@ -487,7 +489,8 @@ class Moderator:
         # wrapped in CommandInvokeError
         cause = error.__cause__
         if not isinstance(cause, discord.HTTPException):
-            return await ctx.bot.on_command_error(ctx, error, bypass=True)
+            ctx.__bypass_local_error__ = True
+            return
 
         await ctx.send(
             "Couldn't delete the messages for some reason... Here's the error:\n"
@@ -543,10 +546,10 @@ class Moderator:
                 return await ctx.send(f"\N{WARNING SIGN} Warned {member.mention} successfully!")
 
         # Auto-punish the user
-        args = member,
+        args = [member]
         duration = row['duration']
         if duration > 0:
-            args += duration,
+            args.append(duration)
             punished_for = f' for {time.duration_units(duration)}'
         else:
             punished_for = f''
@@ -574,6 +577,13 @@ class Moderator:
         ctx.command = punishment_command
         ctx.args[2:] = args
         ctx.kwargs['reason'] = punishment_reason
+
+    @warn.error
+    async def warn_error(self, ctx, error):
+        if isinstance(error, AlreadyWarned):
+            await ctx.send(error)
+        else:
+            ctx.__bypass_local_error__ = True
 
     # XXX: Should this be a group?
 
@@ -700,7 +710,7 @@ class Moderator:
 
     async def _do_mute(self, member, when, role, *, connection=None, reason=None):
         if role in member.roles:
-            raise errors.InvalidUserArgument(f'{member.mention} is already been muted... ;-;')
+            raise AlreadyMuted(f'{member.mention} is already been muted... ;-;')
 
         await member.add_roles(role, reason=reason)
         args = (member.guild.id, member.id, role.id)
@@ -743,7 +753,7 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
-    async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
+    async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason = None):
         """Mutes a user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
@@ -775,8 +785,15 @@ class Moderator:
         await try_edit(f"Done. {member.mention} will now be muted for "
                        f"{duration}... \N{ZIPPER-MOUTH FACE}")
 
+    @mute.error
+    async def mute_error(self, ctx, error):
+        if isinstance(error, AlreadyMuted):
+            await ctx.send(error)
+        else:
+            ctx.__bypass_local_error__ = True
+
     @commands.command()
-    async def mutetime(self, ctx, member: discord.Member=None):
+    async def mutetime(self, ctx, member: discord.Member = None):
         """Shows the time left for a member's mute. Defaults to yourself."""
         if member is None:
             member = ctx.author
@@ -830,7 +847,7 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
-    async def unmute(self, ctx, member: discord.Member, *, reason: Reason=None):
+    async def unmute(self, ctx, member: discord.Member, *, reason: Reason = None):
         """Unmutes a user (obviously)"""
         reason = reason or f'Unmute by {ctx.author}'
 
@@ -853,7 +870,7 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(kick_members=True)
     @commands.bot_has_permissions(kick_members=True)
-    async def kick(self, ctx, member: CheckedMember, *, reason: Reason=None):
+    async def kick(self, ctx, member: CheckedMember, *, reason: Reason = None):
         """Kick a user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
@@ -863,7 +880,7 @@ class Moderator:
     @commands.command(aliases=['sb'])
     @commands.has_permissions(kick_members=True, manage_messages=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def softban(self, ctx, member: CheckedMember, *, reason: Reason=None):
+    async def softban(self, ctx, member: CheckedMember, *, reason: Reason = None):
         """Softbans a user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
@@ -874,7 +891,7 @@ class Moderator:
     @commands.command(aliases=['tb'])
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def tempban(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason=None):
+    async def tempban(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason = None):
         """Temporarily bans a user (obviously)"""
         reason = reason or f'By {ctx.author}'
 
@@ -886,7 +903,7 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def ban(self, ctx, member: CheckedMemberID, *, reason: Reason=None):
+    async def ban(self, ctx, member: CheckedMemberID, *, reason: Reason = None):
         """Bans a user (obviously)
 
         You can also use this to ban someone even if they're not in the server,
@@ -899,7 +916,7 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def unban(self, ctx, user: BannedMember, *, reason: Reason=None):
+    async def unban(self, ctx, user: BannedMember, *, reason: Reason = None):
         """Unbans the user (obviously)"""
         reason = reason or f'By {ctx.author}'
 

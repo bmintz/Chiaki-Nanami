@@ -1,16 +1,92 @@
-import discord
 import inspect
 import os
 import platform
 import re
 
+import discord
 from discord.ext import commands
 
 from ..utils.converter import BotCommand
-from ..utils.formats import truncate
-from ..utils.subprocesses import run_subprocess
-from ..utils.paginator import Paginator, paginated
 
+# --------- Changelog functions -----------
+
+# Some useful regexes
+# NOTE: As cool as it would be to link the commits to the corresponding commits
+#       on GitHub, in practice it would quickly bloat the changelog and would
+#       increase the risk of causing 400s on long changelogs.
+VERSION_HEADER_PATTERN = re.compile(r'^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}|Unreleased)$')
+CHANGE_TYPE_PATTERN = re.compile(r'^### (Added|Changed|Deprecated|Removed|Fixed|Security)$')
+
+def _is_bulleted(line):
+    return line.startswith(('* ', '- '))
+
+def _changelog_versions(lines):
+    version = change_type = release_date = None
+    changes = {}
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        match = VERSION_HEADER_PATTERN.match(line)
+        if match:
+            if version:
+                yield version, {'release_date': release_date, 'changes': changes.copy()}
+            version = match[1]
+            release_date = match[2]
+            changes.clear()
+            continue
+
+        match = CHANGE_TYPE_PATTERN.match(line)
+        if match:
+            change_type = match[1]
+            continue
+
+        if _is_bulleted(line):
+            changes.setdefault(change_type, []).append(line)
+        else:
+            changes[change_type][-1] += ' ' + line.lstrip()
+    yield version, {'release_date': release_date, 'changes': changes.copy()}
+
+def _load_changelog():
+    with open('CHANGELOG.md') as f:
+        return dict(_changelog_versions(f))
+
+_CHANGELOG = _load_changelog()
+
+def _format_line(line):
+    if _is_bulleted(line):
+        return '\u2022 ' + line[2:]
+    return line
+
+def _format_changelog_without_embed(version):
+    changes = _CHANGELOG[version]
+    nl_join = '\n'.join
+    change_lines = '\n\n'.join(
+        f'**{type_}**\n{nl_join(map(_format_line, lines))}'
+        for type_, lines in changes['changes'].items()
+    )
+    return f'**__Version {version} \u2014 {changes["release_date"]}__**\n\n{change_lines}'
+
+def _format_changelog_with_embed(version):
+    changes = _CHANGELOG[version]
+    nl_join = '\n'.join
+    change_lines = '\n\n'.join(
+        f'**__{type_}__**\n{nl_join(map(_format_line, lines))}'
+        for type_, lines in changes['changes'].items()
+    )
+    embed = discord.Embed(description=change_lines)
+
+    if changes['release_date'] == 'Unreleased':
+        url = discord.Embed.Empty
+    else:
+        url = f'https://github.com/Ikusaba-san/Chiaki-Nanami/releases/tag/v{version}'
+
+    name = f'Version {version} \u2014 {changes["release_date"]}'
+    embed.set_author(name=name, url=url)
+    return embed
+
+# ----------------------------------------
 
 class Meta:
     """Need some info about the bot? Here you go!"""
@@ -57,22 +133,6 @@ class Meta:
                  )
         await ctx.send(embed=embed)
 
-    # ----------------- Github Related Commands -------------------
-
-    # Credits to Reina
-    @staticmethod
-    async def _get_github_url():
-        url, _ = await run_subprocess('git remote get-url origin')
-        return url.strip()[:-4]  # remove .git\n
-
-    async def _get_recent_commits(self, *, limit=None):
-        url = await self._get_github_url()
-        cmd = f'git log --pretty=format:"[`%h`]({url}/commit/%H) <%s> (%cr)"'
-        if limit is not None:
-            cmd += f' -{limit}'
-
-        return (await run_subprocess(cmd))[0]
-
     async def _display_raw(self, ctx, lines):
         paginator = commands.Paginator(prefix='```py')
         for line in lines:
@@ -115,48 +175,19 @@ class Meta:
         await ctx.send(url)
 
     @commands.command()
-    @paginated()
-    async def commits(self, ctx, limit=10):
-        """Shows the latest changes made to the bot.
+    async def changelog(self, ctx):
+        """Shows the latest important changes"""
+        version = '.'.join(map(str, ctx.bot.version_info[:3]))
+        if not ctx.bot_has_embed_links():
+            return await ctx.send(_format_changelog_without_embed(version))
 
-        The default is the latest 10 changes.
-        """
-        changes = await self._get_recent_commits(limit=limit)
+        embed = _format_changelog_with_embed(version)
+        embed.colour = ctx.bot.colour
+        author = embed.author
+        bot_icon = ctx.bot.user.avatar_url_as(static_format='png')
+        embed.set_author(name=author.name, url=author.url, icon_url=bot_icon)
 
-        def truncate_sub(m):
-            return truncate(m[1], 47, "...")
-
-        # By default git show doesn't truncate the commit messages.
-        # %<(N,trunc) truncates them but it also pads messages that are
-        # shorter than N columns, which is NOT what we want.
-        #
-        # One attempt was to use sed as shown here:
-        # https://stackoverflow.com/a/24604658
-        #
-        # However since we're attempting to make this a cross-platform bot,
-        # we can't use sed as it's not available in Windows and there's no
-        # equivalent of it, causing it to fail. As a result, we're forced to
-        # use regex.
-        #
-        # We know two things for sure about the commit line:
-        # 1. The hash hyper link goes by the format of [`{hash}`]({commit_url})
-        # 2. The relative committer time is wrapped in parentheses, i.e. ({delta})
-        #
-        # We use a regex solution to fish out the commit message, which
-        # is wrapped in <> from the function above since we know for sure
-        # neither the hash or commiter date will have <> in them.
-        #
-        # Not sure what the performance backlash is since it's regex,
-        # but from naive timings it doesn't look like it takes too long.
-        # (only 3 ms, which isn't that much compared to HTTP requests.)
-
-        lines = (
-            re.sub(r'<(.*)>', truncate_sub, change)
-            for change in changes.splitlines()
-        )
-
-        pages = Paginator(ctx, lines, title='Latest Changes', per_page=10)
-        await pages.interact()
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

@@ -1,13 +1,13 @@
-import asyncpg
-import discord
 import itertools
 import random
-
 from collections import defaultdict, namedtuple
+
+import asyncpg
+import discord
 from discord.ext import commands
 from more_itertools import partition
 
-from ..utils import cache, db, formats, disambiguate
+from ..utils import cache, db, disambiguate, formats
 from ..utils.commands import command_category, walk_parents
 from ..utils.converter import BotCommand, Category
 from ..utils.misc import emoji_url, truncate, unique
@@ -38,18 +38,19 @@ class _PermissionFormattingMixin:
     def _get_header(self):
         if self.command:
             return f'Command **{self.command}** is'
-        elif self.cog == ALL_COMMANDS_KEY:
+
+        if self.cog == ALL_COMMANDS_KEY:
             return 'All commands are'
-        else:
-            category, _, cog = self.cog.partition('/')
-            if cog:
-                return f'Module **{cog}** is'
-            return f'Category **{category.title()}** is'
+
+        category, _, cog = self.cog.partition('/')
+        if cog:
+            return f'Module **{cog}** is'
+        return f'Category **{category.title()}** is'
 
 
 class PermissionDenied(_PermissionFormattingMixin, commands.CheckFailure):
     def __init__(self, message, *args):
-        name, obj, *rest = args
+        name, obj, *_ = args
         self.object = obj
         self.cog, _, self.command = _extract_from_node(name)
 
@@ -62,7 +63,7 @@ class PermissionDenied(_PermissionFormattingMixin, commands.CheckFailure):
 
 class InvalidPermission(_PermissionFormattingMixin, commands.CommandError):
     def __init__(self, message, *args):
-        name, whitelisted, *rest = args
+        name, whitelisted, *_ = args
         self.whitelisted = whitelisted
         self.cog, _, self.command = _extract_from_node(name)
 
@@ -368,7 +369,7 @@ class Permissions:
             if name in lookup[obj.id][True]:  # allow overrides deny
                 return True
 
-            elif name in lookup[obj.id][False]:
+            if name in lookup[obj.id][False]:
                 raise PermissionDenied(f'{name} is denied on the {typename} level', name, obj)
 
         return True

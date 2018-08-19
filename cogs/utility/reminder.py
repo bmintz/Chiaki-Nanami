@@ -1,7 +1,4 @@
-import contextlib
 import discord
-import json
-
 from discord.ext import commands
 
 from ..utils.misc import emoji_url, truncate
@@ -46,12 +43,12 @@ class Reminder:
         await ctx.send(embed=self._create_reminder_embed(ctx, when, message))
 
     @commands.group(invoke_without_command=True)
-    async def remind(self, ctx, when: FutureTime, *, message: commands.clean_content='nothing'):
+    async def remind(self, ctx, when: FutureTime, *, message: commands.clean_content = 'nothing'):
         """Adds a reminder that will go off after a certain amount of time."""
         await self._add_reminder(ctx, when.dt, message)
 
     @remind.command(name='cancel', aliases=['del'])
-    async def cancel_reminder(self, ctx, index: int=1):
+    async def cancel_reminder(self, ctx, index: int = 1):
         """Cancels a running reminder with a given index. Reminders start at 1.
 
         If an index is not given, it defaults to the one that will end first.
@@ -92,7 +89,7 @@ class Reminder:
 
         Reminder that you've set to go off in 30 seconds or less will not be shown, however.
         """
-        query = """SELECT created, expires, args_kwargs #>> '{args,1}', args_kwargs #>> '{args,2}'
+        query = """SELECT expires, args_kwargs #>> '{args,1}', args_kwargs #>> '{args,2}'
                    FROM schedule
                    WHERE event = 'reminder_complete'
                    AND args_kwargs #>> '{args,0}' = $1
@@ -104,7 +101,7 @@ class Reminder:
             return await ctx.send("You have no reminders at the moment.")
 
         def entries():
-            for i, (created, expires, channel_id, message) in enumerate(reminders, start=1):
+            for i, (expires, channel_id, message) in enumerate(reminders, start=1):
                 channel = f'<#{channel_id}>' if channel_id else 'Direct Message'
 
                 name = f'{i}. In {human_timedelta(expires)} from now.'

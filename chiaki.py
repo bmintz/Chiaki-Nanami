@@ -3,8 +3,6 @@
 import asyncio
 import contextlib
 import datetime
-import click
-import discord
 import functools
 import importlib
 import itertools
@@ -13,10 +11,12 @@ import os
 import sys
 import traceback
 
-from cogs.utils import db
-from core import Chiaki, migration
+import click
+import discord
 
 import config
+from cogs.utils import db
+from core import Chiaki, migration
 
 # use faster event loop, but fall back to default if on Windows or not installed
 try:
@@ -25,7 +25,7 @@ except ImportError:
     pass
 else:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    
+
 
 @contextlib.contextmanager
 def log(stream=False):
@@ -99,17 +99,20 @@ async def _create_pool():
     psql = f'postgresql://{config.psql_user}:{config.psql_pass}@{config.psql_host}/{config.psql_db}'
     return await db.create_pool(psql, command_timeout=60)
 
-async def _migrate(version='', downgrade=False, verbose=False):
-    # click doesn't like None as a default so we have to settle with an empty string
-    if not version:
-        version = None
-    
-    for e in itertools.chain.from_iterable(Chiaki.find_extensions(e) or [e] for e in config.extensions):
+def _load_modules(extensions):
+    for e in itertools.chain.from_iterable(Chiaki.find_extensions(e) or [e] for e in extensions):
         try:
             importlib.import_module(e)
         except:
             click.echo(f'Could not load {e}.\n{traceback.format_exc()}', err=True)
-            return
+            raise
+
+async def _migrate(version='', downgrade=False, verbose=False):
+    # click doesn't like None as a default so we have to settle with an empty string
+    if not version:
+        version = None
+
+    _load_modules(config.extensions)
 
     pool = await _create_pool()
     async with pool.acquire() as conn:
@@ -134,6 +137,22 @@ def downgrade(version, verbose):
     """Downgrade the database to a version"""
     _sync_migrate(version, downgrade=True, verbose=verbose)
     click.echo('Downgrade successful! <3')
+
+
+async def _init(verbose):
+    _load_modules(config.extensions)
+
+    pool = await _create_pool()
+    async with pool.acquire() as conn:
+        await migration.init(connection=conn, verbose=verbose)
+
+@main.command(name='init-db')
+@click.option('-v', '--verbose', is_flag=True)
+def init_db(verbose):
+    """Initialize the database"""
+    run = asyncio.get_event_loop().run_until_complete
+    run(_init(verbose))
+    click.echo('Database initialization successful! <3')
 
 
 if __name__ == '__main__':

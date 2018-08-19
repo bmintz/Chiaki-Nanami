@@ -1,7 +1,7 @@
 import copy
+from itertools import starmap
 
 from discord.ext import commands
-from itertools import starmap
 
 from ..utils import db
 from ..utils.examples import _get_static_example

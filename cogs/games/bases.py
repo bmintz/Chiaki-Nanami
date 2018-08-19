@@ -1,11 +1,11 @@
 import asyncio
 import contextlib
-import discord
 import enum
 import functools
 import inspect
 import random
 
+import discord
 from discord.ext import commands
 
 from ..utils.context_managers import temp_item
@@ -195,15 +195,14 @@ class TwoPlayerGameCog:
         await ctx.release()
         with cm:
             await self._invite_member(ctx, member)
-            with put_in_running( _TwoPlayerWaiter(ctx.author, member)):
+            with put_in_running(_TwoPlayerWaiter(ctx.author, member)):
                 waiter = self.running_games[ctx.channel.id]
                 try:
                     await waiter.wait()
                 except asyncio.TimeoutError:
                     if member:
                         return await ctx.send(f"{member.mention} couldn't join in time... :/")
-                    else:
-                        return await ctx.send('No one joined in time. :(')
+                    return await ctx.send('No one joined in time. :(')
                 except asyncio.CancelledError:
                     if waiter._closer == ctx.author:
                         msg = f'{ctx.author.mention} has closed the game. False alarm everyone...'
@@ -261,4 +260,3 @@ class TwoPlayerGameCog:
         if isinstance(waiter, _TwoPlayerWaiter) and waiter.cancel(ctx.author):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.message.add_reaction('\U00002705')
-

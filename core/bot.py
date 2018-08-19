@@ -1,10 +1,6 @@
-import aiohttp
 import asyncio
-import asyncpg
 import collections
 import contextlib
-import discord
-import emoji
 import importlib
 import inspect
 import json
@@ -13,20 +9,21 @@ import pkgutil
 import random
 import re
 import sys
-import textwrap
-import traceback
-
 from datetime import datetime
+
+import aiohttp
+import discord
+import emoji
 from discord.ext import commands
 from more_itertools import always_iterable
-
-from . import context, errors
 
 from cogs.utils import db
 from cogs.utils.jsonf import JSONFile
 from cogs.utils.scheduler import DatabaseScheduler
 from cogs.utils.time import duration_units
 from cogs.utils.transformdict import CIDict
+
+from . import context
 
 # The bot's config file
 import config
@@ -84,7 +81,7 @@ def _is_cog_hidden(cog):
     hidden = getattr(cog, '__hidden__', _sentinel)
     if hidden is not _sentinel:
         return hidden
-    
+
     try:
         module_name = cog.__module__
     except AttributeError:
@@ -95,9 +92,9 @@ def _is_cog_hidden(cog):
         hidden = getattr(module, '__hidden__', _sentinel)
         if hidden is not _sentinel:
             return hidden
-        
+
         module_name = module_name.rpartition('.')[0]
-    
+
     return False
 
 
@@ -168,6 +165,8 @@ class Chiaki(commands.AutoShardedBot):
             # 1000 IDENTIFYs a day limit.
             self.load_extension(ext)
 
+        self.load_extension('core.errors')
+
         self._game_task = self.loop.create_task(self.change_game())
 
     def _import_emojis(self):
@@ -192,7 +191,7 @@ class Chiaki(commands.AutoShardedBot):
                     return self.get_emoji(int(match[1]))
                 if em in emoji.UNICODE_EMOJI or is_edge_case_emoji(em):
                     return _UnicodeEmoji(name=em)
-                log.warn('Unknown Emoji: %r', em)
+                log.warning('Unknown Emoji: %r', em)
 
             return em
 
@@ -382,53 +381,34 @@ class Chiaki(commands.AutoShardedBot):
         if not hasattr(self, 'start_time'):
             self.start_time = datetime.utcnow()
 
-    async def on_command_error(self, ctx, error, *, bypass=False):
-        if not bypass and hasattr(ctx.command, 'on_error'):
-            return
-
-        if (
+    async def on_command_error(self, ctx, error):
+        if not (
             isinstance(error, commands.CheckFailure)
             and not isinstance(error, commands.BotMissingPermissions)
             and await self.is_owner(ctx.author)
         ):
-            try:
-                # Try to release the connection regardless of whether or not
-                # it has been released already. According to the asyncpg source,
-                # attempting to release an already released connection does
-                # nothing.
-                #
-                # This is important because we can't rely on the connection
-                # being released as this can be called from a command-local
-                # error handler where the connection wasn't released yet.
-                await ctx.release()
-                async with ctx.acquire():
-                    await ctx.reinvoke()
-            except Exception as exc:
-                await ctx.command.dispatch_error(ctx, exc)
             return
-
-        cause = error.__cause__
-        if isinstance(error, errors.ChiakiException):
-            await ctx.send(str(error))
-        elif type(error) is commands.BadArgument:
-            await ctx.send(str(cause or error))
-        elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send('This command cannot be used in private messages.')
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.missing_required_arg(error.param)
-        elif isinstance(error, commands.CommandInvokeError):
-            print(f'In {ctx.command.qualified_name}:', file=sys.stderr)
-            traceback.print_tb(error.original.__traceback__)
-            print(f'{error.__class__.__name__}: {error}'.format(error), file=sys.stderr)
-        elif isinstance(error, commands.BotMissingPermissions):
-            await ctx.bot_missing_perms(error.missing_perms)
+        try:
+            # Try to release the connection regardless of whether or not
+            # it has been released already. According to the asyncpg source,
+            # attempting to release an already released connection does
+            # nothing.
+            #
+            # This is important because we can't rely on the connection
+            # being released as this can be called from a command-local
+            # error handler where the connection wasn't released yet.
+            await ctx.release()
+            async with ctx.acquire():
+                await ctx.reinvoke()
+        except Exception as exc:
+            await ctx.command.dispatch_error(ctx, exc)
 
     async def on_message(self, message):
         await self.process_commands(message)
 
     # ------ Viewlikes ------
 
-    # Note these views and properties look deceptive. They look like a thin 
+    # Note these views and properties look deceptive. They look like a thin
     # wrapper len(self.guilds). However, the reason why these are here is
     # to avoid a temporary list to get the len of. Bot.guilds and Bot.users
     # creates a list which can cause a massive hit in performance later on.

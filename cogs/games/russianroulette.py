@@ -83,9 +83,10 @@ class RussianRouletteSession:
             current = self.players.popleft()
 
             def check(m):
-                return (m.channel       == self.context.channel
+                return (m.channel == self.context.channel
                         and m.author.id == current.id
-                        and m.content   == self._required_message)
+                        and m.content == self._required_message
+                        )
 
             await send(f'Alright {current.mention}, it is now your turn. '
                        f'Type `{self._required_message}` to pull the trigger...')

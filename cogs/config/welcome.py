@@ -1,10 +1,10 @@
 import collections
-import discord
 import enum
 import functools
-
-from discord.ext import commands
 from datetime import datetime
+
+import discord
+from discord.ext import commands
 from more_itertools import one
 
 from ..utils import db, time
@@ -235,7 +235,7 @@ class WelcomeMessages:
 
         @commands.group(name=thing.command_name, help=_toggle_help, invoke_without_command=True)
         @_server_message_check()
-        async def group(self, ctx, enable: bool=None):
+        async def group(self, ctx, enable: bool = None):
             await self._toggle_config(ctx, enable, thing=thing)
 
         @group.command(name='message', help=_message_help)

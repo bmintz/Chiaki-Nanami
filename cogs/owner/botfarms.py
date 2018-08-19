@@ -1,10 +1,9 @@
-import discord
 import math
 
+import discord
 from discord.ext import commands
 
 from ..utils import disambiguate
-
 
 # These functions are usually used for doing ratings
 # but here I'm using them to calculate if a server *might*

@@ -39,7 +39,7 @@ support_server_invite = 'https://discord.gg/WtkPTmE'
 
 # -------------------- BOT STUFF ---------------------
 
-# The bot's default command prefix. This can either be a string, 
+# The bot's default command prefix. This can either be a string,
 # or a tuple/list of prefixes
 command_prefix = '->'
 
@@ -93,10 +93,10 @@ ignore_bots = True
 # You can use hexadecimal literals for extra readability (eg 0xFFFFFF)
 colour = 0
 
-# The colour used for the ok embeds. This colour is used on embeds when 
+# The colour used for the ok embeds. This colour is used on embeds when
 # something went ok
 ok_colour = 0x00FF00
 
-# The colour used for the error embeds. This colour is used on embeds when 
+# The colour used for the error embeds. This colour is used on embeds when
 # something went wrong
 error_colour = 0xFF000

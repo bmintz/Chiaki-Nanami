@@ -10,7 +10,6 @@ import logging
 import os
 import random
 import time
-from difflib import SequenceMatcher
 from html import unescape
 
 import aiohttp
@@ -493,7 +492,7 @@ class PokemonTriviaSession(_FuzzyMatchCheck, BaseTriviaSession):
         with open(POKEMON_NAMES_FILE) as f:
             _pokemon_names = json.load(f)
     except FileNotFoundError:
-        logger.warn(f'{POKEMON_NAMES_FILE} not found. Could not load pokemon names.')
+        logger.warning(f'{POKEMON_NAMES_FILE} not found. Could not load pokemon names.')
         _pokemon_names = {}
     else:
         logger.info(f'Successfully loaded {POKEMON_NAMES_FILE}.')
@@ -641,7 +640,7 @@ class Trivia:
             await self._trivia(ctx, PokemonTriviaSession)
 
     else:
-        logger.warn(f'{POKEMON_PATH} directory not found. Could not add Pokemon Trivia.')
+        logger.warning(f'{POKEMON_PATH} directory not found. Could not add Pokemon Trivia.')
 
 
 def setup(bot):

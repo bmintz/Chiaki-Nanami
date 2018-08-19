@@ -1,13 +1,12 @@
-import discord
 import json
 import pathlib
 import random
 import re
-
 from collections import defaultdict, namedtuple
-from discord.ext import commands
 from itertools import zip_longest
 
+import discord
+from discord.ext import commands
 
 Result = namedtuple('Result', 'cmp name image')
 
@@ -169,7 +168,8 @@ def _make_rps_command(name, game_type):
     @command.error
     async def command_error(self, ctx, error):
         if not isinstance(error, commands.MissingRequiredArgument):
-            return await ctx.bot.on_command_error(ctx, error, bypass=True)
+            ctx.__bypass_local_error__ = True
+            return
 
         embed = game_type.element_embed()
         embed.description += f'\n\u200b\n(type `{ctx.clean_prefix}{ctx.invoked_with} element`)'

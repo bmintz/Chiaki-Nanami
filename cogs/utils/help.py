@@ -10,7 +10,7 @@ from collections import OrderedDict
 
 import discord
 from discord.ext import commands
-from more_itertools import chunked, flatten, ilen, run_length, sliced, spy
+from more_itertools import chunked, flatten, run_length, sliced, spy
 
 from .commands import all_names, command_category, walk_parents
 from .converter import BotCommand
@@ -43,7 +43,7 @@ def _make_command_requirements(command):
     requirements = []
     # All commands in this cog are owner-only anyway.
     if command.cog_name == 'Owner':
-      requirements.append('**Bot Owner only**')
+        requirements.append('**Bot Owner only**')
 
     def make_pretty(p):
         return p.replace('_', ' ').title().replace('Guild', 'Server')
@@ -153,10 +153,10 @@ class HelpCommandPage(InteractiveSession):
             enumerate(embed.fields)
         )
 
-        if field_index is not None:
-            return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
-        else:
+        if field_index is None:
             return embed.add_field(name=see_also, value=value, inline=False)
+
+        return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
 
     def default(self):
         command, ctx, func = self.command, self.context, self.func
@@ -236,33 +236,11 @@ def _command_lines(command_can_run_pairs):
         if not command:
             return ''
 
-        # Simply doing f'`{command:>width + 1}`' is not enough because
-        # we want to cross out only the command text, not the entire
-        # block. Doing that requires making two code blocks, one for
-        # the command, and one padded with spaces.
-        #
-        # However Discord loves to be really fucky with codeblocks. If
-        # there are two backticks close together, it will make one huge
-        # code block with the middle two unescaped. e.g `abc``test` will
-        # make one long code block with the string of "abc``test" rather
-        # than what we really want.
-        #
-        # Discord also loves to mess around with spaces, because our code
-        # block is technically empty, Discord will just strip out the
-        # whitespace, leaving us with an empty code block. Thus we need
-        # three zwses -- one between the two code blocks to prevent them
-        # from merging, and two at each end of the 2nd code block to prevent
-        # the padding spaces from getting stripped.
-        #
-        # ~~*phew*~~
-        formatted = f'`{command}`'
-        if not can_run:
-            formatted = f'~~{formatted}~~'
-
-        to_pad = width - len(command) + 1
-        padding = f'\u200b`\u200b{" " * to_pad}\u200b`' if to_pad > 0 else ''
-
-        return formatted + padding
+        # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
+        # chopped off which makes padding on monospace nigh-on impossible.
+        padding = " \u200b" * (width - len(command) + 1)
+        formatted = f'`{command}{padding}`'
+        return formatted if can_run else f'~~{formatted}~~'
 
     return (' '.join(map(format_pair, pair, widths)) for pair in pairs)
 
@@ -500,32 +478,6 @@ class _HelpCommand(BotCommand):
             raise commands.BadArgument(random.choice(self._choices))
 
 
-async def _dm_send_fail(ctx, error):
-    old_send = ctx.send
-
-    async def new_send(content, **kwargs):
-        content += ' You can also turn on DMs if you wish.'
-        await old_send(content, **kwargs)
-
-    ctx.send = new_send
-    await ctx.bot_missing_perms(error.missing_perms)
-
-
-async def _maybe_dm_help(ctx, paginator, error):
-    # We need to create a copy of the context object so that we can
-    # keep an old copy if a logger or something wants to use it.
-    new_ctx = copy.copy(ctx)
-    new_ctx.channel = await ctx.author.create_dm()
-    paginator.context = new_ctx
-
-    try:
-        await paginator.interact()
-    except discord.HTTPException:
-        # Avoid making another copy of the context if we don't need to.
-        new_ctx.channel = ctx.channel
-        await _dm_send_fail(new_ctx, error)
-
-
 async def _help(ctx, command=None, func=lambda s: s):
     if command is None:
         paginator = await GeneralHelpPaginator.create(ctx)
@@ -534,20 +486,51 @@ async def _help(ctx, command=None, func=lambda s: s):
 
     try:
         await paginator.interact()
-    except commands.BotMissingPermissions as e:
+    except commands.BotMissingPermissions:
         # Don't DM the user if the bot can't send messages. We should
         # err on the side of caution and assume the bot was muted for a
         # good reason, and a DM wouldn't be a good idea in this case.
-        if ctx.me.permissions_in(ctx.channel).send_messages:
+        if not ctx.me.permissions_in(ctx.channel).send_messages:
             # We shouldn't let this error propagate, since the bot wouldn't
             # be able to notify the user of missing perms anyways.
-            await _maybe_dm_help(ctx, paginator, e)
+            return
+
+        # Try sending it as DM, if it fails, raise the original
+        # BotMissingPermissions exception
+        #
+        # Because we're raising the original exception we can't split this up
+        # into functions without passing the actual error around.
+        #
+        # TODO: Make InteractiveSession.interact take an alternate destination
+        #       argument so we don't have to copy ctx.
+        new_ctx = copy.copy(ctx)
+        # This is used for sending
+        new_ctx.channel = paginator._channel = await ctx.author.create_dm()
+        # paginator.interact checks if bot has permissions before running.
+        paginator.context = new_ctx
+
+        try:
+            await paginator.interact()
+        except discord.HTTPException:
+            pass
+        else:
+            return
+
+        # We can't DM the user. It's time to tell them that she can't send help.
+        old_send = ctx.send
+
+        async def new_send(content, **kwargs):
+            content += ' You can also turn on DMs if you wish.'
+            await old_send(content, **kwargs)
+
+        ctx.send = new_send
+        raise
 
 
 def help_command(func=lambda s: s, **kwargs):
     """Create a help command with a given transformation function."""
 
-    async def command(_, ctx, *, command: _HelpCommand=None):
+    async def command(_, ctx, *, command: _HelpCommand = None):
         await _help(ctx, command, func=func)
 
     # command.module would be set to *here*. This is bad because the category

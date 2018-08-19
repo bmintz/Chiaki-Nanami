@@ -116,7 +116,7 @@ class InteractiveSession:
         super().__init_subclass__(**kwargs)
         cls._reaction_map = callbacks = collections.OrderedDict()
 
-        # These are lists as opposed to dicts because we need to iterate 
+        # These are lists as opposed to dicts because we need to iterate
         # through it to find a match, rather than looking it up in a table.
         cls._message_callbacks = message_callbacks = []
         cls._message_fallbacks = message_fallbacks = []
@@ -378,12 +378,12 @@ class Paginator(InteractiveSession):
         """First page"""
         return self.page_at(0)
 
-    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}',  fallback=r'\<')
+    @trigger('\N{BLACK LEFT-POINTING TRIANGLE}', fallback=r'\<')
     def previous(self):
         """Previous page"""
         return self.page_at(self._index - 1)
 
-    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}',  fallback=r'\>')
+    @trigger('\N{BLACK RIGHT-POINTING TRIANGLE}', fallback=r'\>')
     def next(self):
         """Next page"""
         return self.page_at(self._index + 1)

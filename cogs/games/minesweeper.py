@@ -4,11 +4,9 @@ import enum
 import itertools
 import random
 import re
-import textwrap
 import time
 from datetime import datetime
 from functools import partial, partialmethod
-from operator import itemgetter
 from string import ascii_lowercase, ascii_uppercase
 
 import discord
@@ -800,7 +798,8 @@ class Minesweeper:
         won, time = await MinesweeperSession(ctx, level, board).run()
         if won is None:
             return
-        elif won:
+
+        if won:
             await self._say_ending_embed(ctx, level, time)
 
     @commands.group(aliases=['msw'], invoke_without_command=True)

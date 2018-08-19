@@ -1,24 +1,22 @@
 import asyncio
 import collections
 import contextlib
-import discord
 import enum
 import json
 import logging
 import operator
 import random
 import re
-
 from datetime import datetime, timedelta
-from discord.ext import commands
 from functools import partial, reduce
+
+import discord
+from discord.ext import commands
 
 from ..utils import cache, db, varpos
 from ..utils.misc import emoji_url, truncate, unique
 from ..utils.paginator import FieldPaginator
 from ..utils.time import duration_units, parse_delta
-
-from core import errors
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +59,7 @@ for k, v in list(_mod_actions.items()):
 
 # ----------------- Schema ---------------------
 
-class ModLogError(errors.ChiakiException):
+class ModLogError(Exception):
     pass
 
 
@@ -394,7 +392,7 @@ class ModLog:
                 auto=auto,
                 connection=ctx.db
             )
-        except ModLogError as e:
+        except ModLogError:
             pass
         else:
             if query_args:
@@ -598,7 +596,7 @@ class ModLog:
 
         await pages.interact()
 
-    async def _check_modlog_channel(self, ctx, channel_id,  message=None, *, embed=None):
+    async def _check_modlog_channel(self, ctx, channel_id, message=None, *, embed=None):
         if not channel_id:
             message = (
                 'Mod-logging should have a channel. '
