@@ -204,7 +204,7 @@ class Chiaki(commands.AutoShardedBot):
                 return self.get_emoji(em)
 
             if isinstance(em, str):
-                match = re.match(r'<:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
+                match = re.match(r'<a?:[a-zA-Z0-9\_]+:([0-9]+)>$', em)
                 if match:
                     return self.get_emoji(int(match[1]))
                 if em in emoji.UNICODE_EMOJI or is_edge_case_emoji(em):
