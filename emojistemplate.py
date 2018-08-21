@@ -90,3 +90,10 @@ checkers_black_king = '\N{HEAVY BLACK HEART}'
 checkers_white_king = '\N{BLUE HEART}'
 checkers_black_last_move = ''
 checkers_white_last_move = ''
+
+# -------- Shards ---------
+
+shard_connecting = ''
+shard_online = ''
+shard_disconnecting = ''
+shard_offline = ''

@@ -5,6 +5,7 @@
 - You can now use `->info channel` on categories.
 - Bad arguments show better error messages.
 - `->changelog` - See what changed in the new versions of Chiaki.
+- `->shards` - See how many shards Chiaki has, and what shard your server is on.
 
 ### Changed
 - Commands are now case-insensitive.

@@ -3,11 +3,12 @@ import itertools
 import math
 import random
 from functools import partial
+from operator import attrgetter
 
 import discord
 import psutil
 from discord.ext import commands
-from more_itertools import all_equal, ilen
+from more_itertools import all_equal, chunked, ilen
 
 from ..utils import db
 from ..utils.formats import pluralize
@@ -31,10 +32,31 @@ class Commands(db.Table):
 
 _celebration = partial(random.choices, '\U0001f38a\U0001f389', k=8)
 
+
+SHARD_STATE_EMOJIS = {
+    'CONNECTING': '[CONNECTING]',
+    'OPEN':       '[ONLINE]',
+    'CLOSING':    '[DISCONNECTING]',
+    'CLOSED':     '[OFFLINE]',
+}
+SHARD_STATE_COLOURS = {
+    'CONNECTING': 0xFFC107,
+    'OPEN': 0x4CAF50,
+    'CLOSING': 0x424242,
+    'CLOSED':  0xF44336,
+}
+
+SHARDS_PER_PAGE = 20
+class ShardPaginator(Paginator):
+    # These are all pointless
+    first = last = goto = None
+
 class Stats:
     def __init__(self, bot):
         self.bot = bot
         self.process = psutil.Process()
+        if getattr(bot, 'shard_count', None) is None:
+            self.shards = None  # "Remove" the command as its unavailable
 
     async def on_command(self, ctx):
         command = ctx.command.qualified_name
@@ -160,11 +182,46 @@ class Stats:
     async def command_stats(self):
         pass
 
-    async def shard_stats(self, ctx):
-        """Shows the status for each of my shards, assuming I support sharding."""
-        if not hasattr(ctx.bot, 'shards'):
-            return await ctx.send("I don't support shards... yet.")
-        # TODO
+    @commands.command()
+    async def shards(self, ctx):
+        """Shows the status for all the shards"""
+        shard_guild_counts = collections.Counter(g.shard_id for g in ctx.bot.guildsview())
+        shards = sorted(ctx.bot.shards.values(), key=attrgetter('id'))
+
+        def default_shard_state_names():
+            names = (SHARD_STATE_EMOJIS[shard.ws.state.name] for shard in shards)
+            for chunk in chunked(names, SHARDS_PER_PAGE):
+                max_width = max(map(len, chunk))
+                for name in chunk:
+                    fill = " \u200b" * (max_width - len(name) + 1)
+                    yield f'`{fill}{name}`'
+
+        def shard_states():
+            if ctx.bot_has_permissions(external_emojis=True):
+                emoji_keys = ['connecting', 'online', 'disconnecting', 'offline']
+                e_config = ctx.bot.emoji_config
+                emojis = [getattr(e_config, 'shard_' + attr) for attr in emoji_keys]
+                if all(emojis):
+                    e_dict = dict(zip(SHARD_STATE_EMOJIS, emojis))
+                    return (e_dict[shard.ws.state.name] for shard in shards)
+
+            return default_shard_state_names()
+
+        lines = (
+             f'{status} Shard **#{shard.id}** \u2014 **{shard_guild_counts[shard.id]}** servers'
+             for status, shard in zip(shard_states(), shards)
+        )
+        shard_id = ctx.guild.shard_id if ctx.guild else 0
+        shard = ctx.bot.shards[shard_id]
+
+        paginator = ShardPaginator(
+            ctx,
+            lines,
+            title=f"Shards (currently on Shard #{shard_id})",
+            colour=SHARD_STATE_COLOURS[shard.ws.state.name],
+            per_page=SHARDS_PER_PAGE,
+        )
+        await paginator.run()
 
     def _is_bot_farm(self, guild):
         checker = self.bot.get_cog('AntiBotCollections')
