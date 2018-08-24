@@ -141,18 +141,19 @@ class TwoPlayerGameCog:
             await ctx.send(message)
 
     def _create_invite(self, ctx, member):
+        command = f'{ctx.prefix}{ctx.command.root_parent or ctx.command}'
         if member:
             action = 'invited you to'
             description = (
                 '**Do you accept?**\n'
-                f'Yes: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} join``\n'
-                f'No: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} decline``\n'
+                f'Yes: Type `` {command} join``\n'
+                f'No: Type `` {command} decline``\n'
                 'You have 5 minutes.'
             )
         else:
             action = 'created'
             description = (
-                f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join in!\n'
+                f'Type `{command} join` to join in!\n'
                 'This will expire in 5 minutes.'
             )
 
