@@ -31,6 +31,10 @@ Y = '87654321'
 def _to_i(x, y):
     return y * 8 + x
 
+_STARTING_BOARD = [' '] * 64
+_STARTING_BOARD[_to_i(3, 4)] = BK_PIECE
+_STARTING_BOARD[_to_i(4, 3)] = WH_PIECE
+
 def _i_to_xy(i):
     y, x = divmod(i, 8)
     return X[x] + Y[y]
@@ -203,15 +207,12 @@ class Board:
 
 
 # Below is the game logic. If you just want to copy the board, Ignore this.
-import asyncio
-import contextlib
 import random
 import re
 
 import discord
 
-from .bases import Status, TwoPlayerGameCog
-from ..utils.context_managers import temp_message
+from .bases import Status, TwoPlayerGameCog, TwoPlayerSession
 from ..utils.misc import emoji_url
 
 
@@ -230,15 +231,10 @@ def _safe_sample(population, k):
     return random.sample(population, min(k, len(population)))
 
 
-class CheckersSession:
+class CheckersSession(TwoPlayerSession, move_pattern=_VALID_MOVE_REGEX, board_factory=Board):
     def __init__(self, ctx, opponent):
-        self._ctx = ctx
-        self._players = random.sample((ctx.author, opponent), 2)
+        super().__init__(ctx, opponent)
 
-        self._status = Status.PLAYING
-        self._display = discord.Embed(colour=ctx.bot.colour)
-
-        self._board = Board()
         if ctx.bot_has_permissions(external_emojis=True):
             config = ctx.bot.emoji_config
             self._board.TILES = {
@@ -249,24 +245,14 @@ class CheckersSession:
                 'WH_LAST_MOVE': str(config.checkers_white_last_move),
             }
 
-    def _check(self, message):
-        if not (message.channel == self._ctx.channel and message.author == self.current):
-            return False
+    def current(self):
+        return self._players[self._board.turn]
 
-        if message.content.lower() in {'stop', 'quit'}:
-            self._status = Status.QUIT
-            return True
+    def _push_move(self, match):
+        self._board.move(match[0])
 
-        lowered = message.content.lower()
-        if not _VALID_MOVE_REGEX.match(lowered):
-            return False
-
-        try:
-            self._board.move(''.join(lowered.split()))
-        except ValueError:
-            pass
-        else:
-            return True
+    def _is_game_over(self):
+        return self._board.is_game_over()
 
     def _instructions(self):
         if self._board.half_moves >= 4:
@@ -281,7 +267,7 @@ class CheckersSession:
             f'**Example:**\n{joined}\n\u200b\n'
         )
 
-    def _update_display(self):
+    async def _update_display(self):
         board = self._board
 
         if self._status is Status.PLAYING:
@@ -294,42 +280,12 @@ class CheckersSession:
         if self._status is Status.END:
             user = self._players[not self._board.turn]
         else:
-            user = self.current
+            user = self.current()
 
         header = _MESSAGES[self._status].format(user=user)
         self._display.description = f'{instructions}{board}'
         self._display.set_author(name=header, icon_url=icon)
 
-    async def _loop(self):
-        wait_for = self._ctx.bot.wait_for
-        # needed cuz we're looking this up a few times
-        resigned = Status.QUIT
-
-        while not self._board.is_game_over():
-            self._update_display()
-            async with temp_message(self._ctx, embed=self._display):
-                try:
-                    user_message = await wait_for('message', timeout=120, check=self._check)
-                except asyncio.TimeoutError:
-                    self._status = Status.TIMEOUT
-                    return
-
-                with contextlib.suppress(Exception):
-                    await user_message.delete()
-
-                if self._status is resigned:
-                    return
-
-        self._status = Status.END
-
-    async def run(self):
-        await self._loop()
-        self._update_display()
-        await self._ctx.send(embed=self._display)
-
-    @property
-    def current(self):
-        return self._players[self._board.turn]
 
 class Checkers(TwoPlayerGameCog, game_cls=CheckersSession):
     pass

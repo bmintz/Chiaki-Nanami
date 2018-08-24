@@ -8,7 +8,7 @@ import Chessnut as chessnut  # muh pep8
 import discord
 from more_itertools import all_equal
 
-from .bases import Status, TwoPlayerGameCog
+from .bases import Status, TwoPlayerGameCog, TwoPlayerSession
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
 
@@ -340,23 +340,34 @@ def _safe_sample(population, k):
     return random.sample(population, min(k, len(population)))
 
 
-class ChessSession:
+class ChessSession(TwoPlayerSession, board_factory=Game):
     def __init__(self, ctx, opponent):
-        self._game = Game()
-        self._players = {
+        super().__init__(ctx, opponent)
+        self._display = (discord.Embed(colour=0x00FF00)
+                        .set_author(name=f'Chess')
+                        .set_image(url='attachment://chess.png')
+                        )
+        self._last_move = None
+        self._image = None
+
+    @property
+    def _game(self):
+        return self._board
+
+    def _current_player(self):
+        return self._players[self._game.state.player]
+
+    def current(self):
+        return self._current_player().user
+
+    def _make_players(self, ctx, opponent):
+        return {
             t: Player(user, Clock())
             for t, user in zip('wb', random.sample((ctx.author, opponent), 2))
         }
 
-        self._status = Status.PLAYING
-        self.ctx = ctx
-
-        self._game_screen = (discord.Embed(colour=0x00FF00)
-                             .set_author(name=f'Chess')
-                             .set_image(url='attachment://chess.png')
-                             )
-        self._last_move = None
-        self._image = None
+    def _is_game_over(self):
+        return self._game.status not in [self._game.NORMAL, self._game.CHECK]
 
     def _in_check(self):
         return self._game.status in [self._game.CHECK, self._game.CHECKMATE]
@@ -365,30 +376,13 @@ class ChessSession:
         self._game.apply_move(move)
         self._last_move = move
 
-    def _check(self, m):
-        current = self.current.user
-        if not (m.channel == self.ctx.channel and m.author == current):
-            return
-
-        if m.content.lower() in {'quit', 'stop'}:
-            self._status = Status.QUIT
-            return True
-
-        translated = _translate(self._game, m.content)
-        if not translated:
-            return
-
-        try:
-            self._push_move(translated)
-        except Exception:
-            return
-
-        return True
+    def _translate_move(self, content):
+        return _translate(self._game, content)
 
     async def _make_move(self):
         try:
-            with self.current.wait_for_move():
-                await self.ctx.bot.wait_for('message', check=self._check)
+            with self._current_player().wait_for_move():
+                await self._ctx.bot.wait_for('message', check=self._check)
         except asyncio.TimeoutError:
             self._status = Status.TIMEOUT
 
@@ -408,11 +402,11 @@ class ChessSession:
     async def _update_display(self):
         game = self._game
         turn = game.state.player
-        screen = self._game_screen
-        player = self.current
+        screen = self._display
+        player = self._current_player()
 
         check = turn if self._in_check() else None
-        run = self.ctx.bot.loop.run_in_executor
+        run = self._ctx.bot.loop.run_in_executor
         get_file = functools.partial(_board_file_from_fen, str(game.board), self._last_move, check)
         self._image = await run(None, get_file)
 
@@ -444,28 +438,13 @@ class ChessSession:
         screen.colour = colour
         screen.set_author(name=header.format(user=player.user), icon_url=icon)
 
-    async def _loop(self):
-        while True:
-            await self._update_display()
+    def _send_message(self):
+        return temp_message(self._ctx, file=self._image, embed=self._display)
 
-            async with temp_message(self.ctx, file=self._image, embed=self._game_screen):
-                await self._make_move()
-
-            if self._status is not Status.PLAYING:
-                break
-
-            status = self._game.status
-            if status not in [self._game.NORMAL, self._game.CHECK]:
-                self._status = Status.END
-                break
-
-    async def run(self):
-        try:
-            return await self._loop()
-        finally:
-            await self._update_display()
-            self._game_screen.set_footer(text=self.result())
-            await self.ctx.send(file=self._image, embed=self._game_screen)
+    async def _end(self):
+        await self._update_display()
+        self._display.set_footer(text=self.result())
+        await self._ctx.send(file=self._image, embed=self._display)
 
     def result(self):
         status = self.status
@@ -477,14 +456,6 @@ class ChessSession:
             return '\xbd - \xbd'
 
         return '?'
-
-    @property
-    def current(self):
-        return self._players[self._game.state.player]
-
-    @property
-    def other(self):
-        return self._players[_OTHER_TURNS[self._game.state.player]]
 
     @property
     def status(self):
