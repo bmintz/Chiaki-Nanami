@@ -63,7 +63,7 @@ class _TwoPlayerWaiter:
         return bool(self._future and self._future.done())
 
 
-class NoSelfArgument(commands.BadArgument):
+class NoSelfArgument(commands.UserInputError):
     """Exception raised in CheckedMember when the author passes themself as an argument"""
 
 
