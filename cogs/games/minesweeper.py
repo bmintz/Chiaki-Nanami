@@ -449,7 +449,7 @@ class MinesweeperSession(InteractiveSession):
             raise ValueError(f'{x} {y} is already visible')
 
         if flag is FlagType.default and (board.is_flag(x, y) or board.is_unsure(x, y)):
-            # We shoul  dn't allow exposing tiles if they're flagged or
+            # We shouldn't allow exposing tiles if they're flagged or
             # marked unsure, because that doesn't make much sense.
             # If the user flagged the tile, they probably know
             # it's a mine already, and they probably don't want to step
