@@ -1,13 +1,7 @@
-import asyncio
-import contextlib
-import itertools
-import random
-from collections import namedtuple
-
 import discord
 from more_itertools import chunked
 
-from .bases import Status, TwoPlayerGameCog
+from .bases import Status, TwoPlayerGameCog, TwoPlayerSession
 from ..utils.context_managers import temp_message
 from ..utils.formats import escape_markdown
 from ..utils.misc import emoji_url
@@ -73,57 +67,33 @@ class Board:
             self._board[r] = tile
 
 
-Stats = namedtuple('Stats', 'winner turns')
-
 # icons
 FOREFIT_ICON = emoji_url('\N{WAVING WHITE FLAG}')
 TIMEOUT_ICON = emoji_url('\N{ALARM CLOCK}')
 
-class TicTacToeSession:
+class TicTacToeSession(TwoPlayerSession, board_factory=Board, move_pattern=r'^(\d)$'):
     def __init__(self, ctx, opponent):
-        self.ctx = ctx
-        self.opponent = opponent
+        super().__init__(ctx, opponent)
+        self._display = discord.Embed(colour=0x00FF00)
 
-        self._players = random.sample((self.ctx.author, self.opponent), 2)
-        self._board = Board()
-        self._status = Status.PLAYING
-
-        self._game_screen = discord.Embed(colour=0x00FF00)
-
-    def _check_message(self, m):
-        user = self.current
-        if not (m.channel == self.ctx.channel and m.author == user):
-            return False
-
-        string = m.content
-        lowered = string.lower()
-
-        if lowered in {'quit', 'stop'}:
-            self._status = Status.QUIT
-            return True
-
-        if not string.isdigit():
-            return
-
-        index = int(string)
+    def _push_move(self, index):
+        index = int(index[0])
         if not 1 <= index <= SIZE:
-            return
+            raise ValueError(f'must be 1 <= space <= {SIZE}')
 
-        try:
-            self._board.place(index - 1)
-        except IndexError:
-            return
-        return True
+        self._board.place(index - 1)
 
-    async def get_input(self):
-        message = await self.ctx.bot.wait_for('message', timeout=120, check=self._check_message)
-        with contextlib.suppress(discord.HTTPException):
-            await message.delete()
+    def _is_game_over(self):
+        return self._board.winner() or self._board.is_full()
 
-    def _update_display(self):
-        screen = self._game_screen
-        user = self.current
+    def current(self):
+        return self._players[self._board._turn]
+
+    async def _update_display(self):
+        screen = self._display
+        user = self.current()
         winner = self._board.winner()
+        turn = self._board._turn
 
         # How can I make this cleaner...
         formats = [
@@ -132,7 +102,7 @@ class TicTacToeSession:
         ]
 
         if not winner:
-            formats[self.turn] = f'**{formats[self.turn]}**'
+            formats[turn] = f'**{formats[turn]}**'
         else:
             self._board.mark()
 
@@ -155,45 +125,16 @@ class TicTacToeSession:
         else:
             screen.set_author(name='Tic-Tac-Toe', icon_url=user.avatar_url)
 
-    async def _loop(self):
-        for counter in itertools.count(1):
-            user = self.current
-            self._update_display()
-
-            async with temp_message(self.ctx, content=f'{user.mention} It is your turn.',
-                                    embed=self._game_screen):
-                try:
-                    await self.get_input()
-                except asyncio.TimeoutError:
-                    self._status = Status.TIMEOUT
-
-                if self._status is not Status.PLAYING:
-                    return Stats(self._players[not self.turn], counter)
-
-                winner = self._board.winner()
-                if winner or self._board.is_full():
-                    self._status = Status.END
-                    return Stats(winner, counter)
-
-    async def run(self):
-        try:
-            return await self._loop()
-        finally:
-            self._update_display()
-            await self.ctx.send(embed=self._game_screen)
-
-    @property
-    def turn(self):
-        return self._board._turn
-
-    @property
-    def current(self):
-        return self._players[self.turn]
+    def _send_message(self):
+        return temp_message(
+            self._ctx,
+            content=f'{self.current().mention} It is your turn.',
+            embed=self._display
+        )
 
 
 class TicTacToe(TwoPlayerGameCog, name='Tic-Tac-Toe', game_cls=TicTacToeSession, aliases=['ttt']):
-    async def _end_game(self, *args):
-        pass
+    pass
 
 def setup(bot):
     bot.add_cog(TicTacToe(bot))

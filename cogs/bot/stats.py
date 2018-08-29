@@ -2,6 +2,7 @@ import discord
 import psutil
 from discord.ext import commands
 
+
 class Stats:
     def __init__(self, bot):
         self.bot = bot

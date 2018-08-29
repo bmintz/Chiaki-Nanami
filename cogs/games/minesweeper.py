@@ -345,12 +345,10 @@ Examples: {examples}
 '''
 
 
-class _MinesweeperHelp(InteractiveSession, stop_fallback=None):
+class _MinesweeperHelp(InteractiveSession, stop_fallback='exit help'):
     def __init__(self, ctx, game):
         super().__init__(ctx)
         self._game = game
-        # Needed to distinguish between being stopped and letting the time run out.
-        self._stopped = False
 
     def default(self):
         board = self._game._board
@@ -366,13 +364,6 @@ class _MinesweeperHelp(InteractiveSession, stop_fallback=None):
         return (discord.Embed(colour=self._bot.colour, description=description)
                 .set_author(name='Minesweeper Help', icon_url=MINESWEEPER_ICON)
                 )
-
-    @trigger('\N{BLACK SQUARE FOR STOP}', fallback='exit help')
-    async def stop(self):
-        """Exit"""
-        await self._game.edit(self._bot.colour, header=self._game._header)
-        self._stopped = True
-        return await super().stop()
 
 
 class _State(enum.Enum):

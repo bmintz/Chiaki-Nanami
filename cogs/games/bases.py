@@ -4,11 +4,12 @@ import enum
 import functools
 import inspect
 import random
+import re
 
 import discord
 from discord.ext import commands
 
-from ..utils.context_managers import temp_item
+from ..utils.context_managers import temp_item, temp_message
 
 
 class Status(enum.Enum):
@@ -59,7 +60,7 @@ class _TwoPlayerWaiter:
         return bool(self._future and self._future.done())
 
 
-class NoSelfArgument(commands.BadArgument):
+class NoSelfArgument(commands.UserInputError):
     """Exception raised in CheckedMember when the author passes themself as an argument"""
 
 
@@ -137,18 +138,19 @@ class TwoPlayerGameCog:
             await ctx.send(message)
 
     def _create_invite(self, ctx, member):
+        command = f'{ctx.prefix}{ctx.command.root_parent or ctx.command}'
         if member:
             action = 'invited you to'
             description = (
                 '**Do you accept?**\n'
-                f'Yes: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} join``\n'
-                f'No: Type `` {ctx.prefix}{ctx.command.root_parent or ctx.command} decline``\n'
+                f'Yes: Type `` {command} join``\n'
+                f'No: Type `` {command} decline``\n'
                 'You have 5 minutes.'
             )
         else:
             action = 'created'
             description = (
-                f'Type `{ctx.prefix}{ctx.command.root_parent or ctx.command} join` to join in!\n'
+                f'Type `{command} join` to join in!\n'
                 'This will expire in 5 minutes.'
             )
 
@@ -212,7 +214,7 @@ class TwoPlayerGameCog:
 
             with put_in_running(self.__game_class__(ctx, waiter._recipient)):
                 inst = self.running_games[ctx.channel.id]
-                result = await inst.run()
+                await inst.run()
 
     async def _game_join(self, ctx):
         """Joins a {name} game.
@@ -260,3 +262,89 @@ class TwoPlayerGameCog:
         if isinstance(waiter, _TwoPlayerWaiter) and waiter.cancel(ctx.author):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.message.add_reaction('\U00002705')
+
+
+class TwoPlayerSession:
+    def __init__(self, ctx, opponent):
+        self._ctx = ctx
+        self._status = Status.PLAYING
+        self._display = discord.Embed(colour=ctx.bot.colour)
+        self._players = self._make_players(ctx, opponent)
+        self._board = self._board_factory()
+
+    def __init_subclass__(cls, *, board_factory, move_pattern=None, timeout=120):
+        cls._timeout = timeout
+        cls._move_pattern = move_pattern
+        cls._board_factory = board_factory
+
+    async def _update_display(self):
+        raise NotImplementedError
+
+    def current(self):
+        """Return the current player"""
+        raise NotImplementedError
+
+    def _push_move(self, move):
+        raise NotImplementedError
+
+    def _is_game_over(self):
+        raise NotImplementedError
+
+    def _translate_move(self, content):
+        return re.match(self._move_pattern, content.lower())
+
+    def _make_players(self, ctx, opponent):
+        return random.sample((ctx.author, opponent), 2)
+
+    def _check(self, message):
+        if not (message.channel == self._ctx.channel and message.author == self.current()):
+            return False
+
+        if message.content.lower() in {'stop', 'quit', 'exit'}:
+            self._status = Status.QUIT
+            return True
+
+        translated = self._translate_move(message.content)
+        if not translated:
+            return False
+
+        try:
+            self._push_move(translated)
+        except NotImplementedError:
+            # Don't suppress NotImplementedError in case a dev forgot to
+            # implement _push_move
+            raise
+        except Exception:
+            # TODO: Make this not catch every single exception to make pylint happy
+            return False
+        else:
+            return True
+
+    async def _make_move(self):
+        wait_for = self._ctx.bot.wait_for
+        try:
+            await wait_for('message', timeout=self._timeout, check=self._check)
+        except asyncio.TimeoutError:
+            self._status = Status.TIMEOUT
+
+    def _send_message(self):
+        return temp_message(self._ctx, embed=self._display)
+
+    async def _loop(self):
+        while not self._is_game_over():
+            await self._update_display()
+            async with self._send_message():
+                await self._make_move()
+
+            if self._status in [Status.QUIT, Status.TIMEOUT]:
+                return
+
+        self._status = Status.END
+
+    async def _end(self):
+        await self._update_display()
+        await self._ctx.send(embed=self._display)
+
+    async def run(self):
+        await self._loop()
+        await self._end()
