@@ -3,9 +3,7 @@ git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
 asyncpg
 Chessnut
 click
-colorthief
 emoji>=0.5            # fixes multi-code emojis having spaces
-lru_dict
 more-itertools>=4.0
 parsedatetime
 psutil

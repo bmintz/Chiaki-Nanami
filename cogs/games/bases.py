@@ -183,7 +183,7 @@ class TwoPlayerGameCog:
             if channel_id:
                 return await ctx.send(
                     "Um, you've already invited them in "
-                    f"<#{channel_id}>, please don't spam them.."
+                    f"<#{channel_id}>, please don't spam them…"
                 )
 
             cm = temp_item(self._invited_games, pair, ctx.channel.id)
