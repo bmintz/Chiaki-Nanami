@@ -27,12 +27,6 @@ psql_db = ''
 # This can be None or an empty string.
 webhook_url = ''
 
-# The destination where all the feedback will be sent. This can be one of three things:
-# 1. An integer - representing the ID of the feedback channel
-# 2. The URL of the webhook for a channel
-# 3. Nothing (blank string or None), representing no channel.
-feedback_destination = ''
-
 # Where to redirect users when they need help using the bot.
 # This should be an invite link.
 support_server_invite = 'https://discord.gg/WtkPTmE'
