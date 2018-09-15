@@ -1,12 +1,68 @@
+import asyncio
 import functools
 import random
 import re
 import weakref
+from itertools import starmap
 
 import discord
 from discord.ext import commands
 
 from .examples import get_example
+
+
+async def disambiguate(ctx, matches, transform=str, *, tries=3):
+    """Prompt the user to choose from a list of matches"""
+
+    if not matches:
+        raise commands.BadArgument('No results found.')
+
+    num_matches = len(matches)
+    if num_matches == 1:
+        return matches[0]
+
+    entries = '\n'.join(starmap('{0}: {1}'.format, enumerate(map(transform, matches), 1)))
+
+    permissions = ctx.channel.permissions_for(ctx.me)
+    if permissions.embed_links:
+        # Build the embed as we go. And make it nice and pretty.
+        embed = discord.Embed(colour=ctx.bot.colour, description=entries)
+        embed.set_author(name=f"There were {num_matches} matches found... Which one did you mean?")
+
+        index = random.randrange(len(matches))
+        instructions = f'Just type the number.\nFor example, typing `{index + 1}` will return {matches[index]}'
+        embed.add_field(name='Instructions', value=instructions)
+
+        message = await ctx.send(embed=embed)
+    else:
+        await ctx.send('There are too many matches... Which one did you mean? **Only say the number**.')
+        message = await ctx.send(entries)
+
+    def check(m):
+        return (m.author.id == ctx.author.id
+                and m.channel.id == ctx.channel.id
+                and m.content.isdigit())
+
+    await ctx.release()
+
+    # TODO: Support reactions again. This will take a ton of code to do properly though.
+    try:
+        for i in range(tries):
+            try:
+                msg = await ctx.bot.wait_for('message', check=check, timeout=30.0)
+            except asyncio.TimeoutError:
+                raise commands.BadArgument('Took too long. Goodbye.')
+
+            index = int(msg.content)
+            try:
+                return matches[index - 1]
+            except IndexError:
+                await ctx.send(f'Please give me a valid number. {tries - i - 1} tries remaining...')
+
+        raise commands.BadArgument('Too many tries. Goodbye.')
+    finally:
+        await message.delete()
+        await ctx.acquire()
 
 
 class _DisambiguateExampleGenerator:
@@ -16,13 +72,6 @@ class _DisambiguateExampleGenerator:
         cls_name = cls.__name__.replace('Disambiguate', '')
         return functools.partial(get_example, getattr(discord, cls_name))
 
-async def _disambiguate(ctx, matches, **kwargs):
-    try:
-        return await ctx.disambiguate(matches, **kwargs)
-    except ValueError as e:
-        # It doesn't matter if it's a Union or not, because there might be more
-        # than one valid result anyways.
-        raise commands.BadArgument(str(e)) from e
 
 class Converter(commands.Converter):
     """Base class for all disambiguating converters.
@@ -90,7 +139,7 @@ class Converter(commands.Converter):
             return exact_match
 
         matches = self._get_possible_results(ctx, argument)
-        return await _disambiguate(ctx, matches, transform=self._transform)
+        return await disambiguate(ctx, matches, transform=self._transform)
 
 
 _ID_REGEX = re.compile(r'([0-9]{15,21})$')
@@ -249,7 +298,7 @@ class union(commands.Converter):
                     continue
                 else:
                     results.append(result)
-        return await _disambiguate(ctx, results, transform=self._transform)
+        return await disambiguate(ctx, results, transform=self._transform)
 
     def random_example(self, ctx):
         return get_example(random.choice(self.types), ctx)
