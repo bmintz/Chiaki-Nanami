@@ -18,6 +18,11 @@ from .misc import maybe_awaitable
 from .paginator import Paginator, trigger
 
 
+def _padded(string, width):
+    # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
+    # chopped off which makes padding on monospace nigh-on impossible.
+    return string + " \u200b" * (width - len(string) + 1)
+
 def _has_subcommands(command):
     return isinstance(command, commands.GroupMixin)
 
@@ -62,7 +67,7 @@ def _list_subcommands_and_descriptions(command):
     padding = max(len(name) for name, _ in name_docs)
 
     return '\n'.join(
-        f'`{name:<{padding}}\u200b` \N{EM DASH} {doc}'
+        f'`{_padded(name, padding)}` \N{EM DASH} {doc}'
         for name, doc in name_docs
     )
 
@@ -127,10 +132,7 @@ def _command_lines(command_can_run_pairs):
         if not command:
             return ''
 
-        # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
-        # chopped off which makes padding on monospace nigh-on impossible.
-        padding = " \u200b" * (width - len(command) + 1)
-        formatted = f'`{command}{padding}`'
+        formatted = f'`{_padded(command, width)}`'
         return formatted if can_run else f'~~{formatted}~~'
 
     return (' '.join(map(format_pair, pair, widths)) for pair in pairs)
