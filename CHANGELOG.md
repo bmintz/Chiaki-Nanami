@@ -11,9 +11,13 @@
 - Commands are now case-insensitive.
 - Quotes are no longer necessary for `->info channel` on channels with more than
   one word.
+- `->help <command>` no longer requires reactions.
 
 ### Removed
 - Removed `->commits` as it wasn't really useful for the end user.
+- Removed example GIFs for commands as there haven't been examples for a while,
+  it became a maintenance burden, and they were obsoleted with the text examples.
+  They *might* come back in a future time.
 
 
 ## 1.3.1 - 2018-07-18

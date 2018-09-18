@@ -1,12 +1,10 @@
 import asyncio
 import copy
-import functools
 import inspect
 import itertools
 import operator
 import random
 import sys
-from collections import OrderedDict
 
 import discord
 from discord.ext import commands
@@ -17,16 +15,11 @@ from .converter import BotCommand
 from .deprecated import DeprecatedCommand
 from .examples import command_example
 from .misc import maybe_awaitable
-from .paginator import InteractiveSession, Paginator, trigger
-
-
-def _unique(iterable):
-    return list(OrderedDict.fromkeys(iterable))
+from .paginator import Paginator, trigger
 
 
 def _has_subcommands(command):
     return isinstance(command, commands.GroupMixin)
-
 
 def _all_checks(command):
     # The main command's checks will be run regardless of if it's a group
@@ -76,134 +69,32 @@ def _list_subcommands_and_descriptions(command):
 def _visible_sub_commands(command):
     return (c for c in command.walk_commands() if not c.hidden and c.enabled)
 
-def _at_least(iterable, n):
-    return any(True for _ in itertools.islice(iterable, n, None))
+def _help_command_embed(ctx, command, func):
+    clean_prefix = ctx.clean_prefix
+    # usages = self.command_usage
 
-def _requires_extra_page(command):
-    return _has_subcommands(command) and _at_least(_visible_sub_commands(command), 4)
+    title = f"`{clean_prefix}{command.full_parent_name} {' / '.join(all_names(command))}`"
 
+    description = (command.help or '').format(prefix=clean_prefix)
+    if isinstance(command, DeprecatedCommand):
+        description = f'*{command.warning}*\n\n{description}'
 
-def _rreplace(s, old, new, occurrence=1):
-    return new.join(s.rsplit(old, occurrence))
+    embed = discord.Embed(title=func(title), description=func(description), colour=ctx.bot.colour)
 
+    requirements = _make_command_requirements(command)
+    if requirements:
+        embed.add_field(name=func("Requirements"), value=func(requirements))
 
-_example_key = '\N{INFORMATION SOURCE}'
-_see_also_key = '\N{DOWNWARDS BLACK ARROW}'
-SEE_EXAMPLE = f'For an example, click {_example_key}'
-EXAMPLE_HEADER = '**Example**'
+    usage = command_example(command, ctx)
+    embed.add_field(name=func("Usage"), value=func(usage), inline=False)
 
+    if _has_subcommands(command):
+        subs = _list_subcommands_and_descriptions(command)
+        embed.add_field(name='See also', value=subs, inline=False)
 
-class HelpCommandPage(InteractiveSession):
-    def __init__(self, ctx, command, func=None):
-        super().__init__(ctx)
-        self.command = command
-        self.func = func
-        self._toggle = False
-        self._old_footer_text = None
-        self._show_subcommands = False
-
-        has_example, needs_see_also = False, True
-
-        if not _requires_extra_page(command):
-            needs_see_also = False
-            self._show_subcommands = True
-
-        self._example = ctx.bot.command_image_urls.get(command.qualified_name)
-        if self._example:
-            has_example = True
-
-        self._reaction_map = self._reaction_maps[has_example, needs_see_also]
-
-    @trigger(_example_key)
-    async def show_example(self):
-        self._toggle = toggle = not self._toggle
-        current, func = self._current, self.func
-
-        def swap_fields(direction):
-            to_replace = (func(SEE_EXAMPLE), func(EXAMPLE_HEADER))[::direction]
-            field = current.fields[-1]
-            replaced = _rreplace(field.value, *to_replace)
-            current.set_field_at(-1, name=field.name, value=replaced, inline=False)
-
-        if toggle:
-            current.set_image(url=self._example)
-            swap_fields(1)
-        else:
-            if hasattr(current, '_image'):
-                del current._image
-                swap_fields(-1)
-        return current
-
-    @trigger(_see_also_key)
-    def show_subcommands(self, embed=None):
-        embed = embed or self._current
-        command, func = self.command, self.func
-        assert isinstance(command, commands.GroupMixin), "command has no subcommands"
-
-        if self._show_subcommands:
-            value = func(_list_subcommands_and_descriptions(command))
-        else:
-            value = func(f'Click {_see_also_key} to expand')
-
-        self._show_subcommands = not self._show_subcommands
-
-        see_also = func('See also')
-        field_index = discord.utils.find(
-            lambda idx_field: idx_field[1].name == see_also,
-            enumerate(embed.fields)
-        )
-
-        if field_index is None:
-            return embed.add_field(name=see_also, value=value, inline=False)
-
-        return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
-
-    def default(self):
-        command, ctx, func = self.command, self.context, self.func
-        clean_prefix = ctx.clean_prefix
-        # usages = self.command_usage
-
-        cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(all_names(command))}`"
-
-        description = (command.help or '').format(prefix=clean_prefix)
-        if isinstance(command, DeprecatedCommand):
-            description = f'*{command.warning}*\n\n{description}'
-
-        cmd_embed = discord.Embed(title=func(cmd_name), description=func(description), colour=self._bot.colour)
-
-        requirements = _make_command_requirements(command)
-        if requirements:
-            cmd_embed.add_field(name=func("Requirements"), value=func(requirements))
-
-        if _has_subcommands(command):
-            self.show_subcommands(embed=cmd_embed)
-
-        usage = command_example(command, ctx)
-        if self._example:
-            usage = f'{usage}\n\n{SEE_EXAMPLE}'
-        else:
-            usage = f'{usage}\n\nNo example for {command}... yet'
-
-        cmd_embed.add_field(name=func("Usage"), value=func(usage), inline=False)
-
-        # if usages is not None:
-        #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
-        category = command_category(command, 'Other')
-        footer = f'Category: {category}'
-        return cmd_embed.set_footer(text=func(footer))
-
-
-def _without_keys(mapping, *keys):
-    return OrderedDict((key, value) for key, value in mapping.items() if key not in keys)
-_rmap_without = functools.partial(_without_keys, HelpCommandPage._reaction_map)
-
-HelpCommandPage._reaction_maps = {
-    (True, True): HelpCommandPage._reaction_map,
-    (True, False): _rmap_without(_see_also_key),
-    (False, True): _rmap_without(_example_key),
-    (False, False): _rmap_without(_example_key, _see_also_key),
-}
-del _rmap_without, _without_keys
+    category = command_category(command, 'Other')
+    footer = f'Category: {category.title()}'
+    return embed.set_footer(text=func(footer))
 
 
 async def _can_run(command, ctx):
@@ -478,12 +369,33 @@ class _HelpCommand(BotCommand):
             raise commands.BadArgument(random.choice(self._choices))
 
 
-async def _help(ctx, command=None, func=lambda s: s):
-    if command is None:
-        paginator = await GeneralHelpPaginator.create(ctx)
-    else:
-        paginator = HelpCommandPage(ctx, command, func)
+async def _help_command(ctx, command, func):
+    permissions = ctx.me.permissions_in(ctx.channel)
+    if not permissions.send_messages:
+        # It's muted, there's no point in either sending the embed or DMing, cuz
+        # it was probably muted for a good reason.
+        return
 
+    if permissions.embed_links:
+        await ctx.send(embed=_help_command_embed(ctx, command, func))
+        return
+    
+    try:
+        await ctx.author.send(embed=_help_command_embed(ctx, command, func))
+    except discord.Forbidden:
+        # We can't embed but if we couldn't send then this part of the code would
+        # never be run anyways so we can just make it respond.
+        await ctx.send(
+            "Sorry... couldn't send you the help, either turn on your DMs or "
+            "let me send embeds."
+        )
+
+async def _help(ctx, command=None, func=lambda s: s):
+    if command is not None:
+        await _help_command(ctx, command, func)
+        return
+
+    paginator = await GeneralHelpPaginator.create(ctx)
     try:
         await paginator.interact()
     except commands.BotMissingPermissions:
