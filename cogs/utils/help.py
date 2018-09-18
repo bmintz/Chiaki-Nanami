@@ -368,6 +368,15 @@ class _HelpCommand(BotCommand):
                 raise
             raise commands.BadArgument(random.choice(self._choices))
 
+def _help_error(ctx, missing_perms):
+    old_send = ctx.send
+
+    async def new_send(content, **kwargs):
+        content += ' You can also turn on DMs if you wish.'
+        await old_send(content, **kwargs)
+
+    ctx.send = new_send
+    raise commands.BotMissingPermissions(missing_perms)
 
 async def _help_command(ctx, command, func):
     permissions = ctx.me.permissions_in(ctx.channel)
@@ -379,71 +388,49 @@ async def _help_command(ctx, command, func):
     if permissions.embed_links:
         await ctx.send(embed=_help_command_embed(ctx, command, func))
         return
-    
+
     try:
         await ctx.author.send(embed=_help_command_embed(ctx, command, func))
-    except discord.Forbidden:
+    except discord.HTTPException:
         # We can't embed but if we couldn't send then this part of the code would
         # never be run anyways so we can just make it respond.
-        await ctx.send(
-            "Sorry... couldn't send you the help, either turn on your DMs or "
-            "let me send embeds."
-        )
+        _help_error(ctx, ['embed_links'])
 
-async def _help(ctx, command=None, func=lambda s: s):
-    if command is not None:
-        await _help_command(ctx, command, func)
+async def _help_general(ctx):
+    if not ctx.me.permissions_in(ctx.channel).send_messages:
+        # It's muted, there's no point in either sending the embed or DMing, cuz
+        # it was probably muted for a good reason.
         return
 
     paginator = await GeneralHelpPaginator.create(ctx)
     try:
         await paginator.interact()
-    except commands.BotMissingPermissions:
-        # Don't DM the user if the bot can't send messages. We should
-        # err on the side of caution and assume the bot was muted for a
-        # good reason, and a DM wouldn't be a good idea in this case.
-        if not ctx.me.permissions_in(ctx.channel).send_messages:
-            # We shouldn't let this error propagate, since the bot wouldn't
-            # be able to notify the user of missing perms anyways.
-            return
+    except commands.BotMissingPermissions as e:
+        missing_perms = e.missing_perms
+    else:
+        return
 
-        # Try sending it as DM, if it fails, raise the original
-        # BotMissingPermissions exception
-        #
-        # Because we're raising the original exception we can't split this up
-        # into functions without passing the actual error around.
-        #
-        # TODO: Make InteractiveSession.interact take an alternate destination
-        #       argument so we don't have to copy ctx.
-        new_ctx = copy.copy(ctx)
-        # This is used for sending
-        new_ctx.channel = paginator._channel = await ctx.author.create_dm()
-        # paginator.interact checks if bot has permissions before running.
-        paginator.context = new_ctx
+    # TODO: Make InteractiveSession.interact take an alternate destination
+    #       argument so we don't have to copy ctx.
+    new_ctx = copy.copy(ctx)
+    # This is used for sending
+    new_ctx.channel = paginator._channel = await ctx.author.create_dm()
+    # paginator.interact checks if bot has permissions before running.
+    paginator.context = new_ctx
 
-        try:
-            await paginator.interact()
-        except discord.HTTPException:
-            pass
-        else:
-            return
-
-        # We can't DM the user. It's time to tell them that she can't send help.
-        old_send = ctx.send
-
-        async def new_send(content, **kwargs):
-            content += ' You can also turn on DMs if you wish.'
-            await old_send(content, **kwargs)
-
-        ctx.send = new_send
-        raise
-
+    try:
+        await paginator.interact()
+    except discord.HTTPException:
+        _help_error(ctx, missing_perms)
 
 def help_command(func=lambda s: s, **kwargs):
     """Create a help command with a given transformation function."""
 
     async def command(_, ctx, *, command: _HelpCommand = None):
-        await _help(ctx, command, func=func)
+        if command is None:
+            await _help_general(ctx)
+        else:
+            await _help_command(ctx, command, func)
 
     # command.module would be set to *here*. This is bad because the category
     # utilizes the module itself, and that means that the category would be
