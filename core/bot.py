@@ -142,12 +142,8 @@ class Chiaki(commands.AutoShardedBot):
         # loop is needed to prevent outside coro errors
         self.session = aiohttp.ClientSession(loop=self.loop)
 
-        try:
-            with open('data/command_image_urls.json') as f:
-                self.command_image_urls = json.load(f)
-        except FileNotFoundError:
-            self.command_image_urls = {}
-
+        self.message_counter = 0
+        self.command_counter = collections.Counter()
         self.custom_prefixes = JSONFile('customprefixes.json')
 
         self.reset_requested = False

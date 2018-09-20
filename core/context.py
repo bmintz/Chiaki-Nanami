@@ -1,10 +1,7 @@
-import asyncio
 import collections
 import contextlib
 import functools
-import random
 import sys
-from itertools import starmap
 
 import discord
 from discord.ext import commands
@@ -84,57 +81,6 @@ class Context(commands.Context):
         we want to release the connection and re-acquire later.
         """
         return await self._release(*sys.exc_info())
-
-    async def disambiguate(self, matches, transform=str, *, tries=3):
-        if not matches:
-            raise ValueError('No results found.')
-
-        num_matches = len(matches)
-        if num_matches == 1:
-            return matches[0]
-
-        entries = '\n'.join(starmap('{0}: {1}'.format, enumerate(map(transform, matches), 1)))
-
-        permissions = self.channel.permissions_for(self.me)
-        if permissions.embed_links:
-            # Build the embed as we go. And make it nice and pretty.
-            embed = discord.Embed(colour=self.bot.colour, description=entries)
-            embed.set_author(name=f"There were {num_matches} matches found... Which one did you mean?")
-
-            index = random.randrange(len(matches))
-            instructions = f'Just type the number.\nFor example, typing `{index + 1}` will return {matches[index]}'
-            embed.add_field(name='Instructions', value=instructions)
-
-            message = await self.send(embed=embed)
-        else:
-            await self.send('There are too many matches... Which one did you mean? **Only say the number**.')
-            message = await self.send(entries)
-
-        def check(m):
-            return (m.author.id == self.author.id
-                    and m.channel.id == self.channel.id
-                    and m.content.isdigit())
-
-        await self.release()
-
-        # TODO: Support reactions again. This will take a ton of code to do properly though.
-        try:
-            for i in range(tries):
-                try:
-                    msg = await self.bot.wait_for('message', check=check, timeout=30.0)
-                except asyncio.TimeoutError:
-                    raise ValueError('Took too long. Goodbye.')
-
-                index = int(msg.content)
-                try:
-                    return matches[index - 1]
-                except IndexError:
-                    await self.send(f'Please give me a valid number. {tries - i - 1} tries remaining...')
-
-            raise ValueError('Too many tries. Goodbye.')
-        finally:
-            await message.delete()
-            await self.acquire()
 
     # Credit to Danny#0007 for making the original
     async def confirm(self, message, *, timeout=60.0, delete_after=True, reacquire=True,

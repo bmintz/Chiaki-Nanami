@@ -1,12 +1,10 @@
 import asyncio
 import copy
-import functools
 import inspect
 import itertools
 import operator
 import random
 import sys
-from collections import OrderedDict
 
 import discord
 from discord.ext import commands
@@ -17,16 +15,16 @@ from .converter import BotCommand
 from .deprecated import DeprecatedCommand
 from .examples import command_example
 from .misc import maybe_awaitable
-from .paginator import InteractiveSession, Paginator, trigger
+from .paginator import Paginator, trigger
 
 
-def _unique(iterable):
-    return list(OrderedDict.fromkeys(iterable))
-
+def _padded(string, width):
+    # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
+    # chopped off which makes padding on monospace nigh-on impossible.
+    return string + " \u200b" * (width - len(string) + 1)
 
 def _has_subcommands(command):
     return isinstance(command, commands.GroupMixin)
-
 
 def _all_checks(command):
     # The main command's checks will be run regardless of if it's a group
@@ -69,141 +67,39 @@ def _list_subcommands_and_descriptions(command):
     padding = max(len(name) for name, _ in name_docs)
 
     return '\n'.join(
-        f'`{name:<{padding}}\u200b` \N{EM DASH} {doc}'
+        f'`{_padded(name, padding)}` \N{EM DASH} {doc}'
         for name, doc in name_docs
     )
 
 def _visible_sub_commands(command):
     return (c for c in command.walk_commands() if not c.hidden and c.enabled)
 
-def _at_least(iterable, n):
-    return any(True for _ in itertools.islice(iterable, n, None))
+def _help_command_embed(ctx, command, func):
+    clean_prefix = ctx.clean_prefix
+    # usages = self.command_usage
 
-def _requires_extra_page(command):
-    return _has_subcommands(command) and _at_least(_visible_sub_commands(command), 4)
+    title = f"`{clean_prefix}{command.full_parent_name} {' / '.join(all_names(command))}`"
 
+    description = (command.help or '').format(prefix=clean_prefix)
+    if isinstance(command, DeprecatedCommand):
+        description = f'*{command.warning}*\n\n{description}'
 
-def _rreplace(s, old, new, occurrence=1):
-    return new.join(s.rsplit(old, occurrence))
+    embed = discord.Embed(title=func(title), description=func(description), colour=ctx.bot.colour)
 
+    requirements = _make_command_requirements(command)
+    if requirements:
+        embed.add_field(name=func("Requirements"), value=func(requirements))
 
-_example_key = '\N{INFORMATION SOURCE}'
-_see_also_key = '\N{DOWNWARDS BLACK ARROW}'
-SEE_EXAMPLE = f'For an example, click {_example_key}'
-EXAMPLE_HEADER = '**Example**'
+    usage = command_example(command, ctx)
+    embed.add_field(name=func("Usage"), value=func(usage), inline=False)
 
+    if _has_subcommands(command):
+        subs = _list_subcommands_and_descriptions(command)
+        embed.add_field(name='See also', value=subs, inline=False)
 
-class HelpCommandPage(InteractiveSession):
-    def __init__(self, ctx, command, func=None):
-        super().__init__(ctx)
-        self.command = command
-        self.func = func
-        self._toggle = False
-        self._old_footer_text = None
-        self._show_subcommands = False
-
-        has_example, needs_see_also = False, True
-
-        if not _requires_extra_page(command):
-            needs_see_also = False
-            self._show_subcommands = True
-
-        self._example = ctx.bot.command_image_urls.get(command.qualified_name)
-        if self._example:
-            has_example = True
-
-        self._reaction_map = self._reaction_maps[has_example, needs_see_also]
-
-    @trigger(_example_key)
-    async def show_example(self):
-        self._toggle = toggle = not self._toggle
-        current, func = self._current, self.func
-
-        def swap_fields(direction):
-            to_replace = (func(SEE_EXAMPLE), func(EXAMPLE_HEADER))[::direction]
-            field = current.fields[-1]
-            replaced = _rreplace(field.value, *to_replace)
-            current.set_field_at(-1, name=field.name, value=replaced, inline=False)
-
-        if toggle:
-            current.set_image(url=self._example)
-            swap_fields(1)
-        else:
-            if hasattr(current, '_image'):
-                del current._image
-                swap_fields(-1)
-        return current
-
-    @trigger(_see_also_key)
-    def show_subcommands(self, embed=None):
-        embed = embed or self._current
-        command, func = self.command, self.func
-        assert isinstance(command, commands.GroupMixin), "command has no subcommands"
-
-        if self._show_subcommands:
-            value = func(_list_subcommands_and_descriptions(command))
-        else:
-            value = func(f'Click {_see_also_key} to expand')
-
-        self._show_subcommands = not self._show_subcommands
-
-        see_also = func('See also')
-        field_index = discord.utils.find(
-            lambda idx_field: idx_field[1].name == see_also,
-            enumerate(embed.fields)
-        )
-
-        if field_index is None:
-            return embed.add_field(name=see_also, value=value, inline=False)
-
-        return embed.set_field_at(field_index[0], name=see_also, value=value, inline=False)
-
-    def default(self):
-        command, ctx, func = self.command, self.context, self.func
-        clean_prefix = ctx.clean_prefix
-        # usages = self.command_usage
-
-        cmd_name = f"`{clean_prefix}{command.full_parent_name} {' / '.join(all_names(command))}`"
-
-        description = (command.help or '').format(prefix=clean_prefix)
-        if isinstance(command, DeprecatedCommand):
-            description = f'*{command.warning}*\n\n{description}'
-
-        cmd_embed = discord.Embed(title=func(cmd_name), description=func(description), colour=self._bot.colour)
-
-        requirements = _make_command_requirements(command)
-        if requirements:
-            cmd_embed.add_field(name=func("Requirements"), value=func(requirements))
-
-        if _has_subcommands(command):
-            self.show_subcommands(embed=cmd_embed)
-
-        usage = command_example(command, ctx)
-        if self._example:
-            usage = f'{usage}\n\n{SEE_EXAMPLE}'
-        else:
-            usage = f'{usage}\n\nNo example for {command}... yet'
-
-        cmd_embed.add_field(name=func("Usage"), value=func(usage), inline=False)
-
-        # if usages is not None:
-        #    cmd_embed.add_field(name=func("Usage"), value=func(usages), inline=False)
-        category = command_category(command, 'Other')
-        footer = f'Category: {category}'
-        return cmd_embed.set_footer(text=func(footer))
-
-
-def _without_keys(mapping, *keys):
-    return OrderedDict((key, value) for key, value in mapping.items() if key not in keys)
-_rmap_without = functools.partial(_without_keys, HelpCommandPage._reaction_map)
-
-HelpCommandPage._reaction_maps = {
-    (True, True): HelpCommandPage._reaction_map,
-    (True, False): _rmap_without(_see_also_key),
-    (False, True): _rmap_without(_example_key),
-    (False, False): _rmap_without(_example_key, _see_also_key),
-}
-del _rmap_without, _without_keys
+    category = command_category(command, 'Other')
+    footer = f'Category: {category.title()}'
+    return embed.set_footer(text=func(footer))
 
 
 async def _can_run(command, ctx):
@@ -236,10 +132,7 @@ def _command_lines(command_can_run_pairs):
         if not command:
             return ''
 
-        # Discord ruined my ZWS hack. Excess whitespace, for some reason, gets
-        # chopped off which makes padding on monospace nigh-on impossible.
-        padding = " \u200b" * (width - len(command) + 1)
-        formatted = f'`{command}{padding}`'
+        formatted = f'`{_padded(command, width)}`'
         return formatted if can_run else f'~~{formatted}~~'
 
     return (' '.join(map(format_pair, pair, widths)) for pair in pairs)
@@ -477,61 +370,69 @@ class _HelpCommand(BotCommand):
                 raise
             raise commands.BadArgument(random.choice(self._choices))
 
+def _help_error(ctx, missing_perms):
+    old_send = ctx.send
 
-async def _help(ctx, command=None, func=lambda s: s):
-    if command is None:
-        paginator = await GeneralHelpPaginator.create(ctx)
+    async def new_send(content, **kwargs):
+        content += ' You can also turn on DMs if you wish.'
+        await old_send(content, **kwargs)
+
+    ctx.send = new_send
+    raise commands.BotMissingPermissions(missing_perms)
+
+async def _help_command(ctx, command, func):
+    permissions = ctx.me.permissions_in(ctx.channel)
+    if not permissions.send_messages:
+        # It's muted, there's no point in either sending the embed or DMing, cuz
+        # it was probably muted for a good reason.
+        return
+
+    if permissions.embed_links:
+        await ctx.send(embed=_help_command_embed(ctx, command, func))
+        return
+
+    try:
+        await ctx.author.send(embed=_help_command_embed(ctx, command, func))
+    except discord.HTTPException:
+        # We can't embed but if we couldn't send then this part of the code would
+        # never be run anyways so we can just make it respond.
+        _help_error(ctx, ['embed_links'])
+
+async def _help_general(ctx):
+    if not ctx.me.permissions_in(ctx.channel).send_messages:
+        # It's muted, there's no point in either sending the embed or DMing, cuz
+        # it was probably muted for a good reason.
+        return
+
+    paginator = await GeneralHelpPaginator.create(ctx)
+    try:
+        await paginator.interact()
+    except commands.BotMissingPermissions as e:
+        missing_perms = e.missing_perms
     else:
-        paginator = HelpCommandPage(ctx, command, func)
+        return
+
+    # TODO: Make InteractiveSession.interact take an alternate destination
+    #       argument so we don't have to copy ctx.
+    new_ctx = copy.copy(ctx)
+    # This is used for sending
+    new_ctx.channel = paginator._channel = await ctx.author.create_dm()
+    # paginator.interact checks if bot has permissions before running.
+    paginator.context = new_ctx
 
     try:
         await paginator.interact()
-    except commands.BotMissingPermissions:
-        # Don't DM the user if the bot can't send messages. We should
-        # err on the side of caution and assume the bot was muted for a
-        # good reason, and a DM wouldn't be a good idea in this case.
-        if not ctx.me.permissions_in(ctx.channel).send_messages:
-            # We shouldn't let this error propagate, since the bot wouldn't
-            # be able to notify the user of missing perms anyways.
-            return
-
-        # Try sending it as DM, if it fails, raise the original
-        # BotMissingPermissions exception
-        #
-        # Because we're raising the original exception we can't split this up
-        # into functions without passing the actual error around.
-        #
-        # TODO: Make InteractiveSession.interact take an alternate destination
-        #       argument so we don't have to copy ctx.
-        new_ctx = copy.copy(ctx)
-        # This is used for sending
-        new_ctx.channel = paginator._channel = await ctx.author.create_dm()
-        # paginator.interact checks if bot has permissions before running.
-        paginator.context = new_ctx
-
-        try:
-            await paginator.interact()
-        except discord.HTTPException:
-            pass
-        else:
-            return
-
-        # We can't DM the user. It's time to tell them that she can't send help.
-        old_send = ctx.send
-
-        async def new_send(content, **kwargs):
-            content += ' You can also turn on DMs if you wish.'
-            await old_send(content, **kwargs)
-
-        ctx.send = new_send
-        raise
-
+    except discord.HTTPException:
+        _help_error(ctx, missing_perms)
 
 def help_command(func=lambda s: s, **kwargs):
     """Create a help command with a given transformation function."""
 
     async def command(_, ctx, *, command: _HelpCommand = None):
-        await _help(ctx, command, func=func)
+        if command is None:
+            await _help_general(ctx)
+        else:
+            await _help_command(ctx, command, func)
 
     # command.module would be set to *here*. This is bad because the category
     # utilizes the module itself, and that means that the category would be
