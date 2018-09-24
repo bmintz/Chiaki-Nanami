@@ -12,6 +12,8 @@
 - Quotes are no longer necessary for `->info channel` on channels with more than
   one word.
 - `->help <command>` no longer requires reactions.
+- The duration in `->mute` is now optional. i.e. `->mute @user 10m Shitposting`
+  and `->mute @user Shitposting` will now both work.
 
 ### Removed
 - Removed `->commits` as it wasn't really useful for the end user.

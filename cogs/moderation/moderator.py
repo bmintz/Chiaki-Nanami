@@ -713,8 +713,10 @@ class Moderator:
             raise AlreadyMuted(f'{member.mention} is already been muted... ;-;')
 
         await member.add_roles(role, reason=reason)
-        args = (member.guild.id, member.id, role.id)
-        await self.bot.db_scheduler.add_abs(when, 'mute_complete', args)
+
+        if when is not None:
+            args = (member.guild.id, member.id, role.id)
+            await self.bot.db_scheduler.add_abs(when, 'mute_complete', args)
 
     async def _create_muted_role(self, ctx):
         # Needs to be released as the process of creating a new role
@@ -753,8 +755,8 @@ class Moderator:
     @commands.command()
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_roles=True)
-    async def mute(self, ctx, member: CheckedMember, duration: time.Delta, *, reason: Reason = None):
-        """Mutes a user (obviously)"""
+    async def mute(self, ctx, member: CheckedMember, duration: typing.Optional[time.Delta]=None, *, reason: Reason = None):
+        """Mutes a user for an optional amount of time (obviously)"""
         reason = reason or f'By {ctx.author}'
 
         async def try_edit(content):
@@ -780,10 +782,15 @@ class Moderator:
             if role is None:
                 return
 
-        when = ctx.message.created_at + duration.delta
+        if duration is None:
+            when = None
+            for_how_long = f'permanently'
+        else:
+            when = ctx.message.created_at + duration.delta
+            for_how_long = f'for {duration}'
+
         await self._do_mute(member, when, role, connection=ctx.db, reason=reason)
-        await try_edit(f"Done. {member.mention} will now be muted for "
-                       f"{duration}... \N{ZIPPER-MOUTH FACE}")
+        await try_edit(f'Done. {member.mention} will now be muted {for_how_long}. \N{ZIPPER-MOUTH FACE}')
 
     @mute.error
     async def mute_error(self, ctx, error):
