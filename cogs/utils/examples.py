@@ -139,13 +139,25 @@ def _format_annotation(annotation, base_module=None):
 
 # ------------- Main Example Function -----------
 
+_NoneType = type(None)
+
 def get_example(converter, ctx):
     """Return a random example based on the converter"""
     if hasattr(converter, 'random_example'):
         return converter.random_example(ctx)
 
     if getattr(converter, '__origin__', None) is typing.Union:
-        return get_example(random.choice(converter.__args__), ctx)
+        converters = converter.__args__
+        if len(converters) == 2 and converters[-1] is _NoneType:
+            # It's *probably* typing.Optional
+            #
+            # XXX: This probably should fall under "optional" args but it's a
+            #      bit more complicated than that and would require rewriting.
+            #      the example generating for this case.
+            converter = converters[0]
+        else:
+            converter = random.choice(converters)
+        return get_example(converter, ctx)
 
     # The default ext converters are special... maybe a bit too special.
     if _is_discord_ext_converter(converter):
