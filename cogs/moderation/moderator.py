@@ -675,7 +675,7 @@ class Moderator:
             lowered = r.name.lower()
             return lowered == 'muted' or 'mute' in lowered
 
-        return discord.utils.find(probably_mute_role, guild.role_hierarchy)
+        return discord.utils.find(probably_mute_role, reversed(guild.roles))
 
     async def _update_muted_role(self, guild, new_role, connection=None):
         connection = connection or self.bot.pool
