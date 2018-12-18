@@ -674,7 +674,7 @@ class Information:
         The number to the left of the role name is the number of members who have that role.
         """
         roles = (
-            ctx.guild.role_hierarchy[:-1] if member is None else
+            ctx.guild.roles[:0:-1] if member is None else
             sorted(member.roles, reverse=True)[:-1]  # remove @everyone
         )
 
@@ -765,7 +765,7 @@ class Information:
         The permission is case insensitive.
         """
         perm_attr = perm.replace(' ', '_').lower()
-        roles = filter(attrgetter(f'permissions.{perm_attr}'), ctx.guild.role_hierarchy)
+        roles = filter(attrgetter(f'permissions.{perm_attr}'), reversed(ctx.guild.roles))
         title = f"Roles in {ctx.guild} that have {perm.replace('_', ' ').title()}"
 
         author_roles = ctx.author.roles
